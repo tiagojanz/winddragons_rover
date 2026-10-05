@@ -1,0 +1,34 @@
+[
+  {
+    "id": "btn-upload-rover",
+    "label": "$(rocket) Upload Rover",
+    "command": "workbench.action.tasks.runTask",
+    "args": "Upload Rover",
+    "color": "#38bdf8",
+    "tooltip": "Compilar e Enviar Firmware para a Boia (Rover)"
+  },
+  {
+    "id": "btn-upload-base",
+    "label": "$(broadcast) Upload Base",
+    "command": "workbench.action.tasks.runTask",
+    "args": "Upload Base",
+    "color": "#4ade80",
+    "tooltip": "Compilar e Enviar Firmware para a Estação Base"
+  },
+  {
+    "id": "btn-monitor-rover",
+    "label": "$(terminal) Monitor Rover",
+    "command": "workbench.action.tasks.runTask",
+    "args": "Monitor Rover",
+    "color": "#a5b4fc",
+    "tooltip": "Abrir Monitor Série do Rover"
+  },
+  {
+    "id": "btn-monitor-base",
+    "label": "$(terminal) Monitor Base",
+    "command": "workbench.action.tasks.runTask",
+    "args": "Monitor Base",
+    "color": "#fde047",
+    "tooltip": "Abrir Monitor Série da Base"
+  }
+]
