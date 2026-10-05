@@ -1,0 +1,12 @@
+# PlatformIO
+.pio
+.pioenvs
+.piolibdeps
+
+# VSCode / IDE
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
