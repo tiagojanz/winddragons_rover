@@ -45,9 +45,15 @@
 #define PIN_GPS_TX     18  // ESP32 TX -> Quectel LC29H RX
 #define GPS_BAUDRATE   115200
 
-#define PIN_MOTOR_ESC  0   // Main propulsion ESC (50Hz PWM)
-#define PIN_SERVO_RUD  1   // Rudder servo (50Hz PWM)
-#define PIN_WINCH      23  // Anchor winch servo (50Hz PWM)
+#define PIN_MOTOR_ESC      0   // Main propulsion ESC (50Hz PWM)
+#define PIN_SERVO_RUD      1   // Rudder servo (50Hz PWM)
+#define PIN_WINCH          23  // Anchor winch servo / motor (50Hz PWM)
+#define PIN_SERVO_RACK     10  // Anchor rack/clutch servo - levanta cremalheira para queda livre (50Hz PWM)
+#define PIN_ALARM_BUZZER   3   // Strobe siren / buzzer output
+
+// Rack servo positions (degrees)
+#define RACK_POS_ENGAGED   0   // Cremalheira engatada / travada (para recolher ou travar âncora)
+#define RACK_POS_RELEASED  90  // Cremalheira levantada (livre para queda da âncora por gravidade)
 
 // ESC / Servo pulse limits (microseconds)
 #define PWM_PULSE_MIN      1000

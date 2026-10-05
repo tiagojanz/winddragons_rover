@@ -131,33 +131,45 @@ private:
         const char *roverCode = c["rover_code"] | "";
         const char *actionStr = c["action"] | "";
         float depthM = c["depth_m"] | 0.0f;
+        uint16_t durationS = c["duration_s"] | 10;
         double targetLat = c["target_lat"] | 0.0;
         double targetLng = c["target_lng"] | 0.0;
 
         uint8_t roverId = fleetManager.resolveRoverCodeToId(roverCode);
         uint8_t action = ACTION_NONE;
 
-        if (strcmp(actionStr, "DROP_ANCHOR") == 0) {
-            action = ACTION_DROP_ANCHOR;
-        } else if (strcmp(actionStr, "RETRACT_ANCHOR") == 0) {
-            action = ACTION_RETRACT_ANCHOR;
-        } else if (strcmp(actionStr, "HOLD_STATION") == 0) {
+        if (strcmp(actionStr, "HOLD_STATION") == 0) {
             action = ACTION_HOLD_STATION;
-        } else if (strcmp(actionStr, "GOTO") == 0) {
-            action = ACTION_GOTO;
+        } else if (strcmp(actionStr, "STOP") == 0 || strcmp(actionStr, "STANDBY") == 0) {
+            action = ACTION_STOP;
+        } else if (strcmp(actionStr, "DROP_ANCHOR") == 0) {
+            action = ACTION_DROP_ANCHOR;
+        } else if (strcmp(actionStr, "RETRIEVE_ANCHOR") == 0 || strcmp(actionStr, "RETRACT_ANCHOR") == 0) {
+            action = ACTION_RETRIEVE_ANCHOR;
+        } else if (strcmp(actionStr, "STOP_ANCHOR") == 0) {
+            action = ACTION_STOP_ANCHOR;
+        } else if (strcmp(actionStr, "NAVIGATE") == 0 || strcmp(actionStr, "GOTO") == 0) {
+            action = ACTION_NAVIGATE;
+        } else if (strcmp(actionStr, "RTL") == 0) {
+            action = ACTION_RTL;
+        } else if (strcmp(actionStr, "ALARM") == 0) {
+            action = ACTION_ALARM;
+        } else if (strcmp(actionStr, "PING") == 0) {
+            action = ACTION_PING;
         } else if (strcmp(actionStr, "MANUAL") == 0) {
             action = ACTION_MANUAL;
         }
 
         if (action != ACTION_NONE) {
-            Serial.printf("[CLOUD] Command #%u for %s -> %s (depth: %.1fm)\n", 
-                          cmdId, roverCode, actionStr, depthM);
+            Serial.printf("[CLOUD] Command #%u for %s -> %s (depth: %.1fm, dur: %us)\n", 
+                          cmdId, roverCode, actionStr, depthM, durationS);
 
             fleetManager.queueCommand(
                 roverId, 
                 cmdId, 
                 action, 
                 static_cast<uint16_t>(depthM * 100.0f),
+                durationS,
                 static_cast<int32_t>(targetLat * 10000000.0),
                 static_cast<int32_t>(targetLng * 10000000.0)
             );

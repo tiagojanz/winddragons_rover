@@ -85,6 +85,7 @@ void transmitControlOrCommand() {
         packet.command_id      = qCmd.command_id;
         packet.action          = qCmd.action;
         packet.target_depth_cm = qCmd.depth_cm;
+        packet.duration_s      = qCmd.duration_s;
         packet.target_lat_deg7 = qCmd.target_lat;
         packet.target_lng_deg7 = qCmd.target_lng;
 
@@ -95,8 +96,8 @@ void transmitControlOrCommand() {
         radio.transmit(reinterpret_cast<uint8_t*>(&packet), sizeof(packet));
         radio.startReceive();
 
-        Serial.printf("[BASE] Dispatched LoRa Action Command #%u to Rover #%u\n", 
-                      qCmd.command_id, qCmd.target_rover_id);
+        Serial.printf("[BASE] Dispatched LoRa Action Command #%u (%s) to Rover #%u\n", 
+                      qCmd.command_id, get_action_str(qCmd.action), qCmd.target_rover_id);
         return;
     }
 

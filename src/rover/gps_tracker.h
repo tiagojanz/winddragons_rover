@@ -55,6 +55,18 @@ public:
         return hasFix() ? 1 : 0;
     }
 
+    // Distance in meters between current GPS location and target coordinates
+    double distanceTo(double targetLat, double targetLng) {
+        if (!hasFix()) return 999999.0;
+        return TinyGPSPlus::distanceBetween(getLatitude(), getLongitude(), targetLat, targetLng);
+    }
+
+    // Bearing/Course in degrees (0..359.9) from current GPS location to target coordinates
+    double courseTo(double targetLat, double targetLng) {
+        if (!hasFix()) return 0.0;
+        return TinyGPSPlus::courseTo(getLatitude(), getLongitude(), targetLat, targetLng);
+    }
+
 private:
     HardwareSerial gpsSerial;
     TinyGPSPlus gps;

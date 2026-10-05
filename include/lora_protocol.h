@@ -19,13 +19,15 @@ enum LoRaMsgType : uint8_t {
 };
 
 // Motor status enum mapping with WindDragons Portal
+// Motor status enum mapping with WindDragons Portal
 enum MotorStatus : uint8_t {
-    MOTOR_IDLE             = 0, // "idle"
+    MOTOR_IDLE             = 0, // "idle" (disarmed / neutral)
     MOTOR_MANUAL           = 1, // "manual"
     MOTOR_HOLDING_STATION  = 2, // "holding_station"
     MOTOR_ANCHORED         = 3, // "anchored"
-    MOTOR_MOVING_TO_TARGET = 4, // "moving_to_target"
-    MOTOR_FAILSAFE         = 5  // "failsafe"
+    MOTOR_MOVING_TO_TARGET = 4, // "moving_to_target" (navigate)
+    MOTOR_RTL              = 5, // "rtl" (return to launch)
+    MOTOR_FAILSAFE         = 6  // "failsafe"
 };
 
 // Anchor status enum mapping with WindDragons Portal
@@ -36,14 +38,19 @@ enum AnchorStatus : uint8_t {
     ANCHOR_RETRACTING= 3  // "retracting"
 };
 
-// Cloud action enum
+// Cloud action enum matching WindDragons Commands
 enum CloudAction : uint8_t {
     ACTION_NONE            = 0,
-    ACTION_DROP_ANCHOR     = 1,
-    ACTION_RETRACT_ANCHOR  = 2,
-    ACTION_HOLD_STATION    = 3,
-    ACTION_GOTO            = 4,
-    ACTION_MANUAL          = 5
+    ACTION_HOLD_STATION    = 1, // Station keeping (target or current GPS position)
+    ACTION_STOP            = 2, // Stop motors / disarm (STANDBY)
+    ACTION_DROP_ANCHOR     = 3, // Lower physical anchor
+    ACTION_RETRIEVE_ANCHOR = 4, // Retrieve physical anchor
+    ACTION_STOP_ANCHOR     = 5, // Emergency stop anchor winch
+    ACTION_NAVIGATE        = 6, // Navigate to target coordinates (GOTO)
+    ACTION_RTL             = 7, // Return to Base / Launch
+    ACTION_ALARM           = 8, // Strobe LED & acoustic alarm
+    ACTION_PING            = 9, // Request immediate telemetry
+    ACTION_MANUAL          = 10 // Manual joystick control
 };
 
 // ------------------------------------------
@@ -98,9 +105,10 @@ struct __attribute__((packed)) PacketActionCommand {
     uint8_t  target_rover_id;// Target Rover ID
     uint16_t command_id;     // Database ID (e.g. 14)
     uint8_t  action;         // CloudAction enum
-    uint16_t target_depth_cm;// For DROP_ANCHOR (e.g. 450)
-    int32_t  target_lat_deg7;// For GOTO / HOLD_STATION
-    int32_t  target_lng_deg7;// For GOTO / HOLD_STATION
+    uint16_t target_depth_cm;// For DROP_ANCHOR (e.g. 450 cm)
+    uint16_t duration_s;     // For ALARM (e.g. 10 s)
+    int32_t  target_lat_deg7;// For NAVIGATE / HOLD_STATION
+    int32_t  target_lng_deg7;// For NAVIGATE / HOLD_STATION
     uint16_t checksum;
 };
 
@@ -120,9 +128,26 @@ inline const char* get_motor_status_str(uint8_t status) {
         case MOTOR_HOLDING_STATION:  return "holding_station";
         case MOTOR_ANCHORED:         return "anchored";
         case MOTOR_MOVING_TO_TARGET: return "moving_to_target";
+        case MOTOR_RTL:              return "rtl";
         case MOTOR_FAILSAFE:         return "failsafe";
         case MOTOR_IDLE:
         default:                     return "idle";
+    }
+}
+
+inline const char* get_action_str(uint8_t action) {
+    switch (action) {
+        case ACTION_HOLD_STATION:    return "HOLD_STATION";
+        case ACTION_STOP:            return "STOP";
+        case ACTION_DROP_ANCHOR:     return "DROP_ANCHOR";
+        case ACTION_RETRIEVE_ANCHOR: return "RETRIEVE_ANCHOR";
+        case ACTION_STOP_ANCHOR:     return "STOP_ANCHOR";
+        case ACTION_NAVIGATE:        return "NAVIGATE";
+        case ACTION_RTL:             return "RTL";
+        case ACTION_ALARM:           return "ALARM";
+        case ACTION_PING:            return "PING";
+        case ACTION_MANUAL:          return "MANUAL";
+        default:                     return "NONE";
     }
 }
 

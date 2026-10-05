@@ -29,6 +29,7 @@ struct QueuedCommand {
     uint16_t command_id;
     uint8_t  action;
     uint16_t depth_cm;
+    uint16_t duration_s;
     int32_t  target_lat;
     int32_t  target_lng;
 };
@@ -97,12 +98,15 @@ public:
         return rovers[selectedRoverIndex % rovers.size()].id;
     }
 
-    void queueCommand(uint8_t roverId, uint16_t cmdId, uint8_t action, uint16_t depthCm, int32_t lat, int32_t lng) {
+    void queueCommand(uint8_t roverId, uint16_t cmdId, uint8_t action, 
+                      uint16_t depthCm = 0, uint16_t durationS = 0, 
+                      int32_t lat = 0, int32_t lng = 0) {
         QueuedCommand cmd;
         cmd.target_rover_id = roverId;
         cmd.command_id = cmdId;
         cmd.action = action;
         cmd.depth_cm = depthCm;
+        cmd.duration_s = durationS;
         cmd.target_lat = lat;
         cmd.target_lng = lng;
         commandQueue.push_back(cmd);
@@ -114,7 +118,7 @@ public:
 
     QueuedCommand popPendingCommand() {
         if (commandQueue.empty()) {
-            return {0, 0, 0, 0, 0, 0};
+            return {0, 0, 0, 0, 0, 0, 0};
         }
         QueuedCommand cmd = commandQueue.front();
         commandQueue.erase(commandQueue.begin());
