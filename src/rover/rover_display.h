@@ -29,7 +29,8 @@ enum RoverScreenPage {
     ROVER_PAGE_NAV = 0,
     ROVER_PAGE_POWER = 1,
     ROVER_PAGE_ACTUATORS = 2,
-    ROVER_PAGE_COUNT = 3
+    ROVER_PAGE_NETWORK = 3,
+    ROVER_PAGE_COUNT = 4
 };
 
 class RoverDisplay {
@@ -38,8 +39,8 @@ public:
 
     void begin() {
         // Disable onboard TF/MicroSD card CS (GPIO 4) to prevent SPI bus collision
-        pinMode(4, OUTPUT);
-        digitalWrite(4, HIGH);
+        pinMode(PIN_SD_CS, OUTPUT);
+        digitalWrite(PIN_SD_CS, HIGH);
 
         // Initialize manufacturer ST7789 display driver
         display.begin();
@@ -70,7 +71,9 @@ public:
 
     void update(uint8_t roverId, GPSTracker &gps, BatteryMonitor &batt,
                 ActuatorController &actuators, uint8_t motorStatus,
-                int16_t lastRssi, bool failsafeActive, bool force = false) {
+                int16_t lastRssi, bool failsafeActive, bool force = false, bool sdOk = false,
+                bool isApMode = false, const char* ip = nullptr, const char* ssid = nullptr,
+                int8_t wifiRssi = 0, uint8_t apClients = 0) {
         uint32_t now = millis();
         if (!force && (now - lastRender < 200)) return; // 5Hz UI refresh unless forced
         lastRender = now;
@@ -87,19 +90,24 @@ public:
         // Current page label in center
         canvas->setTextSize(2);
         canvas->setTextColor(UI_CYAN);
-        canvas->setCursor(120, 4);
+        canvas->setCursor(112, 4);
         if (currentPage == ROVER_PAGE_NAV) {
             canvas->print("NAV/GPS");
         } else if (currentPage == ROVER_PAGE_POWER) {
             canvas->print("BATERIA");
+        } else if (currentPage == ROVER_PAGE_ACTUATORS) {
+            canvas->print("ATUADOR");
         } else {
-            canvas->print("SISTEMA");
+            canvas->print("WIFI/AP");
         }
 
-        // Page tabs indicators (3 dots at top right)
+        // MicroSD status indicator dot (Cyan = Ready, Dark Grey = Not present)
+        canvas->fillCircle(250, 12, 4, sdOk ? UI_CYAN : UI_DARKGREY);
+
+        // Page tabs indicators (4 dots at top right)
         for (int i = 0; i < ROVER_PAGE_COUNT; ++i) {
             uint16_t dotCol = (i == currentPage) ? UI_YELLOW : UI_DARKGREY;
-            canvas->fillCircle(276 + i * 14, 12, 5, dotCol);
+            canvas->fillCircle(268 + i * 12, 12, 4, dotCol);
         }
 
         // 2. Render Page Content in 2-Column Landscape Layout
@@ -113,6 +121,9 @@ public:
             case ROVER_PAGE_ACTUATORS:
                 renderActuatorsPage(actuators, motorStatus, lastRssi, failsafeActive);
                 break;
+            case ROVER_PAGE_NETWORK:
+                renderNetworkPage(isApMode, ip, ssid, wifiRssi, apClients);
+                break;
             default:
                 break;
         }
@@ -122,7 +133,7 @@ public:
         canvas->setTextColor(UI_YELLOW);
         canvas->setTextSize(1);
         canvas->setCursor(10, 156);
-        canvas->printf("PAG %d/3 | CLIQUE [BOOT] P/ MUDAR PAGINA", currentPage + 1);
+        canvas->printf("PAG %d/4 | CLIQUE [BOOT] P/ MUDAR PAGINA", currentPage + 1);
 
         // 4. Push complete frame to physical ST7789 display
         display.drawPixelBuffer(0, 0, LCD_WIDTH - 1, LCD_HEIGHT - 1, canvas->getFramebuffer());
@@ -341,6 +352,113 @@ private:
         } else {
             canvas->setTextColor(UI_GREEN);
             canvas->printf("%d dBm", lastRssi);
+        }
+    }
+
+    void renderNetworkPage(bool isApMode, const char* ip, const char* ssid, int8_t wifiRssi, uint8_t apClients) {
+        int cardY = 26;
+        int cardH = 122;
+
+        // --- Card de Largura Total (x=4..316, w=312, h=122) ---
+        canvas->fillRect(4, cardY, 312, cardH, UI_PANEL_BG);
+        canvas->drawRect(4, cardY, 312, cardH, UI_CARD_BG);
+
+        if (!isApMode) {
+            // ==========================================
+            // MODO WIFI (STA CONECTADO À REDE)
+            // ==========================================
+            // Topo do card: Estado e Sinal RSSI
+            canvas->setTextSize(1);
+            canvas->setTextColor(UI_GREEN);
+            canvas->setCursor(12, cardY + 6);
+            canvas->print("ESTADO: WIFI CONECTADO");
+
+            canvas->setTextColor(UI_WHITE);
+            canvas->setCursor(205, cardY + 6);
+            canvas->printf("SINAL: %d dBm", wifiRssi);
+
+            canvas->drawFastHLine(8, cardY + 18, 304, UI_CARD_BG);
+
+            // Rede SSID
+            canvas->setTextSize(1);
+            canvas->setTextColor(UI_LIGHTGREY);
+            canvas->setCursor(12, cardY + 25);
+            canvas->print("REDE:");
+
+            canvas->setTextSize(2);
+            canvas->setTextColor(UI_WHITE);
+            canvas->setCursor(60, cardY + 22);
+            canvas->printf("%.18s", ssid ? ssid : "");
+
+            // Endereço IP em TAMANHO GIGANTE (Size 3)
+            canvas->setTextSize(1);
+            canvas->setTextColor(UI_LIGHTGREY);
+            canvas->setCursor(12, cardY + 48);
+            canvas->print("ENDERECO IP (ACESSO NO BROWSER):");
+
+            canvas->setTextSize(3);
+            canvas->setTextColor(UI_CYAN);
+            canvas->setCursor(12, cardY + 62);
+            canvas->print(ip ? ip : "0.0.0.0");
+
+            // URL completa e páginas
+            canvas->setTextSize(1);
+            canvas->setTextColor(UI_YELLOW);
+            canvas->setCursor(12, cardY + 98);
+            canvas->printf("http://%s", ip ? ip : "");
+
+            canvas->setTextColor(UI_LIGHTGREY);
+            canvas->setCursor(170, cardY + 98);
+            canvas->print("Web: /wifi, /gps, /control");
+
+        } else {
+            // ==========================================
+            // MODO AP (PONTO DE ACESSO / HOTSPOT)
+            // ==========================================
+            // Topo do card: Estado e Clientes
+            canvas->setTextSize(1);
+            canvas->setTextColor(UI_YELLOW);
+            canvas->setCursor(12, cardY + 6);
+            canvas->print("ESTADO: MODO AP (HOTSPOT)");
+
+            canvas->setTextColor(UI_LIGHTGREY);
+            canvas->setCursor(205, cardY + 6);
+            canvas->printf("CLIENTES: %u", apClients);
+
+            canvas->drawFastHLine(8, cardY + 18, 304, UI_CARD_BG);
+
+            // SSID da Rede (Size 2)
+            canvas->setTextSize(1);
+            canvas->setTextColor(UI_LIGHTGREY);
+            canvas->setCursor(12, cardY + 25);
+            canvas->print("SSID:");
+
+            canvas->setTextSize(2);
+            canvas->setTextColor(UI_YELLOW);
+            canvas->setCursor(55, cardY + 22);
+            canvas->printf("%.18s", ssid ? ssid : "ROVER-01-AP");
+
+            // Password em TAMANHO GRANDE (Size 2)
+            canvas->setTextSize(1);
+            canvas->setTextColor(UI_LIGHTGREY);
+            canvas->setCursor(12, cardY + 48);
+            canvas->print("PASS:");
+
+            canvas->setTextSize(2);
+            canvas->setTextColor(UI_WHITE);
+            canvas->setCursor(55, cardY + 45);
+            canvas->print("12345678");
+
+            // Endereço IP em TAMANHO GIGANTE (Size 3)
+            canvas->setTextSize(1);
+            canvas->setTextColor(UI_LIGHTGREY);
+            canvas->setCursor(12, cardY + 70);
+            canvas->print("ENDERECO IP:");
+
+            canvas->setTextSize(3);
+            canvas->setTextColor(UI_CYAN);
+            canvas->setCursor(12, cardY + 84);
+            canvas->print(ip ? ip : "192.168.4.1");
         }
     }
 

@@ -36,12 +36,27 @@ Ambas as placas usam a mesma pinagem para o módulo **LoRa Ra-02 (SX1278 a 433MH
 | :--- | :--- | :--- |
 | **VCC** | `3.3V` | Nunca ligar a 5V |
 | **GND** | `GND` | Terra comum |
-| **SCK** | `IO7` | Barramento SPI (partilhado) |
-| **MOSI**| `IO6` | Barramento SPI (partilhado) |
-| **MISO**| `IO5` | Barramento SPI |
-| **NSS / CS** | `IO4` | Chip Select LoRa |
-| **RST** | `IO2` | Reset do rádio |
-| **DIO0**| `IO20`| Interrupção de receção de pacotes |
+| **SCK** | `IO2` | Hardware SPI SCLK (Top Header Pino 4) |
+| **MOSI**| `IO3` | Hardware SPI MOSI (Top Header Pino 3) |
+| **MISO**| `IO4` | Hardware SPI MISO (Top Header Pino 2) |
+| **NSS / CS** | `IO5` | CS do LoRa (Top Header Pino 1) |
+| **DIO0**| `IO12`| Interrupção de pacotes (Bottom Header Pino 6) |
+
+---
+
+### Slot MicroSD (TF Card Onboard) — Em ambas as placas
+O slot MicroSD está integrado diretamente na placa ESP32-C6-LCD-1.47 e partilha o barramento SPI com o ecrã ST7789:
+| Função SD | Pino ESP32-C6 | Notas |
+| :--- | :--- | :--- |
+| **CS** | `IO4` | Chip Select do Cartão SD (Ativo LOW) |
+| **MOSI** | `IO6` | Partilhado com LCD MOSI |
+| **SCLK** | `IO7` | Partilhado com LCD SCLK |
+| **MISO** | `IO5` | Linha de leitura MISO |
+
+**Ficheiros suportados na raiz do cartão:**
+- `/config.txt` — Ficheiro de configurações lido automaticamente no boot.
+- `/waypoints.txt` — Ficheiro de coordenadas de navegação (lido no Rover).
+- `/telemetry.csv` — Registo automático de telemetria (GPS, velocidade, rumo, bateria e estado do motor).
 
 ---
 
@@ -72,16 +87,28 @@ Ambas as placas usam a mesma pinagem para o módulo **LoRa Ra-02 (SX1278 a 433MH
 
 ---
 
-## ⚙️ Configuração da Rede e Nuvem
+## 🌐 Conectividade WiFi, Modo AP & Servidor Web
 
-Edite o ficheiro [`include/network_config.h`](file:///Users/tiagotorredovale/Documents/projectos/winddragon/rover/include/network_config.h):
+A Base Station inclui gestão inteligente de ligações WiFi e um Servidor Web HTTP responsivo:
 
-```cpp
-#define WIFI_SSID             "O_SEU_WIFI"
-#define WIFI_PASSWORD         "A_SUA_PASSWORD"
-#define BASE_STATION_ID       "BASE-ALCOCHETE-01"
-#define WINDDRAGONS_API_URL   "https://winddragons.app/api/circuits/station/telemetry"
-```
+### 1. Arranque Inteligente e Fallback para Modo AP:
+- **No arranque**: a Base tenta ligar-se à rede marcada como **Padrão (Default)** ou às redes secundárias guardadas na memória NVS (timeout de 8s).
+- **Se não houver ligação**: entra automaticamente em **Modo Ponto de Acesso (AP)**:
+  - **SSID do AP**: `WindDragons-Base`
+  - **Password**: `12345678`
+  - **Endereço IP**: `http://192.168.4.1`
+- **Ecrã LCD**: ao arrancar (e no menu através de `7. INFO REDE / IP`):
+  - Se ligado a WiFi: apresenta o **endereço IP** atribuído (`http://192.168.x.x`), SSID e sinal RSSI.
+  - Se em modo AP: apresenta o **SSID da Base**, a password e o endereço `http://192.168.4.1`.
+
+### 2. Páginas do Servidor HTTP:
+- **Em Modo AP**:
+  - `/wifi`: Interface para procurar redes próximas (Scan WiFi), adicionar redes e marcar a rede de casa/porto como **Default**.
+- **Em Modo WiFi (Cliente)**:
+  - `/wifi`: Gestão de múltiplas redes guardadas, alteração da rede default, remoção e scanner de sinal.
+  - `/gps`: Telemetria e coordenadas GPS do Rover ativo, rumo da proa, velocidade em nós e links diretos para Google Maps e OpenStreetMap.
+  - `/battery`: Monitorização da bateria LiPo 4S (tensão do pack, média por célula, percentagem colorida e estado de saúde).
+  - `/control`: Comando remoto da boia via rádio LoRa (acelerador do motor ESC com presets, leme, âncora, cremalheira, hold station e botão de paragem de emergência).
 
 ---
 

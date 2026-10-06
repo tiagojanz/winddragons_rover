@@ -1,0 +1,78 @@
+ERC report (2026-10-06T21:09:24, Encoding UTF8)
+Report includes: Errors, Warnings
+
+***** Sheet /
+[lib_symbol_mismatch]: O símbolo 'Conn_01x09' não bate com a cópia existente na biblioteca 'Connector_Generic'
+    ; warning
+    @(50.80 mm, 66.04 mm): Símbolo J1 [Conn_01x09]
+[lib_symbol_mismatch]: O símbolo 'Conn_01x02' não bate com a cópia existente na biblioteca 'Connector_Generic'
+    ; warning
+    @(53.34 mm, 152.40 mm): Símbolo J11 [Conn_01x02]
+[lib_symbol_mismatch]: O símbolo 'Conn_01x02' não bate com a cópia existente na biblioteca 'Connector_Generic'
+    ; warning
+    @(53.34 mm, 180.34 mm): Símbolo J12 [Conn_01x02]
+[lib_symbol_issues]: O símbolo Conn_01x09_Right não foi encontrado na biblioteca 'Connector_Generic'
+    ; warning
+    @(111.76 mm, 66.04 mm): Símbolo J2 [Conn_01x09_Right]
+[lib_symbol_mismatch]: O símbolo 'Conn_01x02' não bate com a cópia existente na biblioteca 'Connector_Generic'
+    ; warning
+    @(114.30 mm, 165.10 mm): Símbolo J5 [Conn_01x02]
+[lib_symbol_mismatch]: O símbolo 'MountingHole' não bate com a cópia existente na biblioteca 'Mechanical'
+    ; warning
+    @(165.10 mm, 193.04 mm): Símbolo H1 [MountingHole]
+[isolated_pin_label]: Label connected to only one pin
+    ; warning
+    @(190.50 mm, 50.80 mm): Rótulo 'NC'
+[lib_symbol_mismatch]: O símbolo 'MountingHole' não bate com a cópia existente na biblioteca 'Mechanical'
+    ; warning
+    @(190.50 mm, 193.04 mm): Símbolo H2 [MountingHole]
+[isolated_pin_label]: Label connected to only one pin
+    ; warning
+    @(200.66 mm, 129.54 mm): Rótulo 'IO15'
+[isolated_pin_label]: Label connected to only one pin
+    ; warning
+    @(200.66 mm, 132.08 mm): Rótulo 'GPS_TX2'
+[isolated_pin_label]: Label connected to only one pin
+    ; warning
+    @(200.66 mm, 134.62 mm): Rótulo 'GPS_RX2'
+[lib_symbol_mismatch]: O símbolo 'Conn_02x04_Odd_Even' não bate com a cópia existente na biblioteca 'Connector_Generic'
+    ; warning
+    @(208.28 mm, 50.80 mm): Símbolo J3 [Conn_02x04_Odd_Even]
+[lib_symbol_mismatch]: O símbolo 'MountingHole' não bate com a cópia existente na biblioteca 'Mechanical'
+    ; warning
+    @(215.90 mm, 193.04 mm): Símbolo H3 [MountingHole]
+[lib_symbol_mismatch]: O símbolo 'Conn_01x07' não bate com a cópia existente na biblioteca 'Connector_Generic'
+    ; warning
+    @(218.44 mm, 137.16 mm): Símbolo J6 [Conn_01x07]
+[lib_symbol_mismatch]: O símbolo 'MountingHole' não bate com a cópia existente na biblioteca 'Mechanical'
+    ; warning
+    @(241.30 mm, 193.04 mm): Símbolo H4 [MountingHole]
+[lib_symbol_mismatch]: O símbolo 'Conn_01x03' não bate com a cópia existente na biblioteca 'Connector_Generic'
+    ; warning
+    @(309.88 mm, 152.40 mm): Símbolo J7 [Conn_01x03]
+[lib_symbol_mismatch]: O símbolo 'Conn_01x03' não bate com a cópia existente na biblioteca 'Connector_Generic'
+    ; warning
+    @(309.88 mm, 180.34 mm): Símbolo J8 [Conn_01x03]
+[lib_symbol_issues]: O símbolo Joystick_PS4_Thumbstick não foi encontrado na biblioteca 'Device'
+    ; warning
+    @(314.96 mm, 66.04 mm): Símbolo JOY1 [Joystick_PS4_Thumbstick]
+[lib_symbol_mismatch]: O símbolo 'Conn_01x04' não bate com a cópia existente na biblioteca 'Connector_Generic'
+    ; warning
+    @(347.98 mm, 66.04 mm): Símbolo JP_RBL [Conn_01x04]
+[lib_symbol_mismatch]: O símbolo 'Conn_01x03' não bate com a cópia existente na biblioteca 'Connector_Generic'
+    ; warning
+    @(381.00 mm, 64.77 mm): Símbolo J4 [Conn_01x03]
+[lib_symbol_mismatch]: O símbolo 'Conn_01x03' não bate com a cópia existente na biblioteca 'Connector_Generic'
+    ; warning
+    @(381.00 mm, 152.40 mm): Símbolo J9 [Conn_01x03]
+[lib_symbol_mismatch]: O símbolo 'Conn_01x03' não bate com a cópia existente na biblioteca 'Connector_Generic'
+    ; warning
+    @(381.00 mm, 180.34 mm): Símbolo J10 [Conn_01x03]
+
+ ** ERC messages: 22  Errors 0  Warnings 22
+
+ ** Ignored checks:
+    - Global label only appears once in the schematic
+    - Four connection points are joined together
+    - SPICE model issue
+    - Assigned footprint doesn't match footprint filters

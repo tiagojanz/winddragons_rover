@@ -28,8 +28,8 @@ public:
 
     void begin() {
         // Disable onboard MicroSD card CS (GPIO 4)
-        pinMode(4, OUTPUT);
-        digitalWrite(4, HIGH);
+        pinMode(PIN_SD_CS, OUTPUT);
+        digitalWrite(PIN_SD_CS, HIGH);
 
         // Initialize Lafvin ST7789 display driver
         display.begin();
@@ -55,7 +55,7 @@ public:
     }
 
     void update(FleetManager &fleet, bool wifiOk, bool cloudOk, 
-                int8_t throttle, int8_t rudder, uint8_t navMode) {
+                int8_t throttle, int8_t rudder, uint8_t navMode, bool sdOk = false) {
         uint32_t now = millis();
         if (now - lastRender < 200) return; // 5Hz UI refresh
         lastRender = now;
@@ -64,11 +64,12 @@ public:
 
         FleetRover *selected = fleet.getSelectedRover();
 
-        // 1. Status Bar icons
+        // 1. Status Bar icons (SD, WiFi, Cloud)
         drawStaticHeader();
-        canvas->fillRect(120, 4, 46, 18, UI_NAVY);
+        canvas->fillRect(104, 4, 64, 18, UI_NAVY);
+        canvas->fillCircle(114, 13, 4, sdOk ? UI_CYAN : UI_DARKGREY);
         canvas->fillCircle(132, 13, 4, wifiOk ? UI_GREEN : UI_RED);
-        canvas->fillCircle(150, 13, 4, cloudOk ? UI_CYAN : UI_ORANGE);
+        canvas->fillCircle(150, 13, 4, cloudOk ? UI_GREEN : UI_ORANGE);
 
         // 2. Active Rover Header
         canvas->fillRect(4, 30, LCD_WIDTH - 8, 28, UI_CARD_BG);
@@ -214,6 +215,134 @@ public:
             canvas->setCursor(6, 298);
             canvas->print("JOY: NAVEGAR | CLIQUE: OK");
         }
+
+        // Push frame to ST7789
+        display.drawPixelBuffer(0, 0, LCD_WIDTH - 1, LCD_HEIGHT - 1, canvas->getFramebuffer());
+    }
+
+    void renderNetworkScreen(bool isApMode, const char* ssid, const char* ip, int8_t rssi, uint8_t clients = 0) {
+        if (!canvas) return;
+
+        drawStaticHeader();
+
+        // 1. Status Banner
+        canvas->fillRect(4, 30, LCD_WIDTH - 8, 255, UI_PANEL_BG);
+        canvas->drawRect(4, 30, LCD_WIDTH - 8, 255, UI_CARD_BG);
+
+        if (!isApMode) {
+            // === MODO WIFI (STA CONECTADO) ===
+            canvas->fillRect(8, 34, LCD_WIDTH - 16, 26, UI_NAVY);
+            canvas->drawRect(8, 34, LCD_WIDTH - 16, 26, UI_GREEN);
+            canvas->setTextColor(UI_GREEN);
+            canvas->setTextSize(1);
+            canvas->setCursor(14, 43);
+            canvas->print("ESTADO: WIFI CONECTADO");
+
+            // Endereço IP em destaque
+            canvas->setTextColor(UI_LIGHTGREY);
+            canvas->setCursor(14, 68);
+            canvas->print("ENDERECO IP:");
+            canvas->setCursor(14, 82);
+            canvas->setTextColor(UI_CYAN);
+            canvas->setTextSize(2);
+            canvas->print(ip ? ip : "0.0.0.0");
+
+            // SSID
+            canvas->setTextSize(1);
+            canvas->setTextColor(UI_LIGHTGREY);
+            canvas->setCursor(14, 110);
+            canvas->print("REDE CONECTADA:");
+            canvas->setCursor(14, 124);
+            canvas->setTextColor(UI_WHITE);
+            canvas->setTextSize(1);
+            canvas->printf("%.20s", ssid ? ssid : "");
+
+            // Sinal RSSI
+            canvas->setTextColor(UI_LIGHTGREY);
+            canvas->setCursor(14, 145);
+            canvas->print("SINAL DE REDE:");
+            canvas->setCursor(14, 158);
+            canvas->setTextColor(UI_GREEN);
+            canvas->printf("%d dBm (Bom)", rssi);
+
+            // Instrucao de acesso HTTP Web
+            canvas->fillRect(8, 180, LCD_WIDTH - 16, 95, UI_CARD_BG);
+            canvas->setTextColor(UI_YELLOW);
+            canvas->setCursor(14, 188);
+            canvas->print("ACESSO WEB SERVER:");
+            canvas->setTextColor(UI_WHITE);
+            canvas->setCursor(14, 204);
+            canvas->printf("http://%s", ip ? ip : "");
+            canvas->setTextColor(UI_LIGHTGREY);
+            canvas->setCursor(14, 222);
+            canvas->print("Disponivel:");
+            canvas->setCursor(14, 234);
+            canvas->print("- GPS e Mapas");
+            canvas->setCursor(14, 246);
+            canvas->print("- Bateria LiPo 4S");
+            canvas->setCursor(14, 258);
+            canvas->print("- Comando de Boias");
+        } else {
+            // === MODO AP (PONTO DE ACESSO) ===
+            canvas->fillRect(8, 34, LCD_WIDTH - 16, 26, UI_NAVY);
+            canvas->drawRect(8, 34, LCD_WIDTH - 16, 26, UI_YELLOW);
+            canvas->setTextColor(UI_YELLOW);
+            canvas->setTextSize(1);
+            canvas->setCursor(14, 43);
+            canvas->print("ESTADO: MODO AP (PONTO ACESSO)");
+
+            // SSID em destaque
+            canvas->setTextColor(UI_LIGHTGREY);
+            canvas->setCursor(14, 68);
+            canvas->print("SSID DA BASE (LIGUE-SE):");
+            canvas->setCursor(14, 82);
+            canvas->setTextColor(UI_YELLOW);
+            canvas->setTextSize(2);
+            canvas->printf("%.14s", ssid ? ssid : "WindDragons");
+
+            // Password
+            canvas->setTextSize(1);
+            canvas->setTextColor(UI_LIGHTGREY);
+            canvas->setCursor(14, 110);
+            canvas->print("PASSWORD WIFI:");
+            canvas->setCursor(14, 124);
+            canvas->setTextColor(UI_WHITE);
+            canvas->print("12345678");
+
+            // Endereço IP do AP
+            canvas->setTextColor(UI_LIGHTGREY);
+            canvas->setCursor(14, 145);
+            canvas->print("ENDERECO CONFIG:");
+            canvas->setCursor(14, 158);
+            canvas->setTextColor(UI_CYAN);
+            canvas->printf("http://%s", ip ? ip : "192.168.4.1");
+
+            // Dica de configuração
+            canvas->fillRect(8, 180, LCD_WIDTH - 16, 95, UI_CARD_BG);
+            canvas->setTextColor(UI_CYAN);
+            canvas->setCursor(14, 188);
+            canvas->print("CONFIGURACAO WIFI:");
+            canvas->setTextColor(UI_LIGHTGREY);
+            canvas->setCursor(14, 204);
+            canvas->print("1. Conecte o telemovel");
+            canvas->setCursor(14, 218);
+            canvas->printf("   ao WiFi '%s'", ssid ? ssid : "");
+            canvas->setCursor(14, 234);
+            canvas->print("2. Abra o browser em");
+            canvas->setCursor(14, 248);
+            canvas->setTextColor(UI_GREEN);
+            canvas->printf("   http://%s", ip ? ip : "192.168.4.1");
+            canvas->setTextColor(UI_LIGHTGREY);
+            canvas->setCursor(14, 262);
+            canvas->printf("Clientes: %d", clients);
+        }
+
+        // Rodapé
+        canvas->fillRect(0, 290, LCD_WIDTH, 30, UI_NAVY);
+        canvas->setTextColor(UI_LIGHTGREY);
+        canvas->setTextSize(1);
+        canvas->setCursor(6, 298);
+        canvas->print("BOOT: MENU / VOLTAR");
 
         // Push frame to ST7789
         display.drawPixelBuffer(0, 0, LCD_WIDTH - 1, LCD_HEIGHT - 1, canvas->getFramebuffer());

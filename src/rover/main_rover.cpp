@@ -9,8 +9,12 @@
 #include "actuators.h"
 #include "battery_monitor.h"
 #include "rover_display.h"
+#include "sd_card_manager.h"
+#include "wifi_config_manager.h"
+#include "rover_config_manager.h"
+#include "rover_web_server.h"
 
-// Define this Rover's ID (e.g. 1 for ROVER-01, 2 for ROVER-02)
+// Define default Rover ID fallback
 #ifndef ROVER_ID
 #define ROVER_ID 1
 #endif
@@ -20,11 +24,23 @@ GPSTracker gps;
 ActuatorController actuators;
 BatteryMonitor battery;
 RoverDisplay roverDisplay;
+SDCardManager sdCard;
 Adafruit_NeoPixel rgbLed(1, PIN_RGB_LED, NEO_GRB + NEO_KHZ800);
+WiFiConfigManager wifiConfig;
+RoverConfigManager roverConfig;
 
-// Module(CS, DIO0, RST, DIO1, SPI)
-Module loraModule(PIN_LORA_NSS, PIN_LORA_DIO0, PIN_LORA_RST, RADIOLIB_NC, SPI);
+// State tracking forward declaration
+extern uint8_t currentMotorStatus;
+extern uint32_t lastControlReceivedTime;
+
+RoverWebServer webServer(wifiConfig, gps, battery, actuators, currentMotorStatus, lastControlReceivedTime, roverConfig, sdCard);
+
+#if ENABLE_LORA
+// Dedicated SPI bus for LoRa SX1278 on header pins (avoids display conflict)
+SPIClass loraSPI(FSPI);
+Module loraModule(PIN_LORA_NSS, PIN_LORA_DIO0, PIN_LORA_RST, RADIOLIB_NC, loraSPI);
 SX1278 radio(&loraModule);
+#endif
 
 // State tracking
 uint16_t telemetrySeq = 0;
@@ -72,7 +88,7 @@ void sendTelemetry() {
 
     packet.magic          = LORA_MAGIC_BYTE;
     packet.msg_type       = MSG_TELEMETRY;
-    packet.rover_id       = ROVER_ID;
+    packet.rover_id       = roverConfig.getRoverId();
     packet.seq_num        = telemetrySeq++;
     
     packet.lat_deg7       = gps.getLatDeg7();
@@ -100,11 +116,13 @@ void sendTelemetry() {
                                          sizeof(packet) - sizeof(packet.checksum));
 
     // Transmit telemetry
+#if ENABLE_LORA
     if (loraReady) {
         radio.standby();
         radio.transmit(reinterpret_cast<uint8_t*>(&packet), sizeof(packet));
         radio.startReceive();
     }
+#endif
 }
 
 void processIncomingPacket(uint8_t *buffer, size_t length) {
@@ -116,7 +134,7 @@ void processIncomingPacket(uint8_t *buffer, size_t length) {
 
     if (msgType == MSG_MANUAL_CONTROL && length == sizeof(PacketManualControl)) {
         PacketManualControl *cmd = reinterpret_cast<PacketManualControl*>(buffer);
-        if (cmd->target_rover_id == ROVER_ID || cmd->target_rover_id == BROADCAST_ROVER_ID) {
+        if (cmd->target_rover_id == roverConfig.getRoverId() || cmd->target_rover_id == BROADCAST_ROVER_ID) {
             uint16_t calc = calculate_checksum(buffer, sizeof(PacketManualControl) - sizeof(cmd->checksum));
             if (calc == cmd->checksum) {
                 lastControlReceivedTime = millis();
@@ -145,7 +163,7 @@ void processIncomingPacket(uint8_t *buffer, size_t length) {
     } 
     else if (msgType == MSG_ACTION_COMMAND && length == sizeof(PacketActionCommand)) {
         PacketActionCommand *cmd = reinterpret_cast<PacketActionCommand*>(buffer);
-        if (cmd->target_rover_id == ROVER_ID || cmd->target_rover_id == BROADCAST_ROVER_ID) {
+        if (cmd->target_rover_id == roverConfig.getRoverId() || cmd->target_rover_id == BROADCAST_ROVER_ID) {
             uint16_t calc = calculate_checksum(buffer, sizeof(PacketActionCommand) - sizeof(cmd->checksum));
             if (calc == cmd->checksum) {
                 lastExecutedCommandId = cmd->command_id;
@@ -333,16 +351,43 @@ void setup() {
     digitalWrite(PIN_LCD_CS, HIGH);
     pinMode(PIN_LORA_NSS, OUTPUT);
     digitalWrite(PIN_LORA_NSS, HIGH);
-    pinMode(4, OUTPUT);
-    digitalWrite(4, HIGH); // MicroSD CS
+    pinMode(PIN_SD_CS, OUTPUT);
+    digitalWrite(PIN_SD_CS, HIGH); // MicroSD CS
 
     // Initialize Display ST7789 1.47"
     roverDisplay.begin();
     pinMode(PIN_BTN_BOOT, INPUT_PULLUP);
     attachInterrupt(digitalPinToInterrupt(PIN_BTN_BOOT), isrBootButton, FALLING);
     Serial.println("[ROVER] ST7789 Diagnostic LCD initialized (Landscape)");
+
+    // Initialize MicroSD Card
+    Serial.print("[ROVER] A inicializar cartao MicroSD... ");
+    if (sdCard.begin()) {
+        Serial.println("OK!");
+        sdCard.printCardInfo();
+        sdCard.printDirectory("/", 1);
+
+        if (sdCard.fileExists("/waypoints.txt")) {
+            Serial.println("[ROVER] Encontrado /waypoints.txt no cartao SD:");
+            Serial.println(sdCard.readFile("/waypoints.txt"));
+        }
+
+        if (!sdCard.fileExists("/telemetry.csv")) {
+            sdCard.writeFile("/telemetry.csv", "timestamp_ms,lat,lng,speed_kn,heading_deg,batt_pct,batt_mv,motor_status\n");
+        }
+    } else {
+        Serial.println("Nenhum cartao detetado (ou formato nao suportado).");
+    }
+
+    // Carregar configurações principais (/config.json no SD ou NVS)
+    roverConfig.begin(&sdCard);
+    webServer.setRoverId(roverConfig.getRoverId());
+    Serial.printf("[ROVER] Configuracao Ativa: ID=%u | SSID AP=%s\n", 
+                  roverConfig.getRoverId(), roverConfig.getApSsid().c_str());
     
+#if ENABLE_LORA
     Serial.print("[ROVER] Initializing LoRa SX1278 (433MHz)... ");
+    loraSPI.begin(PIN_LORA_SCK, PIN_LORA_MISO, PIN_LORA_MOSI, PIN_LORA_NSS);
     int state = radio.begin(LORA_FREQUENCY, LORA_BANDWIDTH, LORA_SPREAD_FACTOR, 
                             LORA_CODING_RATE, LORA_SYNC_WORD, LORA_OUTPUT_POWER, 
                             LORA_PREAMBLE_LEN);
@@ -354,12 +399,31 @@ void setup() {
     } else {
         Serial.printf("FAILED! (code: %d)\n", state);
         loraReady = false;
+        loraSPI.end();
         setRgbColor(50, 0, 0); // Red
     }
+#else
+    Serial.println("[ROVER] LoRa em repouso (barramento SPI dedicado ao Display ST7789 e MicroSD)");
+    loraReady = false;
+#endif
+
+    // Initialize WiFi with Auto-Connect / Fallback to AP Mode (Synchronized with MicroSD Card)
+    wifiConfig.begin(&sdCard);
+    Serial.println("[ROVER] A ligar WiFi (STA)...");
+    bool wifiOk = wifiConfig.autoConnect(8000);
+    if (!wifiOk) {
+        wifiConfig.startAccessPoint(roverConfig.getApSsid().c_str(), roverConfig.getApPassword().c_str());
+    }
+
+    // Initialize HTTP Web Server (port 80)
+    webServer.begin();
 }
 
 void loop() {
     uint32_t now = millis();
+
+    // 0. Handle HTTP Web Server requests
+    webServer.handleClient();
 
     // 1. Screen Navigation Button (Instant Hardware Interrupt)
     bool forceDisplay = false;
@@ -368,10 +432,16 @@ void loop() {
         roverDisplay.nextPage();
         forceDisplay = true;
         bool failsafeActive = (currentMotorStatus == MOTOR_FAILSAFE);
-        int16_t currentRssi = loraReady ? static_cast<int16_t>(radio.getRSSI()) : 0;
-        roverDisplay.update(ROVER_ID, gps, battery, actuators, currentMotorStatus, 
-                            currentRssi, failsafeActive, true);
-        Serial.printf("[ROVER] Display page switched to: %d\n", roverDisplay.getCurrentPage());
+        int16_t currentRssi = 0;
+#if ENABLE_LORA
+        if (loraReady) currentRssi = static_cast<int16_t>(radio.getRSSI());
+#endif
+        roverDisplay.update(roverConfig.getRoverId(), gps, battery, actuators, currentMotorStatus, 
+                            currentRssi, failsafeActive, true, sdCard.isReady(),
+                            wifiConfig.isAPMode(), wifiConfig.getIPAddress().c_str(),
+                            wifiConfig.getSSID().c_str(), wifiConfig.getRSSI(),
+                            wifiConfig.getAPStationCount());
+        Serial.printf("[ROVER] Display page switched to: %d (1:NAV, 2:BATT, 3:ACT, 4:NET)\n", roverDisplay.getCurrentPage() + 1);
     }
 
     // 2. Process GPS
@@ -388,6 +458,7 @@ void loop() {
     }
 
     // 5. Check for received LoRa packets
+#if ENABLE_LORA
     if (loraReady) {
         int packetLen = radio.getPacketLength();
         if (packetLen > 0) {
@@ -399,6 +470,7 @@ void loop() {
             radio.startReceive();
         }
     }
+#endif
 
     // 6. Failsafe Watchdog: In manual mode, stop if signal lost
     if (currentMotorStatus == MOTOR_MANUAL && (now - lastControlReceivedTime > FAILSAFE_TIMEOUT_MS)) {
@@ -436,9 +508,27 @@ void loop() {
         }
     }
 
-    // 9. Update Rover Onboard LCD Display (Instant if forced, or 5Hz periodically)
+    // 9. Log telemetry to SD card periodically (every 5000ms if SD card is ready)
+    static uint32_t lastSdLogTime = 0;
+    if (sdCard.isReady() && (now - lastSdLogTime >= 5000)) {
+        lastSdLogTime = now;
+        char logBuf[128];
+        snprintf(logBuf, sizeof(logBuf), "%lu,%.6f,%.6f,%.1f,%.1f,%u,%u,%u\n",
+                 now, gps.getLatitude(), gps.getLongitude(), gps.getSpeedKnots(),
+                 gps.getHeading(), battery.getPercentage(), battery.getVoltageMv(),
+                 currentMotorStatus);
+        sdCard.appendFile("/telemetry.csv", logBuf);
+    }
+
+    // 10. Update Rover Onboard LCD Display (Instant if forced, or 5Hz periodically)
     bool failsafeActive = (currentMotorStatus == MOTOR_FAILSAFE);
-    int16_t currentRssi = loraReady ? static_cast<int16_t>(radio.getRSSI()) : 0;
-    roverDisplay.update(ROVER_ID, gps, battery, actuators, currentMotorStatus, 
-                        currentRssi, failsafeActive, forceDisplay);
+    int16_t currentRssi = 0;
+#if ENABLE_LORA
+    if (loraReady) currentRssi = static_cast<int16_t>(radio.getRSSI());
+#endif
+    roverDisplay.update(roverConfig.getRoverId(), gps, battery, actuators, currentMotorStatus, 
+                        currentRssi, failsafeActive, forceDisplay, sdCard.isReady(),
+                        wifiConfig.isAPMode(), wifiConfig.getIPAddress().c_str(),
+                        wifiConfig.getSSID().c_str(), wifiConfig.getRSSI(),
+                        wifiConfig.getAPStationCount());
 }

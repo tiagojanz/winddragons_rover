@@ -856,163 +856,161 @@ def build_rover_pcb():
 # 3. BUILD UNIVERSAL CARRIER BOARD (ROVER & BASE UNIFIED - 100 x 70 mm)
 # ==============================================================================
 def build_universal_pcb():
-    b = BoardBuilder("Universal_Carrier", 100.0, 70.0, "/Users/tiagotorredovale/Documents/projectos/winddragon/rover/hardware/universal_pcb")
+    b = BoardBuilder("Universal_Carrier", 100.0, 85.0, "/Users/tiagotorredovale/Documents/projectos/winddragon/rover/hardware/universal_pcb")
     
     # 4x M3 Mounting Holes
     b.add_mounting_hole(4.5, 4.5)
     b.add_mounting_hole(95.5, 4.5)
-    b.add_mounting_hole(4.5, 65.5)
-    b.add_mounting_hole(95.5, 65.5)
+    b.add_mounting_hole(4.5, 80.5)
+    b.add_mounting_hole(95.5, 80.5)
 
-    # ESP32-C6 Socket: Left (X=36.0) & Right (X=58.86), Y=15.0 to 53.10 (step 2.54)
-    esp_left_nets = [
-        "3V3", "EN", "IO4_NSS", "IO5_MISO", "IO6_MOSI", "IO7_SCK",
-        "IO0_ADC", "IO1_ADC", "IO8", "IO9", "IO10_DIO0", "IO11_BUZ",
-        "IO12_RST", "IO13", "IO14", "IO15"
+    # ESP32-C6 in LANDSCAPE orientation (horizontal headers):
+    # Header Top (Y=70.0): Left pins of ESP32 (SPI LoRa, ADCs, Buzzer, IRQ)
+    esp_top_nets = [
+        "3V3", "GND", "IO4_NSS", "IO5_MISO", "IO6_MOSI", "IO7_SCK",
+        "IO0_ADC", "IO1_ADC", "GND", "NC", "IO10_DIO0", "IO11_BUZ",
+        "IO12_RST", "IO13_SW", "IO14", "IO15"
     ]
-    esp_right_nets = [
+    # Header Bottom (Y=47.14): Right pins of ESP32 (5V, GND, Servos/Buttons, GPS)
+    esp_bot_nets = [
         "5V", "GND", "IO18_ACT1_UP", "IO19_ACT2_DOWN", "IO20_ACT3_MODE", "IO21",
         "IO22", "IO23_ACT4", "IO2", "IO3", "IO16_GPS_TX", "IO17_GPS_RX",
         "GND", "3V3", "NC", "GND"
     ]
-    esp_l = b.add_pin_header(36.0, 15.0, 16, pitch=2.54, vertical=True, is_pin1_idx=1, net_list=esp_left_nets, label="ESP32_L", label_pos=(-6.5, 20.0))
-    esp_r = b.add_pin_header(58.86, 15.0, 16, pitch=2.54, vertical=True, is_pin1_idx=1, net_list=esp_right_nets, label="ESP32_R", label_pos=(2.5, 20.0))
+    esp_t = b.add_pin_header(31.0, 70.0, 16, pitch=2.54, vertical=False, is_pin1_idx=1, net_list=esp_top_nets, label="ESP32_T", label_pos=(16.0, 3.0))
+    esp_b = b.add_pin_header(31.0, 47.14, 16, pitch=2.54, vertical=False, is_pin1_idx=1, net_list=esp_bot_nets, label="ESP32_B", label_pos=(16.0, -3.5))
 
-    # ESP32 Module Outline on Silkscreen
-    b.silk_rects.append((33.0, 13.0, 61.86, 56.0, 0.2))
-    b.silk_rects.append((40.5, 24.0, 54.5, 50.0, 0.15))
-    b.silk_texts.append(("ST7789 LCD 1.47 INCH", 41.0, 37.0, 1.0))
-    b.silk_rects.append((43.5, 54.5, 51.5, 58.0, 0.15))
-    b.silk_texts.append(("USB-C", 45.5, 55.5, 0.9))
+    # ESP32 Module Outline on Silkscreen in LANDSCAPE
+    b.silk_rects.append((26.0, 44.0, 74.0, 73.0, 0.2))
+    # ST7789 1.47" LCD in LANDSCAPE (32mm wide x 16mm high)
+    b.silk_rects.append((34.0, 51.0, 66.0, 66.0, 0.18))
+    b.silk_texts.append(("ST7789 1.47 INCH LCD (LANDSCAPE 320x172)", 35.0, 58.5, 0.9))
+    b.silk_rects.append((23.5, 54.5, 27.5, 62.5, 0.15))
+    b.silk_texts.append(("USB-C", 24.0, 63.5, 0.75))
 
-    # --- LEFT SIDE: LoRa Ra-02 Header (X=26.5) ---
+    # --- LEFT SIDE: LoRa Ra-02 Header (X=10.0, Y from 50.0 to 67.78) ---
     lora_pins = []
     for y_val, net_name in [
-        (15.00, "3V3"), (17.54, "GND"), (20.08, "IO4_NSS"), (22.62, "IO5_MISO"),
-        (25.16, "IO6_MOSI"), (27.70, "IO7_SCK"), (40.40, "IO10_DIO0"), (45.48, "IO12_RST")
+        (67.78, "3V3"), (65.24, "GND"), (62.70, "IO4_NSS"), (60.16, "IO5_MISO"),
+        (57.62, "IO6_MOSI"), (55.08, "IO7_SCK"), (52.54, "IO10_DIO0"), (50.00, "IO12_RST")
     ]:
-        b.add_pin(26.5, y_val, drill=1.0, pad_size=1.7, is_pin1=(y_val==15.00), net=net_name)
-        lora_pins.append((26.5, y_val))
-    b.silk_rects.append((24.5, 13.0, 28.5, 48.0, 0.2))
-    b.silk_texts.append(("LORA RA-02", 22.0, 50.0, 0.85))
+        b.add_pin(10.0, y_val, drill=1.0, pad_size=1.7, is_pin1=(y_val==67.78), net=net_name)
+        lora_pins.append((10.0, y_val))
+    b.silk_rects.append((6.0, 46.0, 20.0, 74.0, 0.2))
+    b.silk_texts.append(("LORA RA-02", 7.5, 71.5, 0.85))
 
     # --- LEFT SIDE: PS4 / XBOX 3D JOYSTICK THROUGH-HOLE FOOTPRINT ---
-    # Solder raw replacement gamepad thumbstick directly onto PCB!
-    cx, cy = 14.0, 31.51
+    cx, cy = 18.0, 22.0
     b.add_ps4_joystick(cx, cy, label="PS4 3D JOYSTICK", net_x="IO0_ADC", net_y="IO1_ADC")
 
-    # --- LEFT SIDE: APM Sensor / Joystick 4-Pin Header (X=31.0, Y=30.24 to 37.86) ---
-    # Connects APM Battery sensor cable (Rover) OR external joystick cable (Base)
-    joy_apm = b.add_pin_header(31.0, 30.24, 4, pitch=2.54, vertical=True, is_pin1_idx=1, net_list=["IO0_ADC", "IO1_ADC", "GND", "3V3"], label="", label_pos=(0, 0))
-    b.silk_texts.append(("APM / JOY", 28.5, 39.5, 0.75))
-    b.silk_texts.append(("X/V", 28.5, 30.24, 0.65))
-    b.silk_texts.append(("Y/I", 28.5, 32.78, 0.65))
-    b.silk_texts.append(("GND", 28.5, 35.32, 0.65))
-    b.silk_texts.append(("3V3", 28.5, 37.86, 0.65))
+    # --- LEFT SIDE: APM Sensor / Joystick 4-Pin Header (X=32.0, Y=20.0 to 27.62) ---
+    joy_apm = b.add_pin_header(32.0, 20.0, 4, pitch=2.54, vertical=True, is_pin1_idx=1, net_list=["3V3", "GND", "IO1_ADC", "IO0_ADC"], label="", label_pos=(0, 0))
+    b.silk_texts.append(("APM / JOY", 28.5, 18.0, 0.75))
+    b.silk_texts.append(("3V G Y X", 28.5, 29.5, 0.65))
 
-    # --- LEFT SIDE: Buzzer (X=31.0, Y=42.94 to 45.48) ---
-    buz = b.add_pin_header(31.0, 42.94, 2, pitch=2.54, vertical=True, is_pin1_idx=1, net_list=["IO11_BUZ", "GND"], label="", label_pos=(0, 0))
-    b.silk_texts.append(("BUZZER", 28.5, 47.0, 0.8))
-    b.silk_texts.append(("+ -", 32.5, 44.0, 0.65))
+    # --- LEFT SIDE: Buzzer (X=32.0, Y=33.0 to 35.54) ---
+    buz = b.add_pin_header(32.0, 33.0, 2, pitch=2.54, vertical=True, is_pin1_idx=1, net_list=["GND", "IO11_BUZ"], label="", label_pos=(0, 0))
+    b.silk_texts.append(("BUZZER", 28.5, 38.0, 0.75))
+    b.silk_texts.append(("+ -", 32.5, 31.5, 0.65))
 
-    # --- RIGHT SIDE: GPS Quectel LC29H (X=75.0, Y=40.40 to 48.02) ---
-    gps = b.add_pin_header(75.0, 40.40, 4, pitch=2.54, vertical=True, is_pin1_idx=1, net_list=["IO16_RX", "IO17_TX", "GND", "3V3"], label="", label_pos=(0, 0))
-    b.silk_texts.append(("RX", 77.5, 40.40, 0.8))
-    b.silk_texts.append(("TX", 77.5, 42.94, 0.8))
-    b.silk_texts.append(("GND", 77.5, 45.48, 0.8))
-    b.silk_texts.append(("3V3", 77.5, 48.02, 0.8))
-    b.silk_texts.append(("GPS LC29H", 74.0, 50.5, 0.9))
-    b.silk_rects.append((72.0, 38.0, 96.0, 62.0, 0.2))
-    b.silk_texts.append(("QUECTEL LC29H GNSS", 74.0, 59.5, 0.9))
+    # --- RIGHT SIDE: GPS Quectel LC29H (X=82.0, Y=60.0 to 67.62) ---
+    gps = b.add_pin_header(82.0, 60.0, 4, pitch=2.54, vertical=True, is_pin1_idx=1, net_list=["3V3", "GND", "IO17_RX", "IO16_TX"], label="", label_pos=(0, 0))
+    b.silk_texts.append(("GPS LC29H", 82.0, 57.5, 0.85))
+    b.silk_rects.append((76.0, 55.0, 96.0, 75.0, 0.2))
+    b.silk_texts.append(("QUECTEL LC29H GNSS", 78.0, 72.0, 0.85))
 
-    # --- RIGHT SIDE: 3x 4-PIN SMD TACTILE PUSHBUTTONS (BASE STATION) ---
-    btn1 = b.add_smd_button(66.5, 20.08, label="UP", net_sig="IO18_ACT1_UP")
-    btn2 = b.add_smd_button(74.5, 22.62, label="DOWN", net_sig="IO19_ACT2_DOWN")
-    btn3 = b.add_smd_button(82.5, 25.16, label="MODE", net_sig="IO20_ACT3_MODE")
+    # --- RIGHT SIDE: 3x 4-PIN SMD TACTILE PUSHBUTTONS (Centrados em Y=20.0) ---
+    btn1 = b.add_smd_button(48.0, 20.0, label="UP", net_sig="IO18_ACT1_UP")
+    btn2 = b.add_smd_button(60.0, 20.0, label="DOWN", net_sig="IO19_ACT2_DOWN")
+    btn3 = b.add_smd_button(72.0, 20.0, label="MODE", net_sig="IO20_ACT3_MODE")
 
-    # --- RIGHT SIDE: Servos & ESC / External Button Headers (X=90.0, Y=20.08 to 32.78) ---
-    esc = b.add_pin_header(90.0, 20.08, 3, pitch=2.54, vertical=False, is_pin1_idx=1, net_list=["IO18_ACT1_UP", "5V_SERVO", "GND"], label="", label_pos=(0, 0))
-    rud = b.add_pin_header(90.0, 22.62, 3, pitch=2.54, vertical=False, is_pin1_idx=1, net_list=["IO19_ACT2_DOWN", "5V_SERVO", "GND"], label="", label_pos=(0, 0))
-    winch = b.add_pin_header(90.0, 25.16, 3, pitch=2.54, vertical=False, is_pin1_idx=1, net_list=["IO20_ACT3_MODE", "5V_SERVO", "GND"], label="", label_pos=(0, 0))
-    rack = b.add_pin_header(90.0, 32.78, 3, pitch=2.54, vertical=False, is_pin1_idx=1, net_list=["IO23_ACT4", "5V_SERVO", "GND"], label="", label_pos=(0, 0))
+    # --- RIGHT SIDE: Servos & ESC / External Actuators (X=88.0, Y=15.0 to 36.0) ---
+    esc = b.add_pin_header(88.0, 36.0, 3, pitch=2.54, vertical=False, is_pin1_idx=1, net_list=["IO18_ACT1_UP", "5V_SERVO", "GND"], label="", label_pos=(0, 0))
+    rud = b.add_pin_header(88.0, 29.0, 3, pitch=2.54, vertical=False, is_pin1_idx=1, net_list=["IO19_ACT2_DOWN", "5V_SERVO", "GND"], label="", label_pos=(0, 0))
+    winch = b.add_pin_header(88.0, 22.0, 3, pitch=2.54, vertical=False, is_pin1_idx=1, net_list=["IO20_ACT3_MODE", "5V_SERVO", "GND"], label="", label_pos=(0, 0))
+    rack = b.add_pin_header(88.0, 15.0, 3, pitch=2.54, vertical=False, is_pin1_idx=1, net_list=["IO23_ACT4", "5V_SERVO", "GND"], label="", label_pos=(0, 0))
 
-    b.silk_texts.append(("ACTUATORS (ROVER)", 82.0, 36.5, 0.8))
-    b.silk_texts.append(("S + -", 90.5, 34.8, 0.75))
-    b.silk_texts.append(("CREMALHEIRA", 81.5, 32.78, 0.7))
-    b.silk_texts.append(("ESC/UP", 89.5, 18.2, 0.7))
+    b.silk_texts.append(("ACTUATORS (ROVER)", 78.0, 40.0, 0.8))
+    b.silk_texts.append(("S + -", 88.5, 38.2, 0.75))
+    b.silk_texts.append(("ESC/UP", 78.5, 36.0, 0.7))
+    b.silk_texts.append(("LEME/DN", 78.5, 29.0, 0.7))
+    b.silk_texts.append(("GUINCHO/MODE", 75.5, 22.0, 0.7))
+    b.silk_texts.append(("CREMALHEIRA", 76.0, 15.0, 0.7))
 
     # Power Inputs
-    pwr_esp = b.add_pin_header(56.32, 8.0, 2, pitch=2.54, vertical=False, is_pin1_idx=1, net_list=["GND", "5V"], label="", label_pos=(0, 0))
-    b.silk_texts.append(("- +", 56.8, 10.5, 0.7))
-    b.silk_texts.append(("PWR ESP 5V", 52.0, 5.5, 0.8))
+    pwr_esp = b.add_pin_header(36.0, 8.0, 2, pitch=2.54, vertical=False, is_pin1_idx=1, net_list=["GND", "5V"], label="", label_pos=(0, 0))
+    b.silk_texts.append(("- +", 36.5, 10.5, 0.7))
+    b.silk_texts.append(("PWR ESP 5V", 32.0, 5.5, 0.8))
     
-    pwr_srv = b.add_pin_header(92.54, 12.0, 2, pitch=2.54, vertical=False, is_pin1_idx=1, net_list=["5V_SERVO", "GND"], label="", label_pos=(0, 0))
-    b.silk_texts.append(("+ -", 93.0, 14.5, 0.7))
-    b.silk_texts.append(("PWR SERVO 5V", 89.0, 8.5, 0.8))
+    pwr_srv = b.add_pin_header(88.0, 8.0, 2, pitch=2.54, vertical=False, is_pin1_idx=1, net_list=["5V_SERVO", "GND"], label="", label_pos=(0, 0))
+    b.silk_texts.append(("+ -", 88.5, 10.5, 0.7))
+    b.silk_texts.append(("PWR SERVO 5V", 84.0, 5.5, 0.8))
 
-    b.silk_texts.append(("WINDDRAGONS UNIVERSAL CARRIER V3.1 (ROVER & BASE)", 10.0, 5.5, 1.15))
-    b.silk_texts.append(("100% PLANAR ZERO-CROSSING (100x70mm)", 10.0, 3.2, 0.85))
+    b.silk_texts.append(("WINDDRAGONS UNIVERSAL CARRIER V3.5 (LANDSCAPE)", 10.0, 80.5, 1.15))
+    b.silk_texts.append(("100x85mm (JLCPCB 100x100mm COMPLIANT)", 10.0, 78.0, 0.85))
 
     # ==========================================================================
-    # ROUTING (100% COLLINEAR, PURE HORIZONTAL PARALLEL TRACES, ZERO CROSSINGS!)
+    # ROUTING (100% COLLINEAR, PURE PLANAR ZERO CROSSINGS!)
     # ==========================================================================
-    # --- RIGHT SIDE: Straight Horizontal Traces from ESP_R through SMD Buttons to Headers ---
-    b.add_track_top(esp_r[2][0], 20.08, esc[0][0], 20.08, width=0.5)
-    b.add_track_top(esp_r[3][0], 22.62, rud[0][0], 22.62, width=0.5)
-    b.add_track_top(esp_r[4][0], 25.16, winch[0][0], 25.16, width=0.5)
-    b.add_track_top(esp_r[7][0], 32.78, rack[0][0], 32.78, width=0.5)
+    # --- Top copper routing ---
+    # ESP 5V Power
+    b.add_route_top([(38.54, 8.0), (38.54, 40.0), (31.0, 47.14)], width=0.8)
 
-    # --- RIGHT SIDE: GPS LC29H Straight Horizontal Traces to ESP_R ---
-    b.add_track_top(esp_r[10][0], 40.40, gps[0][0], 40.40, width=0.5)  # IO16 TX -> GPS RX
-    b.add_track_top(esp_r[11][0], 42.94, gps[1][0], 42.94, width=0.5)  # IO17 RX <- GPS TX
-    b.add_track_top(esp_r[12][0], 45.48, gps[2][0], 45.48, width=0.6)  # GND
-    b.add_track_top(esp_r[13][0], 48.02, gps[3][0], 48.02, width=0.6)  # 3V3
+    # Servo 5V and GND Power Buses
+    b.add_track_top(90.54, 8.0, 90.54, 36.0, width=1.0)
+    b.add_track_top(93.08, 8.0, 93.08, 36.0, width=1.0)
 
-    # Servo Power Bus (+5V_SERVO): Straight vertical line along X=92.54
-    b.add_track_top(92.54, 12.0, 92.54, 32.78, width=1.0)
-    # Servo GND Bus: Straight vertical line along X=95.08
-    b.add_track_top(95.08, 12.0, 95.08, 32.78, width=1.0)
+    # Actuators straight routing from ESP Header Bottom
+    b.add_route_top([(36.08, 47.14), (36.08, 36.0), (88.0, 36.0)], width=0.5)
+    b.add_route_top([(48.0, 36.0), (44.75, 22.25)], width=0.4) # SW1
+    b.add_route_top([(38.62, 47.14), (38.62, 29.0), (88.0, 29.0)], width=0.5)
+    b.add_route_top([(60.0, 29.0), (56.75, 22.25)], width=0.4) # SW2
+    b.add_route_top([(41.16, 47.14), (41.16, 22.0), (88.0, 22.0)], width=0.5)
+    b.add_route_top([(48.78, 47.14), (48.78, 15.0), (88.0, 15.0)], width=0.5)
 
-    # --- LEFT SIDE: LoRa Direct Straight Horizontal Traces to ESP_L ---
-    b.add_track_top(26.5, 15.00, esp_l[0][0], 15.00, width=0.6)  # 3V3
-    b.add_track_top(26.5, 20.08, esp_l[2][0], 20.08, width=0.4)  # IO4 NSS
-    b.add_track_top(26.5, 22.62, esp_l[3][0], 22.62, width=0.4)  # IO5 MISO
-    b.add_track_top(26.5, 25.16, esp_l[4][0], 25.16, width=0.4)  # IO6 MOSI
-    b.add_track_top(26.5, 27.70, esp_l[5][0], 27.70, width=0.4)  # IO7 SCK
-    b.add_track_top(26.5, 40.40, esp_l[10][0], 40.40, width=0.4) # IO10 DIO0
-    b.add_track_top(26.5, 45.48, esp_l[12][0], 45.48, width=0.4) # IO12 RST
+    # GPS LC29H routing
+    b.add_route_top([(56.40, 47.14), (76.0, 47.14), (76.0, 67.62), (82.0, 67.62)], width=0.5)
+    b.add_route_top([(58.94, 47.14), (78.0, 47.14), (78.0, 65.08), (82.0, 65.08)], width=0.5)
+    b.add_route_top([(61.48, 47.14), (80.0, 47.14), (80.0, 62.54), (82.0, 62.54)], width=0.6)
+    b.add_route_top([(64.02, 47.14), (82.0, 47.14), (82.0, 60.0)], width=0.6)
 
-    # --- LEFT SIDE: PS4 Joystick & APM Sensor Direct Traces to ESP_L ---
-    # VRx (IO0) at Y=30.24: From Joystick PotX wiper to APM Pin 1 to ESP32_L Pin 6
-    b.add_route_top([(14.0, 22.78), (14.0, 21.20), (24.50, 21.20), (24.50, 30.24), (esp_l[6][0], 30.24)], width=0.4)
-    # VRy (IO1) at Y=32.78: From Joystick PotY wiper to APM Pin 2 to ESP32_L Pin 7
-    b.add_route_top([(22.73, 31.51), (24.50, 31.51), (24.50, 32.78), (esp_l[7][0], 32.78)], width=0.4)
-    # SW (L3 Click) at Y=48.02: From Joystick Switch pin to ESP32_L Pin 13 (IO13)
-    b.add_route_top([(17.25, 41.76), (17.25, 48.02), (esp_l[13][0], 48.02)], width=0.4)
+    # LoRa Ra-02 routing from ESP Header Top
+    b.add_route_top([(31.0, 70.0), (20.0, 70.0), (10.0, 67.78)], width=0.6)
+    b.add_route_top([(36.08, 70.0), (36.08, 62.70), (10.0, 62.70)], width=0.4)
+    b.add_route_top([(38.62, 70.0), (38.62, 60.16), (10.0, 60.16)], width=0.4)
+    b.add_route_top([(41.16, 70.0), (41.16, 57.62), (10.0, 57.62)], width=0.4)
+    b.add_route_top([(43.70, 70.0), (43.70, 55.08), (10.0, 55.08)], width=0.4)
+    b.add_route_top([(56.40, 70.0), (56.40, 75.0), (22.0, 75.0), (22.0, 52.54), (10.0, 52.54)], width=0.4)
+    b.add_route_top([(61.48, 70.0), (61.48, 77.0), (24.0, 77.0), (24.0, 50.0), (10.0, 50.0)], width=0.4)
 
-    # --- LEFT SIDE: Buzzer Direct Straight Trace to ESP_L ---
-    b.add_track_top(buz[0][0], 42.94, esp_l[11][0], 42.94, width=0.4) # IO11 BUZ
+    # Buzzer routing
+    b.add_route_top([(58.94, 70.0), (58.94, 45.0), (32.0, 35.54)], width=0.4)
 
-    # --- ESP 5V POWER ROUTE ---
-    b.add_track_top(58.86, 8.0, 58.86, 15.00, width=0.8)
+    # Joystick and APM routing
+    b.add_route_top([(46.24, 70.0), (46.24, 27.62), (32.0, 27.62), (18.0, 13.27)], width=0.4)
+    b.add_route_top([(48.78, 70.0), (48.78, 25.08), (32.0, 25.08), (26.73, 22.0)], width=0.4)
+    b.add_route_top([(64.02, 70.0), (64.02, 32.0), (21.25, 27.75)], width=0.4)
 
-    # --- BOTTOM COPPER GND & 3V3 TIES ---
-    b.add_track_bot(56.32, 8.0, esp_r[1][0], 17.54, width=0.8)
-    b.add_track_bot(26.5, 17.54, esp_l[1][0], 17.54, width=0.8)
-    b.add_track_bot(joy_apm[2][0], 35.32, esp_l[8][0], 35.32, width=0.8)
-    b.add_track_bot(buz[1][0], 45.48, esp_l[12][0], 45.48, width=0.8)
-    # Buttons GND bus on bottom copper
-    b.add_track_bot(69.75, 20.08, 77.75, 22.62, width=0.5)
-    b.add_track_bot(77.75, 22.62, 85.75, 25.16, width=0.5)
-    b.add_track_bot(85.75, 25.16, 95.08, 25.16, width=0.5)
-    # Joystick 3V3 power trace on bottom copper
-    b.add_track_bot(26.5, 15.00, 16.50, 22.78, width=0.6)
+    # --- Bottom copper routing ---
+    b.add_track_bot(10.0, 65.24, 33.54, 70.0, width=0.8) # LoRa GND
+    b.add_track_bot(32.0, 33.0, 32.0, 22.54, width=0.8)  # Buzzer GND
+    b.add_track_bot(51.25, 20.0, 63.25, 20.0, width=0.5) # Buttons GND chain
+    b.add_track_bot(63.25, 20.0, 75.25, 20.0, width=0.5)
+    b.add_track_bot(75.25, 20.0, 93.08, 20.0, width=0.6)
+    b.add_track_bot(36.0, 8.0, 33.54, 47.14, width=0.8)  # ESP Power GND
+    b.add_track_bot(32.0, 20.0, 20.5, 13.27, width=0.6)  # Joystick 3V3
 
     b.generate_all()
+
 
 if __name__ == "__main__":
     print("Generating Universal Carrier PCB & Gerbers (V3.0 100% Planar Zero-Crossing)...")
     build_universal_pcb()
+    try:
+        import convert_to_kicad_project
+        convert_to_kicad_project.main()
+    except Exception as e:
+        print(f"KiCad Project generation note: {e}")
     print("\nGenerating Rover Carrier PCB & Gerbers (V3.0 100% Planar Zero-Crossing)...")
     build_rover_pcb()
     print("\nGenerating Base Station Carrier PCB & Gerbers (V3.0 100% Planar Zero-Crossing)...")

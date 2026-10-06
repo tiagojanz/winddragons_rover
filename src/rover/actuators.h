@@ -14,15 +14,10 @@ public:
           gravityDropSpeedCmPerSec(80.0f),
           lastWinchUpdate(0), isRackLifted(false),
           alarmActive(false), alarmEndTimeMs(0),
-          lastAlarmToggleMs(0), alarmStrobeState(false) {}
+          lastAlarmToggleMs(0), alarmStrobeState(false),
+          buzzerHardwareEnabled(false) {}
 
     void begin() {
-        // Allocate 4 PWM timers for ESP32Servo (ESC, Rudder, Winch, Rack)
-        ESP32PWM::allocateTimer(0);
-        ESP32PWM::allocateTimer(1);
-        ESP32PWM::allocateTimer(2);
-        ESP32PWM::allocateTimer(3);
-
         motorServo.setPeriodHertz(50);
         rudderServo.setPeriodHertz(50);
         winchServo.setPeriodHertz(50);
@@ -33,8 +28,25 @@ public:
         winchServo.attach(PIN_WINCH, PWM_PULSE_MIN, PWM_PULSE_MAX);
         rackServo.attach(PIN_SERVO_RACK, PWM_PULSE_MIN, PWM_PULSE_MAX);
 
-        pinMode(PIN_ALARM_BUZZER, OUTPUT);
-        digitalWrite(PIN_ALARM_BUZZER, LOW);
+        #if ARDUINO_USB_CDC_ON_BOOT
+        // No ESP32-C6, GPIO 13 é USB D+. Se o cabo USB estiver ligado ao PC, protege o pino para não derrubar o CDC.
+        // Se estiver em operação autónoma (alimentado por bateria), ativa o buzzer no pino 13!
+        if (PIN_ALARM_BUZZER >= 0) {
+            if (!HWCDC::isPlugged()) {
+                buzzerHardwareEnabled = true;
+                pinMode(PIN_ALARM_BUZZER, OUTPUT);
+                digitalWrite(PIN_ALARM_BUZZER, LOW);
+            } else {
+                buzzerHardwareEnabled = false;
+            }
+        }
+        #else
+        if (PIN_ALARM_BUZZER >= 0) {
+            buzzerHardwareEnabled = true;
+            pinMode(PIN_ALARM_BUZZER, OUTPUT);
+            digitalWrite(PIN_ALARM_BUZZER, LOW);
+        }
+        #endif
 
         stopMotor();
         centerRudder();
@@ -49,6 +61,7 @@ public:
         rackServo.write(RACK_POS_RELEASED);
         isRackLifted = true;
     }
+    void releaseRack() { liftRack(); }
 
     // Baixa a cremalheira travando/engatando o carretel para travar a profundidade ou recolher
     void engageRack() {
@@ -58,19 +71,29 @@ public:
 
     bool isRackReleased() const { return isRackLifted; }
 
+    void emergencyStop() {
+        stopMotor();
+        centerRudder();
+        stopWinch();
+    }
+
     // Trigger visual/acoustic alarm for a duration in seconds
     void triggerAlarm(uint16_t durationSeconds = 10) {
         alarmActive = true;
         alarmEndTimeMs = millis() + (static_cast<uint32_t>(durationSeconds) * 1000UL);
         lastAlarmToggleMs = millis();
         alarmStrobeState = true;
-        digitalWrite(PIN_ALARM_BUZZER, HIGH);
+        if (buzzerHardwareEnabled && PIN_ALARM_BUZZER >= 0) {
+            digitalWrite(PIN_ALARM_BUZZER, HIGH);
+        }
     }
 
     void stopAlarm() {
         alarmActive = false;
         alarmStrobeState = false;
-        digitalWrite(PIN_ALARM_BUZZER, LOW);
+        if (buzzerHardwareEnabled && PIN_ALARM_BUZZER >= 0) {
+            digitalWrite(PIN_ALARM_BUZZER, LOW);
+        }
     }
 
     bool isAlarmActive() const { return alarmActive; }
@@ -176,7 +199,9 @@ public:
             } else if (now - lastAlarmToggleMs >= 100) {
                 lastAlarmToggleMs = now;
                 alarmStrobeState = !alarmStrobeState;
-                digitalWrite(PIN_ALARM_BUZZER, alarmStrobeState ? HIGH : LOW);
+                if (buzzerHardwareEnabled && PIN_ALARM_BUZZER >= 0) {
+                    digitalWrite(PIN_ALARM_BUZZER, alarmStrobeState ? HIGH : LOW);
+                }
             }
         }
     }
@@ -213,4 +238,5 @@ private:
     uint32_t alarmEndTimeMs;
     uint32_t lastAlarmToggleMs;
     bool alarmStrobeState;
+    bool buzzerHardwareEnabled;
 };

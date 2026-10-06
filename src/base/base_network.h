@@ -9,19 +9,19 @@
 #include "network_config.h"
 #include "fleet_manager.h"
 #include "lora_protocol.h"
+#include "wifi_config_manager.h"
 
 class BaseNetwork {
 public:
-    BaseNetwork(FleetManager &fleet) : fleetManager(fleet), lastSyncTime(0), lastHttpStatus(0), syncSuccess(false) {}
+    BaseNetwork(FleetManager &fleet, WiFiConfigManager &wifi) 
+        : fleetManager(fleet), wifiConfig(wifi), lastSyncTime(0), lastHttpStatus(0), syncSuccess(false) {}
 
     void begin() {
-        WiFi.mode(WIFI_STA);
-        WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-        Serial.printf("[WIFI] Connecting to SSID: %s\n", WIFI_SSID);
+        // Conexão e fallback AP geridos pelo WiFiConfigManager
     }
 
     bool isConnected() const {
-        return WiFi.status() == WL_CONNECTED;
+        return wifiConfig.isConnected();
     }
 
     int getLastHttpStatus() const { return lastHttpStatus; }
@@ -43,6 +43,8 @@ public:
     }
 
 private:
+    FleetManager &fleetManager;
+    WiFiConfigManager &wifiConfig;
     void syncTelemetryToCloud() {
         WiFiClientSecure client;
         client.setInsecure(); // Skip certificate verification for flexible operation
@@ -176,7 +178,6 @@ private:
         }
     }
 
-    FleetManager &fleetManager;
     uint32_t lastSyncTime;
     int lastHttpStatus;
     bool syncSuccess;
