@@ -451,6 +451,34 @@ def generate_kicad_pcb(path):
     lines.append(f'    (pad "2" thru_hole circle (at 2.54 0) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "F.SilkS") (net {get_net("+5V_SERVO")} "{net_name("+5V_SERVO")}"))')
     lines.append('  )')
 
+    # WindDragons Logos (Front 20mm at 64,69 and Back 14mm at 50.5,56)
+    dragon_json_path = os.path.join(os.path.dirname(__file__), 'dragon_polys.json')
+    if os.path.exists(dragon_json_path):
+        with open(dragon_json_path) as djf:
+            dragon_norm_polys = json.load(djf)
+
+        # Front Logo (20mm, F.SilkS)
+        lines.append(f'  (footprint "WindDragons:WindDragons_Logo_20mm" (layer "F.Cu") (uuid "{new_uuid()}")')
+        lines.append(f'    (at 60.0 68.0)')
+        lines.append(f'    (fp_text reference "LOGO1" (at 0 -11.5) (layer "F.SilkS") (effects (font (size 1 1) (thickness 0.15))) (hide yes))')
+        lines.append(f'    (fp_text value "WindDragons_Logo" (at 0 11.5) (layer "F.Fab") (effects (font (size 1 1) (thickness 0.15))) (hide yes))')
+        lines.append(f'    (attr exclude_from_pos_files exclude_from_bom allow_missing_courtyard)')
+        for poly in dragon_norm_polys:
+            pts_str = " ".join([f"(xy {x*20.0:.3f} {y*20.0:.3f})" for x, y in poly])
+            lines.append(f'    (fp_poly (pts {pts_str}) (stroke (width 0.01) (type solid)) (fill yes) (layer "F.SilkS"))')
+        lines.append('  )')
+
+        # Back Logo (14mm, B.SilkS) - mirrored X for back orientation
+        lines.append(f'  (footprint "WindDragons:WindDragons_Logo_14mm" (layer "B.Cu") (uuid "{new_uuid()}")')
+        lines.append(f'    (at 50.5 56.0)')
+        lines.append(f'    (fp_text reference "LOGO2" (at 0 -8.5) (layer "B.SilkS") (effects (font (size 1 1) (thickness 0.15))) (hide yes))')
+        lines.append(f'    (fp_text value "WindDragons_Logo" (at 0 8.5) (layer "B.Fab") (effects (font (size 1 1) (thickness 0.15))) (hide yes))')
+        lines.append(f'    (attr exclude_from_pos_files exclude_from_bom allow_missing_courtyard)')
+        for poly in dragon_norm_polys:
+            pts_str = " ".join([f"(xy {-x*14.0:.3f} {y*14.0:.3f})" for x, y in poly])
+            lines.append(f'    (fp_poly (pts {pts_str}) (stroke (width 0.01) (type solid)) (fill yes) (layer "B.SilkS"))')
+        lines.append('  )')
+
     # Silkscreen Outlines
     front_silk_rects = [
         (1.5, 1.5, BOARD_W - 1.5, BOARD_H - 1.5, 0.2),

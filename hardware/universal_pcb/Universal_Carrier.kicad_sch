@@ -2383,6 +2383,16 @@
 	)
 	(wire
 		(pts
+			(xy 157.48 182.88) (xy 162.56 182.88)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "2db53deb-816e-4c01-9594-d5f709db22d5")
+	)
+	(wire
+		(pts
 			(xy 48.26 181.61) (xy 35.56 181.61)
 		)
 		(stroke
@@ -2390,6 +2400,16 @@
 			(type solid)
 		)
 		(uuid "2f0e215d-6747-44c7-ac4f-96b6e23ee8d3")
+	)
+	(wire
+		(pts
+			(xy 147.32 152.4) (xy 142.24 152.4)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "35f301b5-be05-4c7b-abc4-7c71206d22e4")
 	)
 	(wire
 		(pts
@@ -2440,6 +2460,16 @@
 			(type solid)
 		)
 		(uuid "429df4c3-eea1-4db2-8e34-569a553b2ba5")
+	)
+	(wire
+		(pts
+			(xy 157.48 152.4) (xy 162.56 152.4)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "481a2a63-d589-4493-bb3a-8152777b554e")
 	)
 	(wire
 		(pts
@@ -2560,6 +2590,16 @@
 			(type solid)
 		)
 		(uuid "7592861e-1d58-4878-b7e8-77f4f4dc77b6")
+	)
+	(wire
+		(pts
+			(xy 147.32 167.64) (xy 142.24 167.64)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "7bf5ff98-0018-4c7a-a591-0045926973ed")
 	)
 	(wire
 		(pts
@@ -2703,6 +2743,16 @@
 	)
 	(wire
 		(pts
+			(xy 157.48 167.64) (xy 162.56 167.64)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "ba017708-4ffb-426f-a6e3-fdfb68d5e2a4")
+	)
+	(wire
+		(pts
 			(xy 213.36 132.08) (xy 200.66 132.08)
 		)
 		(stroke
@@ -2730,6 +2780,26 @@
 			(type solid)
 		)
 		(uuid "c6ac3a35-9c7c-47d2-8b59-909678dc8a2d")
+	)
+	(wire
+		(pts
+			(xy 157.48 137.16) (xy 162.56 137.16)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "cb48a522-d645-43ea-a791-e3d9e8346bc5")
+	)
+	(wire
+		(pts
+			(xy 147.32 137.16) (xy 142.24 137.16)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "cce272d5-b4be-42c6-abc7-76cf6754ea01")
 	)
 	(wire
 		(pts
@@ -2780,6 +2850,16 @@
 			(type solid)
 		)
 		(uuid "e8acf5a3-5091-4d04-a3d7-87d43d5d7e37")
+	)
+	(wire
+		(pts
+			(xy 375.92 69.85) (xy 363.22 69.85)
+		)
+		(stroke
+			(width 0)
+			(type solid)
+		)
+		(uuid "e976286a-bc98-435c-9097-94a1bc754a0c")
 	)
 	(wire
 		(pts
@@ -2863,6 +2943,16 @@
 	)
 	(wire
 		(pts
+			(xy 147.32 182.88) (xy 142.24 182.88)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "f90385a8-3d14-4194-94ec-939806951c95")
+	)
+	(wire
+		(pts
 			(xy 203.2 53.34) (xy 190.5 53.34)
 		)
 		(stroke
@@ -2880,86 +2970,6 @@
 			(type solid)
 		)
 		(uuid "fdf93d69-8eec-4518-8bca-286259f28d36")
-	)
-	(wire
-		(pts
-			(xy 342.9 62.23) (xy 332.74 62.23)
-		)
-		(stroke
-			(width 0)
-			(type solid)
-		)
-		(uuid "a14b0004-965f-4fed-e2f3-916a00000021")
-	)
-	(wire
-		(pts
-			(xy 342.9 64.77) (xy 332.74 64.77)
-		)
-		(stroke
-			(width 0)
-			(type solid)
-		)
-		(uuid "a14b0004-965f-4fed-e2f3-916a00000022")
-	)
-	(wire
-		(pts
-			(xy 342.9 67.31) (xy 332.74 67.31)
-		)
-		(stroke
-			(width 0)
-			(type solid)
-		)
-		(uuid "a14b0004-965f-4fed-e2f3-916a00000023")
-	)
-	(wire
-		(pts
-			(xy 342.9 69.85) (xy 332.74 69.85)
-		)
-		(stroke
-			(width 0)
-			(type solid)
-		)
-		(uuid "a14b0004-965f-4fed-e2f3-916a00000024")
-	)
-	(label "JOY_X"
-		(at 332.74 62.23 180)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify right)
-		)
-		(uuid "a14b0004-965f-4fed-e2f3-916a00000025")
-	)
-	(label "IO0_ADC"
-		(at 332.74 64.77 180)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify right)
-		)
-		(uuid "a14b0004-965f-4fed-e2f3-916a00000026")
-	)
-	(label "JOY_Y"
-		(at 332.74 67.31 180)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify right)
-		)
-		(uuid "a14b0004-965f-4fed-e2f3-916a00000027")
-	)
-	(label "IO1_ADC"
-		(at 332.74 69.85 180)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify right)
-		)
-		(uuid "a14b0004-965f-4fed-e2f3-916a00000028")
 	)
 	(label "IO1_ADC"
 		(at 33.02 66.04 180)
@@ -3001,6 +3011,16 @@
 		)
 		(uuid "19dccd0f-bfd0-4967-bf97-b03b4616263d")
 	)
+	(label "GND"
+		(at 162.56 167.64 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "2025c88c-6920-44b9-9f90-ed947c3bd18b")
+	)
 	(label "+5V"
 		(at 35.56 153.67 180)
 		(effects
@@ -3020,6 +3040,16 @@
 			(justify right)
 		)
 		(uuid "25eb4b71-4b92-4f1a-9181-76a8df7629a3")
+	)
+	(label "+3V3"
+		(at 363.22 69.85 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "2c6e70a1-8b66-4d07-8e52-6849202dab62")
 	)
 	(label "+3V3"
 		(at 289.56 71.12 180)
@@ -3090,6 +3120,16 @@
 			(justify right)
 		)
 		(uuid "3f06c6b2-a5df-49e5-b298-17c6bd3e91bc")
+	)
+	(label "IO20_RUDDER_DN"
+		(at 142.24 167.64 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "450419d3-3159-40a1-a03f-fae2936a0ca4")
 	)
 	(label "IO19_WINCH_MODE"
 		(at 129.54 60.96 0)
@@ -3201,6 +3241,16 @@
 		)
 		(uuid "6fa03e09-f433-44f7-a58b-c4b37c14e055")
 	)
+	(label "GND"
+		(at 162.56 152.4 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "7088853b-b24e-405a-9155-cd1133ea0ae4")
+	)
 	(label "IO4_MISO"
 		(at 190.5 55.88 180)
 		(effects
@@ -3271,7 +3321,17 @@
 		)
 		(uuid "7b37a5ae-cf90-44d9-87d7-50889f7ac0eb")
 	)
-	(label "JOY_Y"
+	(label "GND"
+		(at 162.56 137.16 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "7bdc7e7e-d164-4479-bf45-7f0737d8b75b")
+	)
+	(label "IO1_ADC"
 		(at 289.56 68.58 180)
 		(effects
 			(font
@@ -3300,6 +3360,16 @@
 			(justify right)
 		)
 		(uuid "82af4610-82c6-4c3f-913c-f5c4b50ecdc2")
+	)
+	(label "IO9_BOOT"
+		(at 142.24 182.88 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "87bec54a-0b26-4f9e-ab5a-6487375474cd")
 	)
 	(label "IO1_ADC"
 		(at 363.22 64.77 180)
@@ -3350,6 +3420,16 @@
 			(justify left)
 		)
 		(uuid "99872bc5-ba14-42e3-8c29-17443bd6c754")
+	)
+	(label "GND"
+		(at 162.56 182.88 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "9bd26fbb-a2f3-4629-bdb7-7f2199f16d20")
 	)
 	(label "IO19_WINCH_MODE"
 		(at 292.1 177.8 180)
@@ -3501,6 +3581,16 @@
 		)
 		(uuid "d0aeb418-a8be-4ad5-8f73-622559bd9f6c")
 	)
+	(label "IO19_WINCH_MODE"
+		(at 142.24 152.4 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "d88e0f6b-900b-4a64-8801-3ea3609b2dcb")
+	)
 	(label "IO20_RUDDER_DN"
 		(at 363.22 149.86 180)
 		(effects
@@ -3541,7 +3631,7 @@
 		)
 		(uuid "e710cd78-912e-463f-9b41-94e5a9f194b3")
 	)
-	(label "JOY_X"
+	(label "IO0_ADC"
 		(at 289.56 58.42 180)
 		(effects
 			(font
@@ -3620,6 +3710,16 @@
 			(justify right)
 		)
 		(uuid "f897f622-3d60-4a50-90f4-35cddc4c23db")
+	)
+	(label "IO18_ACT1_UP"
+		(at 142.24 137.16 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "fa579377-f95b-4598-9008-65c1d8f80013")
 	)
 	(label "IO17_GPS_TX"
 		(at 200.66 139.7 180)
@@ -3730,6 +3830,14 @@
 		(pin "1"
 			(uuid "3a91e3f6-5e75-408f-9b36-b722bfbbda31")
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "J2")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Connector_Generic:Conn_01x03")
@@ -3802,6 +3910,14 @@
 		(pin "3"
 			(uuid "c2444e38-ad95-4036-9194-114470ddd38f")
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "J10")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Connector_Generic:Conn_01x02")
@@ -3871,6 +3987,92 @@
 		(pin "1"
 			(uuid "d37ba518-558a-49d4-a5e2-df2c17a2fcc0")
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "J5")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Switch:SW_Push")
+		(at 152.4 182.88 0)
+		(mirror y)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "1ace40c3-287b-4de4-a8c1-bec21c3a411c")
+		(property "Reference" "SW4"
+			(at 152.4 179.07 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "BOOT"
+			(at 152.4 186.69 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "PS4_joystick:SKRKAEE020"
+			(at 152.4 182.88 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 152.4 182.88 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 152.4 182.88 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "22d27f23-b44e-401b-bf8c-6dc0b8348b34")
+		)
+		(pin "2"
+			(uuid "8c1705b8-60a8-4d76-b920-139dc81bb381")
+		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "SW4")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Mechanical:MountingHole")
@@ -3934,6 +4136,91 @@
 				)
 			)
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "H3")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Switch:SW_Push")
+		(at 152.4 167.64 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "1be4b0c6-f934-46a2-84cc-18b37f8e836f")
+		(property "Reference" "SW3"
+			(at 152.4 163.83 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "DOWN"
+			(at 152.4 171.45 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "PS4_joystick:SKRKAEE020"
+			(at 152.4 167.64 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 152.4 167.64 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 152.4 167.64 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "7c8fa9da-78eb-41d4-b751-3fb47de3ee5f")
+		)
+		(pin "2"
+			(uuid "d15cf157-92a5-45a1-83e7-8c4ef8a28b7a")
+		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "SW3")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Mechanical:MountingHole")
@@ -3994,6 +4281,14 @@
 			(effects
 				(font
 					(size 1.27 1.27)
+				)
+			)
+		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "H2")
+					(unit 1)
 				)
 			)
 		)
@@ -4102,6 +4397,14 @@
 		(pin "V3"
 			(uuid "5cabeeeb-6844-431e-b1bd-354c95cfcf6b")
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "JOY1")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Connector_Generic:Conn_01x02")
@@ -4170,6 +4473,14 @@
 		)
 		(pin "1"
 			(uuid "316124d6-3e48-46e8-ae68-a2795d8c3ddb")
+		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "J12")
+					(unit 1)
+				)
+			)
 		)
 	)
 	(symbol
@@ -4243,85 +4554,18 @@
 		(pin "3"
 			(uuid "2b803e0b-209e-4264-ba07-369bbe749dff")
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "J7")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Connector_Generic:Conn_01x04")
-		(at 347.98 66.04 0)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(uuid "a14b0004-965f-4fed-e2f3-916a00000010")
-		(property "Reference" "JP_RBL"
-			(at 347.98 74.93 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.5 1.5)
-				)
-			)
-		)
-		(property "Value" "REMOVE_BEFORE_LAUNCH"
-			(at 347.98 57.15 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" "Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical"
-			(at 347.98 66.04 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 347.98 66.04 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "Remove Before Launch: Bench Test Shunts (1-2 JOY_X to IO0, 3-4 JOY_Y to IO1)"
-			(at 347.98 66.04 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "1"
-			(uuid "a14b0004-965f-4fed-e2f3-916a00000011")
-		)
-		(pin "2"
-			(uuid "a14b0004-965f-4fed-e2f3-916a00000012")
-		)
-		(pin "3"
-			(uuid "a14b0004-965f-4fed-e2f3-916a00000013")
-		)
-		(pin "4"
-			(uuid "a14b0004-965f-4fed-e2f3-916a00000014")
-		)
-	)
-	(symbol
-		(lib_id "Connector_Generic:Conn_01x03")
-		(at 381 64.77 0)
+		(at 381 66.04 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -4331,7 +4575,7 @@
 		(dnp no)
 		(uuid "4efffc93-1274-4592-941b-182a91efb1fc")
 		(property "Reference" "J4"
-			(at 381 72.39 0)
+			(at 381 74.93 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -4340,7 +4584,7 @@
 				)
 			)
 		)
-		(property "Value" "BATT_APM"
+		(property "Value" "APM_JOY"
 			(at 381 57.15 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -4350,8 +4594,8 @@
 				)
 			)
 		)
-		(property "Footprint" "Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Horizontal"
-			(at 381 64.77 0)
+		(property "Footprint" "Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical"
+			(at 381 66.04 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -4362,7 +4606,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 381 64.77 0)
+			(at 381 66.04 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -4372,7 +4616,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 381 64.77 0)
+			(at 381 66.04 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -4389,6 +4633,17 @@
 		)
 		(pin "3"
 			(uuid "a50005c9-eb7b-4584-9f6b-0d95cad3ab61")
+		)
+		(pin "4"
+			(uuid "00518e1b-b91c-4433-b42b-2e08483be70b")
+		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "J4")
+					(unit 1)
+				)
+			)
 		)
 	)
 	(symbol
@@ -4461,6 +4716,14 @@
 		)
 		(pin "3"
 			(uuid "f6b07487-1fdf-4970-8007-b82519ba6c3c")
+		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "J8")
+					(unit 1)
+				)
+			)
 		)
 	)
 	(symbol
@@ -4545,6 +4808,14 @@
 		)
 		(pin "7"
 			(uuid "c6b254e1-1e49-4ba9-a80d-0291a07fc2b8")
+		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "J6")
+					(unit 1)
+				)
+			)
 		)
 	)
 	(symbol
@@ -4633,6 +4904,14 @@
 		(pin "8"
 			(uuid "4bed02e3-5cf8-4d16-a274-e297fd26185e")
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "J3")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Connector_Generic:Conn_01x03")
@@ -4704,6 +4983,14 @@
 		)
 		(pin "3"
 			(uuid "ec4675e1-be2f-4c6a-846f-88b035ed3706")
+		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "J9")
+					(unit 1)
+				)
+			)
 		)
 	)
 	(symbol
@@ -4795,6 +5082,91 @@
 		(pin "7"
 			(uuid "0d63179e-3dc5-4a9a-a1da-8e4c8f6450df")
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "J1")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Switch:SW_Push")
+		(at 152.4 137.16 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "ace93055-4cad-4a18-bd0a-144586ca0d38")
+		(property "Reference" "SW1"
+			(at 152.4 133.35 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "UP"
+			(at 152.4 140.97 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "PS4_joystick:SKRKAEE020"
+			(at 152.4 137.16 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 152.4 137.16 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 152.4 137.16 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "8d63df6b-204c-424b-a3c1-da9980466e77")
+		)
+		(pin "2"
+			(uuid "494c7fe5-4f72-4ef6-874f-d6f90dcc539d")
+		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "SW1")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Connector_Generic:Conn_01x02")
@@ -4864,6 +5236,91 @@
 		(pin "1"
 			(uuid "aa068532-731a-4644-9905-b2cd7a9f7651")
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "J11")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Switch:SW_Push")
+		(at 152.4 152.4 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "dde15b65-4cda-4a83-ae9a-f7445dd77570")
+		(property "Reference" "SW2"
+			(at 152.4 148.59 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "MODE"
+			(at 152.4 156.21 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "PS4_joystick:SKRKAEE020"
+			(at 152.4 152.4 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 152.4 152.4 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 152.4 152.4 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "033673bf-1ef0-4414-8c6a-3db83a2a2966")
+		)
+		(pin "2"
+			(uuid "290dd8bc-5665-48f8-8901-7afc2c4bf6b1")
+		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "SW2")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Mechanical:MountingHole")
@@ -4924,6 +5381,14 @@
 			(effects
 				(font
 					(size 1.27 1.27)
+				)
+			)
+		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "H4")
+					(unit 1)
 				)
 			)
 		)
@@ -4990,195 +5455,19 @@
 				)
 			)
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "H1")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(sheet_instances
 		(path "/"
 			(page "1")
 		)
 	)
-
-	(symbol
-		(lib_id "Switch:SW_Push")
-		(at 152.40 137.16 0)
-		(unit 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(uuid "ace93055-4cad-4a18-bd0a-144586ca0d38")
-		(property "Reference" "SW1"
-			(at 152.40 133.35 0)
-			(effects (font (size 1.27 1.27)))
-		)
-		(property "Value" "UP"
-			(at 152.40 140.97 0)
-			(effects (font (size 1.27 1.27)))
-		)
-		(property "Footprint" "PS4_joystick:SKRKAEE020"
-			(at 152.40 137.16 0)
-			(hide yes)
-			(effects (font (size 1.27 1.27)))
-		)
-		(pin "1" (uuid "8d63df6b-204c-424b-a3c1-da9980466e77"))
-		(pin "2" (uuid "494c7fe5-4f72-4ef6-874f-d6f90dcc539d"))
-	)
-	(wire
-		(pts (xy 147.32 137.16) (xy 142.24 137.16))
-		(stroke (width 0) (type default))
-		(uuid "cce272d5-b4be-42c6-abc7-76cf6754ea01")
-	)
-	(label "IO18_ACT1_UP"
-		(at 142.24 137.16 180)
-		(effects (font (size 1.27 1.27)) (justify right))
-		(uuid "fa579377-f95b-4598-9008-65c1d8f80013")
-	)
-	(wire
-		(pts (xy 157.48 137.16) (xy 162.56 137.16))
-		(stroke (width 0) (type default))
-		(uuid "cb48a522-d645-43ea-a791-e3d9e8346bc5")
-	)
-	(label "GND"
-		(at 162.56 137.16 0)
-		(effects (font (size 1.27 1.27)) (justify left))
-		(uuid "7bdc7e7e-d164-4479-bf45-7f0737d8b75b")
-	)
-	(symbol
-		(lib_id "Switch:SW_Push")
-		(at 152.40 152.40 0)
-		(unit 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(uuid "dde15b65-4cda-4a83-ae9a-f7445dd77570")
-		(property "Reference" "SW2"
-			(at 152.40 148.59 0)
-			(effects (font (size 1.27 1.27)))
-		)
-		(property "Value" "MODE"
-			(at 152.40 156.21 0)
-			(effects (font (size 1.27 1.27)))
-		)
-		(property "Footprint" "PS4_joystick:SKRKAEE020"
-			(at 152.40 152.40 0)
-			(hide yes)
-			(effects (font (size 1.27 1.27)))
-		)
-		(pin "1" (uuid "033673bf-1ef0-4414-8c6a-3db83a2a2966"))
-		(pin "2" (uuid "290dd8bc-5665-48f8-8901-7afc2c4bf6b1"))
-	)
-	(wire
-		(pts (xy 147.32 152.40) (xy 142.24 152.40))
-		(stroke (width 0) (type default))
-		(uuid "35f301b5-be05-4c7b-abc4-7c71206d22e4")
-	)
-	(label "IO19_WINCH_MODE"
-		(at 142.24 152.40 180)
-		(effects (font (size 1.27 1.27)) (justify right))
-		(uuid "d88e0f6b-900b-4a64-8801-3ea3609b2dcb")
-	)
-	(wire
-		(pts (xy 157.48 152.40) (xy 162.56 152.40))
-		(stroke (width 0) (type default))
-		(uuid "481a2a63-d589-4493-bb3a-8152777b554e")
-	)
-	(label "GND"
-		(at 162.56 152.40 0)
-		(effects (font (size 1.27 1.27)) (justify left))
-		(uuid "7088853b-b24e-405a-9155-cd1133ea0ae4")
-	)
-	(symbol
-		(lib_id "Switch:SW_Push")
-		(at 152.40 167.64 0)
-		(unit 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(uuid "1be4b0c6-f934-46a2-84cc-18b37f8e836f")
-		(property "Reference" "SW3"
-			(at 152.40 163.83 0)
-			(effects (font (size 1.27 1.27)))
-		)
-		(property "Value" "DOWN"
-			(at 152.40 171.45 0)
-			(effects (font (size 1.27 1.27)))
-		)
-		(property "Footprint" "PS4_joystick:SKRKAEE020"
-			(at 152.40 167.64 0)
-			(hide yes)
-			(effects (font (size 1.27 1.27)))
-		)
-		(pin "1" (uuid "7c8fa9da-78eb-41d4-b751-3fb47de3ee5f"))
-		(pin "2" (uuid "d15cf157-92a5-45a1-83e7-8c4ef8a28b7a"))
-	)
-	(wire
-		(pts (xy 147.32 167.64) (xy 142.24 167.64))
-		(stroke (width 0) (type default))
-		(uuid "7bf5ff98-0018-4c7a-a591-0045926973ed")
-	)
-	(label "IO20_RUDDER_DN"
-		(at 142.24 167.64 180)
-		(effects (font (size 1.27 1.27)) (justify right))
-		(uuid "450419d3-3159-40a1-a03f-fae2936a0ca4")
-	)
-	(wire
-		(pts (xy 157.48 167.64) (xy 162.56 167.64))
-		(stroke (width 0) (type default))
-		(uuid "ba017708-4ffb-426f-a6e3-fdfb68d5e2a4")
-	)
-	(label "GND"
-		(at 162.56 167.64 0)
-		(effects (font (size 1.27 1.27)) (justify left))
-		(uuid "2025c88c-6920-44b9-9f90-ed947c3bd18b")
-	)
-	(symbol
-		(lib_id "Switch:SW_Push")
-		(at 152.40 182.88 0)
-		(unit 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(uuid "1ace40c3-287b-4de4-a8c1-bec21c3a411c")
-		(property "Reference" "SW4"
-			(at 152.40 179.07 0)
-			(effects (font (size 1.27 1.27)))
-		)
-		(property "Value" "BOOT"
-			(at 152.40 186.69 0)
-			(effects (font (size 1.27 1.27)))
-		)
-		(property "Footprint" "PS4_joystick:SKRKAEE020"
-			(at 152.40 182.88 0)
-			(hide yes)
-			(effects (font (size 1.27 1.27)))
-		)
-		(pin "1" (uuid "22d27f23-b44e-401b-bf8c-6dc0b8348b34"))
-		(pin "2" (uuid "8c1705b8-60a8-4d76-b920-139dc81bb381"))
-	)
-	(wire
-		(pts (xy 147.32 182.88) (xy 142.24 182.88))
-		(stroke (width 0) (type default))
-		(uuid "f90385a8-3d14-4194-94ec-939806951c95")
-	)
-	(label "IO9_BOOT"
-		(at 142.24 182.88 180)
-		(effects (font (size 1.27 1.27)) (justify right))
-		(uuid "87bec54a-0b26-4f9e-ab5a-6487375474cd")
-	)
-	(wire
-		(pts (xy 157.48 182.88) (xy 162.56 182.88))
-		(stroke (width 0) (type default))
-		(uuid "2db53deb-816e-4c01-9594-d5f709db22d5")
-	)
-	(label "GND"
-		(at 162.56 182.88 0)
-		(effects (font (size 1.27 1.27)) (justify left))
-		(uuid "9bd26fbb-a2f3-4629-bdb7-7f2199f16d20")
-	)
+	(embedded_fonts no)
 )

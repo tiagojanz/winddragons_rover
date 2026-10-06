@@ -241,7 +241,7 @@
       "internal_id": "",
       "mfg": "",
       "mpn": "",
-      "sch_revision": ""
+      "sch_revision": "V4.1 - Zero DRC Parity Clean"
     },
     "layer_pairs": [],
     "layer_presets": [],
@@ -667,7 +667,7 @@
       {
         "filename": "Universal_Carrier.kicad_sch",
         "name": "Universal_Carrier",
-        "uuid": "00000000-0000-0000-0000-000000000000"
+        "uuid": "c0000000-0000-0000-0000-000000000001"
       }
     ],
     "used_designators": "",
@@ -675,8 +675,8 @@
   },
   "sheets": [
     [
-      "769816c7-8944-4677-a9c8-ad5ff41b894c",
-      ""
+      "c0000000-0000-0000-0000-000000000001",
+      "Universal_Carrier"
     ]
   ],
   "text_variables": {},
