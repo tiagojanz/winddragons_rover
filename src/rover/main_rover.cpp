@@ -7,6 +7,8 @@
 #include "lora_protocol.h"
 #include "gps_tracker.h"
 #include "actuators.h"
+#include "battery_monitor.h"
+#include "rover_display.h"
 
 // Define this Rover's ID (e.g. 1 for ROVER-01, 2 for ROVER-02)
 #ifndef ROVER_ID
@@ -16,12 +18,12 @@
 // Peripherals
 GPSTracker gps;
 ActuatorController actuators;
+BatteryMonitor battery;
+RoverDisplay roverDisplay;
 Adafruit_NeoPixel rgbLed(1, PIN_RGB_LED, NEO_GRB + NEO_KHZ800);
 
-// Hardware SPI for SX1278 Ra-02
-SPIClass spiLoRa(FSPI);
-// Module(CS, DIO0, RST, DIO1)
-Module loraModule(PIN_LORA_NSS, PIN_LORA_DIO0, PIN_LORA_RST, RADIOLIB_NC, spiLoRa);
+// Module(CS, DIO0, RST, DIO1, SPI)
+Module loraModule(PIN_LORA_NSS, PIN_LORA_DIO0, PIN_LORA_RST, RADIOLIB_NC, SPI);
 SX1278 radio(&loraModule);
 
 // State tracking
@@ -31,6 +33,7 @@ uint32_t lastControlReceivedTime = 0;
 const uint32_t FAILSAFE_TIMEOUT_MS = 2500;
 uint8_t currentMotorStatus = MOTOR_IDLE;
 uint16_t lastExecutedCommandId = 0;
+bool loraReady = false;
 
 // Autonomous Navigation & Station Keeping Coordinates
 double homeLat = 0.0;
@@ -45,6 +48,18 @@ double navTargetLng = 0.0;
 
 const float STATION_KEEPING_TOLERANCE_M = 8.0f; // Station keeping radius in meters
 const float WAYPOINT_ARRIVAL_RADIUS_M    = 4.0f; // Target arrival radius in meters
+
+// Button Navigation Interrupt
+volatile bool flagPageChange = false;
+volatile uint32_t lastBtnPressTime = 0;
+
+void IRAM_ATTR isrBootButton() {
+    uint32_t now = millis();
+    if (now - lastBtnPressTime > 200) {
+        lastBtnPressTime = now;
+        flagPageChange = true;
+    }
+}
 
 void setRgbColor(uint8_t r, uint8_t g, uint8_t b) {
     rgbLed.setPixelColor(0, rgbLed.Color(r, g, b));
@@ -67,9 +82,14 @@ void sendTelemetry() {
     packet.satellites     = gps.getSatellites();
     packet.fix_quality    = gps.getFixQuality();
 
-    // Simulated 3S LiPo voltage (e.g. 12.4V) or from analog divider if implemented
-    packet.battery_mv     = 12400; 
-    packet.battery_pct    = 90;
+    // Real LiPo 4S telemetry from APM Power Module (28V / 90A)
+    battery.update();
+    packet.battery_mv     = battery.getVoltageMv(); 
+    packet.battery_pct    = battery.getPercentage();
+
+    Serial.printf("[BATT 4S] %u mV (%u%%) | I: %.2f A | Consumo: %.1f mAh | Avg Cell: %.2f V\n",
+                  battery.getVoltageMv(), battery.getPercentage(), 
+                  battery.getCurrentAmps(), battery.getConsumedMah(), battery.getCellAverageV());
 
     packet.motor_status   = currentMotorStatus;
     packet.anchor_status  = actuators.getAnchorStatus();
@@ -80,9 +100,11 @@ void sendTelemetry() {
                                          sizeof(packet) - sizeof(packet.checksum));
 
     // Transmit telemetry
-    radio.standby();
-    radio.transmit(reinterpret_cast<uint8_t*>(&packet), sizeof(packet));
-    radio.startReceive();
+    if (loraReady) {
+        radio.standby();
+        radio.transmit(reinterpret_cast<uint8_t*>(&packet), sizeof(packet));
+        radio.startReceive();
+    }
 }
 
 void processIncomingPacket(uint8_t *buffer, size_t length) {
@@ -98,11 +120,23 @@ void processIncomingPacket(uint8_t *buffer, size_t length) {
             uint16_t calc = calculate_checksum(buffer, sizeof(PacketManualControl) - sizeof(cmd->checksum));
             if (calc == cmd->checksum) {
                 lastControlReceivedTime = millis();
-                currentMotorStatus = MOTOR_MANUAL;
 
-                actuators.setThrottle(cmd->throttle);
-                actuators.setRudder(cmd->rudder);
-                actuators.jogWinch(cmd->anchor_jog);
+                if (cmd->mode_request == 1) { // HOLD STATION (Virtual Anchor)
+                    if (currentMotorStatus != MOTOR_HOLDING_STATION) {
+                        if (gps.hasFix()) {
+                            stationTargetLat = gps.getLatitude();
+                            stationTargetLng = gps.getLongitude();
+                        }
+                        currentMotorStatus = MOTOR_HOLDING_STATION;
+                        Serial.printf("[ROVER] Switched to HOLD_STATION at (%.6f, %.6f)\n", 
+                                      stationTargetLat, stationTargetLng);
+                    }
+                } else { // 0 = MANUAL
+                    currentMotorStatus = MOTOR_MANUAL;
+                    actuators.setThrottle(cmd->throttle);
+                    actuators.setRudder(cmd->rudder);
+                    actuators.jogWinch(cmd->anchor_jog);
+                }
 
                 // LED flash Blue
                 setRgbColor(0, 0, 30);
@@ -275,11 +309,16 @@ void updateAutonomousNavigation() {
 
 void setup() {
     Serial.begin(115200);
-    delay(1000);
+    Serial.setTxTimeoutMs(0); // Non-blocking USB CDC TX (prevents 2000ms stalls)
+    delay(200);
     Serial.printf("\n=== WINDDRAGONS ROVER-%02d BOOTING ===\n", ROVER_ID);
 
     rgbLed.begin();
     setRgbColor(20, 20, 0); // Yellow: Booting
+
+    // Initialize Battery Monitor (APM 28V 90A Module for LiPo 4S)
+    battery.begin();
+    Serial.println("[ROVER] APM Battery Monitor initialized (ADC Pins V=0, I=3)");
 
     // Initialize Actuators (ESC, Leme, Guincho, Cremalheira, Alarme)
     actuators.begin();
@@ -289,8 +328,19 @@ void setup() {
     gps.begin();
     Serial.println("[ROVER] Quectel LC29H GPS UART initialized");
 
-    // Initialize SPI and LoRa
-    spiLoRa.begin(PIN_LORA_SCK, PIN_LORA_MISO, PIN_LORA_MOSI, PIN_LORA_NSS);
+    // De-assert all SPI Chip Selects before bus init
+    pinMode(PIN_LCD_CS, OUTPUT);
+    digitalWrite(PIN_LCD_CS, HIGH);
+    pinMode(PIN_LORA_NSS, OUTPUT);
+    digitalWrite(PIN_LORA_NSS, HIGH);
+    pinMode(4, OUTPUT);
+    digitalWrite(4, HIGH); // MicroSD CS
+
+    // Initialize Display ST7789 1.47"
+    roverDisplay.begin();
+    pinMode(PIN_BTN_BOOT, INPUT_PULLUP);
+    attachInterrupt(digitalPinToInterrupt(PIN_BTN_BOOT), isrBootButton, FALLING);
+    Serial.println("[ROVER] ST7789 Diagnostic LCD initialized (Landscape)");
     
     Serial.print("[ROVER] Initializing LoRa SX1278 (433MHz)... ");
     int state = radio.begin(LORA_FREQUENCY, LORA_BANDWIDTH, LORA_SPREAD_FACTOR, 
@@ -298,44 +348,59 @@ void setup() {
                             LORA_PREAMBLE_LEN);
     if (state == RADIOLIB_ERR_NONE) {
         Serial.println("OK!");
+        loraReady = true;
         setRgbColor(0, 30, 0); // Green
+        radio.startReceive();
     } else {
         Serial.printf("FAILED! (code: %d)\n", state);
+        loraReady = false;
         setRgbColor(50, 0, 0); // Red
     }
-
-    // Set to continuous receive mode
-    radio.startReceive();
 }
 
 void loop() {
     uint32_t now = millis();
 
-    // 1. Process GPS
+    // 1. Screen Navigation Button (Instant Hardware Interrupt)
+    bool forceDisplay = false;
+    if (flagPageChange) {
+        flagPageChange = false;
+        roverDisplay.nextPage();
+        forceDisplay = true;
+        bool failsafeActive = (currentMotorStatus == MOTOR_FAILSAFE);
+        int16_t currentRssi = loraReady ? static_cast<int16_t>(radio.getRSSI()) : 0;
+        roverDisplay.update(ROVER_ID, gps, battery, actuators, currentMotorStatus, 
+                            currentRssi, failsafeActive, true);
+        Serial.printf("[ROVER] Display page switched to: %d\n", roverDisplay.getCurrentPage());
+    }
+
+    // 2. Process GPS
     gps.update();
 
-    // 2. Update Actuators (winch timing, alarm timing/strobe)
+    // 3. Update Actuators (winch timing, alarm timing/strobe)
     actuators.update();
 
-    // 3. Autonomous Navigation / Station Keeping updates (10Hz)
+    // 4. Autonomous Navigation / Station Keeping updates (10Hz)
     static uint32_t lastNavUpdate = 0;
     if (now - lastNavUpdate >= 100) {
         lastNavUpdate = now;
         updateAutonomousNavigation();
     }
 
-    // 4. Check for received LoRa packets
-    int packetLen = radio.getPacketLength();
-    if (packetLen > 0) {
-        uint8_t buffer[64];
-        int readState = radio.readData(buffer, packetLen);
-        if (readState == RADIOLIB_ERR_NONE) {
-            processIncomingPacket(buffer, packetLen);
+    // 5. Check for received LoRa packets
+    if (loraReady) {
+        int packetLen = radio.getPacketLength();
+        if (packetLen > 0) {
+            uint8_t buffer[64];
+            int readState = radio.readData(buffer, packetLen);
+            if (readState == RADIOLIB_ERR_NONE) {
+                processIncomingPacket(buffer, packetLen);
+            }
+            radio.startReceive();
         }
-        radio.startReceive();
     }
 
-    // 5. Failsafe Watchdog: In manual mode, stop if signal lost
+    // 6. Failsafe Watchdog: In manual mode, stop if signal lost
     if (currentMotorStatus == MOTOR_MANUAL && (now - lastControlReceivedTime > FAILSAFE_TIMEOUT_MS)) {
         actuators.stopMotor();
         actuators.centerRudder();
@@ -345,7 +410,7 @@ void loop() {
         Serial.println("[ROVER] FAILSAFE TRIGGERED! Signal lost -> Motor stopped.");
     }
 
-    // 6. Handle Visual LED Status / Strobe Alarm
+    // 7. Handle Visual LED Status / Strobe Alarm
     if (actuators.isAlarmActive()) {
         if (actuators.getAlarmStrobeState()) {
             setRgbColor(255, 255, 255); // High-intensity white strobe
@@ -354,7 +419,7 @@ void loop() {
         }
     }
 
-    // 7. Send Telemetry periodically (every 1000ms)
+    // 8. Send Telemetry periodically (every 1000ms)
     if (now - lastTelemetryTime >= 1000) {
         lastTelemetryTime = now;
         sendTelemetry();
@@ -370,4 +435,10 @@ void loop() {
             }
         }
     }
+
+    // 9. Update Rover Onboard LCD Display (Instant if forced, or 5Hz periodically)
+    bool failsafeActive = (currentMotorStatus == MOTOR_FAILSAFE);
+    int16_t currentRssi = loraReady ? static_cast<int16_t>(radio.getRSSI()) : 0;
+    roverDisplay.update(ROVER_ID, gps, battery, actuators, currentMotorStatus, 
+                        currentRssi, failsafeActive, forceDisplay);
 }

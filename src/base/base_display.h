@@ -2,6 +2,8 @@
 
 #include <Arduino.h>
 #include <Arduino_GFX_Library.h>
+#include <canvas/Arduino_Canvas.h>
+#include "Display_ST7789.h"
 #include "config_common.h"
 #include "fleet_manager.h"
 
@@ -22,160 +24,202 @@
 
 class BaseDisplay {
 public:
-    BaseDisplay() : gfx(nullptr), lastRender(0) {}
+    BaseDisplay() : canvas(nullptr), lastRender(0) {}
 
     void begin() {
-        // Turn on LCD Backlight
-        pinMode(PIN_LCD_BL, OUTPUT);
-        digitalWrite(PIN_LCD_BL, HIGH);
+        // Disable onboard MicroSD card CS (GPIO 4)
+        pinMode(4, OUTPUT);
+        digitalWrite(4, HIGH);
 
-        // ST7789 1.47" (172x320) SPI Bus configuration
-        Arduino_DataBus *bus = new Arduino_ESP32SPI(
-            PIN_LCD_DC, PIN_LCD_CS, PIN_LCD_SCLK, PIN_LCD_MOSI, GFX_NOT_DEFINED
-        );
+        // Initialize Lafvin ST7789 display driver
+        display.begin();
+        display.setBacklight(80); // 80% brightness
 
-        // ST7789 (width: 172, height: 320, col_offset: 34, row_offset: 0)
-        gfx = new Arduino_ST7789(
-            bus, PIN_LCD_RST, 0 /* rotation */, true /* IPS */,
-            LCD_WIDTH, LCD_HEIGHT, 34, 0, 34, 0
-        );
-
-        if (gfx) {
-            gfx->begin();
-            gfx->fillScreen(UI_BLACK);
+        // Create high-speed off-screen RAM canvas
+        canvas = new Arduino_Canvas(LCD_WIDTH, LCD_HEIGHT, nullptr);
+        if (canvas) {
+            canvas->begin();
+            canvas->fillScreen(UI_BLACK);
             drawStaticHeader();
+            display.drawPixelBuffer(0, 0, LCD_WIDTH - 1, LCD_HEIGHT - 1, canvas->getFramebuffer());
         }
     }
 
     void drawStaticHeader() {
-        if (!gfx) return;
-        gfx->fillRect(0, 0, LCD_WIDTH, 26, UI_NAVY); // Dark Navy Blue Header
-        gfx->setTextColor(UI_WHITE);
-        gfx->setTextSize(1);
-        gfx->setCursor(6, 9);
-        gfx->print("WINDDRAGONS BASE");
+        if (!canvas) return;
+        canvas->fillRect(0, 0, LCD_WIDTH, 26, UI_NAVY);
+        canvas->setTextColor(UI_WHITE);
+        canvas->setTextSize(1);
+        canvas->setCursor(6, 9);
+        canvas->print("WINDDRAGONS BASE");
     }
 
-    void update(FleetManager &fleet, bool wifiOk, bool cloudOk, int8_t throttle, int8_t rudder) {
+    void update(FleetManager &fleet, bool wifiOk, bool cloudOk, 
+                int8_t throttle, int8_t rudder, uint8_t navMode) {
         uint32_t now = millis();
         if (now - lastRender < 200) return; // 5Hz UI refresh
         lastRender = now;
 
-        if (!gfx) return;
+        if (!canvas) return;
 
         FleetRover *selected = fleet.getSelectedRover();
 
         // 1. Status Bar icons
-        gfx->fillRect(120, 4, 46, 18, UI_NAVY);
-        // WiFi indicator
-        gfx->fillCircle(132, 13, 4, wifiOk ? UI_GREEN : UI_RED);
-        // Cloud sync indicator
-        gfx->fillCircle(150, 13, 4, cloudOk ? UI_CYAN : UI_ORANGE);
+        drawStaticHeader();
+        canvas->fillRect(120, 4, 46, 18, UI_NAVY);
+        canvas->fillCircle(132, 13, 4, wifiOk ? UI_GREEN : UI_RED);
+        canvas->fillCircle(150, 13, 4, cloudOk ? UI_CYAN : UI_ORANGE);
 
         // 2. Active Rover Header
-        gfx->fillRect(4, 30, LCD_WIDTH - 8, 28, UI_CARD_BG); // Card BG
-        gfx->setTextColor(UI_YELLOW);
-        gfx->setTextSize(2);
-        gfx->setCursor(8, 36);
+        canvas->fillRect(4, 30, LCD_WIDTH - 8, 28, UI_CARD_BG);
+        canvas->setTextColor(UI_YELLOW);
+        canvas->setTextSize(2);
+        canvas->setCursor(8, 36);
         if (selected) {
-            gfx->print(selected->code);
+            canvas->print(selected->code);
         } else {
-            gfx->print("NO ROVER");
+            canvas->print("NO ROVER");
         }
 
         // Online & RSSI badge
-        gfx->setTextSize(1);
-        gfx->setCursor(110, 36);
+        canvas->setTextSize(1);
+        canvas->setCursor(110, 36);
         if (selected && selected->is_online) {
-            gfx->setTextColor(UI_GREEN);
-            gfx->print("ONLINE");
-            gfx->setCursor(110, 47);
-            gfx->setTextColor(UI_WHITE);
-            gfx->printf("%d dBm", selected->rssi);
+            canvas->setTextColor(UI_GREEN);
+            canvas->print("ONLINE");
+            canvas->setCursor(110, 47);
+            canvas->setTextColor(UI_WHITE);
+            canvas->printf("%d dBm", selected->rssi);
         } else {
-            gfx->setTextColor(UI_RED);
-            gfx->print("OFFLINE");
+            canvas->setTextColor(UI_RED);
+            canvas->print("OFFLINE");
         }
 
         // 3. Telemetry Info Card
         int y = 64;
-        gfx->fillRect(4, y, LCD_WIDTH - 8, 140, UI_PANEL_BG); // Dark slate
+        canvas->fillRect(4, y, LCD_WIDTH - 8, 140, UI_PANEL_BG);
 
-        gfx->setTextColor(UI_WHITE);
-        gfx->setTextSize(1);
+        canvas->setTextColor(UI_WHITE);
+        canvas->setTextSize(1);
 
         if (selected && selected->is_online) {
-            gfx->setCursor(8, y + 6);
-            gfx->setTextColor(UI_LIGHTGREY);
-            gfx->print("GPS COORD:");
-            gfx->setCursor(8, y + 17);
-            gfx->setTextColor(UI_WHITE);
-            gfx->printf("%.6f, %.6f", selected->lat, selected->lng);
+            canvas->setCursor(8, y + 6);
+            canvas->setTextColor(UI_LIGHTGREY);
+            canvas->print("GPS COORD:");
+            canvas->setCursor(8, y + 17);
+            canvas->setTextColor(UI_WHITE);
+            canvas->printf("%.6f, %.6f", selected->lat, selected->lng);
 
-            gfx->setCursor(8, y + 32);
-            gfx->setTextColor(UI_LIGHTGREY);
-            gfx->print("SPEED / HEADING:");
-            gfx->setCursor(8, y + 43);
-            gfx->setTextColor(UI_WHITE);
-            gfx->printf("%.1f kn | %.0f deg", selected->speed_knots, selected->heading_deg);
+            canvas->setCursor(8, y + 32);
+            canvas->setTextColor(UI_LIGHTGREY);
+            canvas->print("SPEED / HEADING:");
+            canvas->setCursor(8, y + 43);
+            canvas->setTextColor(UI_WHITE);
+            canvas->printf("%.1f kn | %.0f deg", selected->speed_knots, selected->heading_deg);
 
-            gfx->setCursor(8, y + 58);
-            gfx->setTextColor(UI_LIGHTGREY);
-            gfx->print("BATTERY:");
-            gfx->setCursor(8, y + 69);
-            gfx->setTextColor(selected->battery_pct < 25 ? UI_RED : UI_GREEN);
-            gfx->printf("%u%% (%.1f V)", selected->battery_pct, selected->battery_voltage);
+            canvas->setCursor(8, y + 58);
+            canvas->setTextColor(UI_LIGHTGREY);
+            canvas->print("BATTERY:");
+            canvas->setCursor(8, y + 69);
+            canvas->setTextColor(selected->battery_pct < 25 ? UI_RED : UI_GREEN);
+            canvas->printf("%u%% (%.1f V)", selected->battery_pct, selected->battery_voltage);
 
-            gfx->setCursor(8, y + 84);
-            gfx->setTextColor(UI_LIGHTGREY);
-            gfx->print("MOTOR STATUS:");
-            gfx->setCursor(8, y + 95);
-            gfx->setTextColor(UI_YELLOW);
-            gfx->print(get_motor_status_str(selected->motor_status));
+            canvas->setCursor(8, y + 84);
+            canvas->setTextColor(UI_LIGHTGREY);
+            canvas->print("MOTOR STATUS:");
+            canvas->setCursor(8, y + 95);
+            canvas->setTextColor(UI_YELLOW);
+            canvas->print(get_motor_status_str(selected->motor_status));
 
-            gfx->setCursor(8, y + 110);
-            gfx->setTextColor(UI_LIGHTGREY);
-            gfx->print("ANCHOR:");
-            gfx->setCursor(8, y + 121);
-            gfx->setTextColor(UI_CYAN);
-            gfx->printf("%s (%.1fm)", get_anchor_status_str(selected->anchor_status), selected->anchor_depth_m);
+            canvas->setCursor(8, y + 110);
+            canvas->setTextColor(UI_LIGHTGREY);
+            canvas->print("ANCHOR:");
+            canvas->setCursor(8, y + 121);
+            canvas->setTextColor(UI_CYAN);
+            canvas->printf("%s (%.1fm)", get_anchor_status_str(selected->anchor_status), selected->anchor_depth_m);
         } else {
-            gfx->setTextColor(UI_LIGHTGREY);
-            gfx->setCursor(14, y + 60);
-            gfx->print("Waiting for telemetry...");
+            canvas->setTextColor(UI_LIGHTGREY);
+            canvas->setCursor(14, y + 60);
+            canvas->print("Waiting for telemetry...");
         }
 
         // 4. Joystick Controls Card
         y = 210;
-        gfx->fillRect(4, y, LCD_WIDTH - 8, 70, UI_CARD_BG);
-        gfx->setTextColor(UI_WHITE);
-        gfx->setTextSize(1);
-        gfx->setCursor(8, y + 6);
-        gfx->print("JOYSTICK INPUT");
+        canvas->fillRect(4, y, LCD_WIDTH - 8, 70, UI_CARD_BG);
+        canvas->setTextColor(UI_WHITE);
+        canvas->setTextSize(1);
+        canvas->setCursor(8, y + 6);
+        canvas->printf("JOYSTICK INPUT [%s]", (navMode == 0) ? "MANUAL" : "STATION");
 
         // Throttle indicator bar
-        gfx->setCursor(8, y + 22);
-        gfx->printf("THR: %+3d%%", throttle);
-        gfx->drawRect(70, y + 20, 90, 10, UI_WHITE);
+        canvas->setCursor(8, y + 22);
+        canvas->printf("THR: %+3d%%", throttle);
+        canvas->drawRect(70, y + 20, 90, 10, UI_WHITE);
         int barW = map(throttle, -100, 100, 0, 88);
-        gfx->fillRect(71, y + 21, barW, 8, throttle >= 0 ? UI_GREEN : UI_RED);
+        canvas->fillRect(71, y + 21, barW, 8, throttle >= 0 ? UI_GREEN : UI_RED);
 
         // Rudder indicator bar
-        gfx->setCursor(8, y + 42);
-        gfx->printf("RUD: %+3d%%", rudder);
-        gfx->drawRect(70, y + 40, 90, 10, UI_WHITE);
+        canvas->setCursor(8, y + 42);
+        canvas->printf("RUD: %+3d%%", rudder);
+        canvas->drawRect(70, y + 40, 90, 10, UI_WHITE);
         int barR = map(rudder, -100, 100, 0, 88);
-        gfx->fillRect(71, y + 41, barR, 8, UI_BLUE);
+        canvas->fillRect(71, y + 41, barR, 8, UI_BLUE);
 
         // 5. Bottom Navigation Hint
-        gfx->fillRect(0, 290, LCD_WIDTH, 30, UI_NAVY);
-        gfx->setTextColor(UI_LIGHTGREY);
-        gfx->setTextSize(1);
-        gfx->setCursor(6, 298);
-        gfx->print("BOOT: Cycle Rover [1..8]");
+        canvas->fillRect(0, 290, LCD_WIDTH, 30, UI_NAVY);
+        canvas->setTextColor(UI_LIGHTGREY);
+        canvas->setTextSize(1);
+        canvas->setCursor(6, 298);
+        canvas->print("BOOT: Cycle Rover [1..8]");
+
+        // Push frame to ST7789
+        display.drawPixelBuffer(0, 0, LCD_WIDTH - 1, LCD_HEIGHT - 1, canvas->getFramebuffer());
     }
 
-private:
-    Arduino_GFX *gfx;
+    void renderMenu(const char* const items[], uint8_t count, uint8_t selectedIndex, const char* feedbackMsg = nullptr) {
+        if (!canvas) return;
+
+        canvas->fillRect(4, 30, LCD_WIDTH - 8, 255, UI_PANEL_BG);
+        canvas->setTextColor(UI_YELLOW);
+        canvas->setTextSize(1);
+        canvas->setCursor(10, 38);
+        canvas->print("=== MENU DE CONTROLO ===");
+
+        int startY = 56;
+        int itemH = 26;
+
+        for (uint8_t i = 0; i < count; ++i) {
+            int y = startY + i * itemH;
+            if (i == selectedIndex) {
+                canvas->fillRect(8, y, LCD_WIDTH - 16, itemH - 3, UI_NAVY);
+                canvas->drawRect(8, y, LCD_WIDTH - 16, itemH - 3, UI_CYAN);
+                canvas->setTextColor(UI_WHITE);
+            } else {
+                canvas->fillRect(8, y, LCD_WIDTH - 16, itemH - 3, UI_CARD_BG);
+                canvas->setTextColor(UI_LIGHTGREY);
+            }
+            canvas->setCursor(14, y + 6);
+            canvas->print(items[i]);
+        }
+
+        // Bottom Feedback / Hint
+        canvas->fillRect(0, 290, LCD_WIDTH, 30, UI_NAVY);
+        canvas->setTextSize(1);
+        if (feedbackMsg != nullptr) {
+            canvas->setTextColor(UI_YELLOW);
+            canvas->setCursor(6, 298);
+            canvas->print(feedbackMsg);
+        } else {
+            canvas->setTextColor(UI_CYAN);
+            canvas->setCursor(6, 298);
+            canvas->print("JOY: NAVEGAR | CLIQUE: OK");
+        }
+
+        // Push frame to ST7789
+        display.drawPixelBuffer(0, 0, LCD_WIDTH - 1, LCD_HEIGHT - 1, canvas->getFramebuffer());
+    }
+
+    ST7789Display display;
+    Arduino_Canvas *canvas;
     uint32_t lastRender;
 };

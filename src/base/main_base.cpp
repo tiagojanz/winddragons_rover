@@ -17,14 +17,38 @@ BaseNetwork   network(fleet);
 BaseDisplay   display;
 Adafruit_NeoPixel rgbLed(1, PIN_RGB_LED, NEO_GRB + NEO_KHZ800);
 
-// Hardware SPI for SX1278
-SPIClass spiLoRa(FSPI);
-Module loraModule(PIN_LORA_NSS, PIN_LORA_DIO0, PIN_LORA_RST, RADIOLIB_NC, spiLoRa);
+// Hardware SPI for SX1278 (Shared SPI bus)
+Module loraModule(PIN_LORA_NSS, PIN_LORA_DIO0, PIN_LORA_RST, RADIOLIB_NC, SPI);
 SX1278 radio(&loraModule);
 
 // Loop timers
 uint32_t lastControlTxTime = 0;
 const uint32_t CONTROL_TX_INTERVAL_MS = 100; // 10Hz manual control stream
+
+// Navigation Mode & UI Menu state
+uint8_t currentNavMode = 0; // 0 = MANUAL, 1 = HOLD STATION
+uint16_t localCmdId = 1000;
+
+enum UiScreen {
+    SCREEN_DASHBOARD,
+    SCREEN_MENU
+};
+UiScreen currentScreen = SCREEN_DASHBOARD;
+
+const char* const MENU_ITEMS[] = {
+    "1. MODO MANUAL",
+    "2. HOLD STATION",
+    "3. LANCAR ANCORA",
+    "4. RECOLHER ANCORA",
+    "5. PARAR MOTORES",
+    "6. PROXIMO ROVER",
+    "7. VOLTAR / SAIR"
+};
+const uint8_t MENU_COUNT = sizeof(MENU_ITEMS) / sizeof(MENU_ITEMS[0]);
+uint8_t menuSelectedIndex = 0;
+uint32_t lastMenuActivityMs = 0;
+const char* menuFeedback = nullptr;
+uint32_t menuFeedbackUntilMs = 0;
 
 // Button state
 bool lastBootBtnState = HIGH;
@@ -43,7 +67,13 @@ void setup() {
     rgbLed.begin();
     setRgbColor(20, 20, 0); // Yellow
 
-    pinMode(PIN_BTN_BOOT, INPUT_PULLUP);
+    // De-assert all SPI Chip Selects before bus init
+    pinMode(PIN_LCD_CS, OUTPUT);
+    digitalWrite(PIN_LCD_CS, HIGH);
+    pinMode(PIN_LORA_NSS, OUTPUT);
+    digitalWrite(PIN_LORA_NSS, HIGH);
+    pinMode(4, OUTPUT);
+    digitalWrite(4, HIGH); // MicroSD CS
 
     // 1. Initialize Display
     display.begin();
@@ -54,7 +84,6 @@ void setup() {
     Serial.println("[BASE] Joystick inputs initialized");
 
     // 3. Initialize LoRa
-    spiLoRa.begin(PIN_LORA_SCK, PIN_LORA_MISO, PIN_LORA_MOSI, PIN_LORA_NSS);
     Serial.print("[BASE] Initializing LoRa SX1278 (433MHz)... ");
     int state = radio.begin(LORA_FREQUENCY, LORA_BANDWIDTH, LORA_SPREAD_FACTOR,
                             LORA_CODING_RATE, LORA_SYNC_WORD, LORA_OUTPUT_POWER,
@@ -73,7 +102,7 @@ void setup() {
 }
 
 void transmitControlOrCommand() {
-    // Priority 1: Transmit any pending cloud action command (e.g. DROP_ANCHOR)
+    // Priority 1: Transmit any pending cloud or local action command (e.g. DROP_ANCHOR)
     if (fleet.hasPendingCommand()) {
         QueuedCommand qCmd = fleet.popPendingCommand();
         PacketActionCommand packet;
@@ -108,10 +137,18 @@ void transmitControlOrCommand() {
     packet.magic           = LORA_MAGIC_BYTE;
     packet.msg_type        = MSG_MANUAL_CONTROL;
     packet.target_rover_id = fleet.getSelectedRoverId();
-    packet.throttle        = joystick.getThrottle();
-    packet.rudder          = joystick.getRudder();
-    packet.anchor_jog      = joystick.getAnchorJog();
-    packet.mode_request    = 0; // Manual
+
+    // In menu browsing, zero throttle & rudder to prevent boat movement
+    if (currentScreen == SCREEN_MENU) {
+        packet.throttle = 0;
+        packet.rudder   = 0;
+    } else {
+        packet.throttle = joystick.getThrottle();
+        packet.rudder   = joystick.getRudder();
+    }
+
+    packet.anchor_jog   = joystick.getAnchorJog();
+    packet.mode_request = currentNavMode;
 
     packet.checksum = calculate_checksum(reinterpret_cast<const uint8_t*>(&packet),
                                          sizeof(packet) - sizeof(packet.checksum));
@@ -155,12 +192,99 @@ void handleRoverCycleButton() {
     lastBootBtnState = currentBtn;
 }
 
+void handleInputsAndMenu(uint32_t now) {
+    joystick.update();
+    handleRoverCycleButton();
+
+    bool btnModePressed = (digitalRead(PIN_BTN_MODE) == LOW);
+
+    if (currentScreen == SCREEN_DASHBOARD) {
+        // Short Click: Toggle navigation mode directly (MANUAL <-> HOLD STATION)
+        if (joystick.wasShortClicked()) {
+            currentNavMode = (currentNavMode == 0) ? 1 : 0;
+            Serial.printf("[BASE] Nav Mode Toggled: %s\n", currentNavMode == 1 ? "HOLD STATION" : "MANUAL");
+            if (currentNavMode == 1) {
+                setRgbColor(0, 30, 30); // Cyan
+            } else {
+                setRgbColor(0, 30, 0);  // Green
+            }
+        }
+        // Long Press (>700ms) or physical MODE button: Open Action Menu
+        else if (joystick.wasLongClicked() || btnModePressed) {
+            currentScreen = SCREEN_MENU;
+            menuSelectedIndex = 0;
+            lastMenuActivityMs = now;
+            menuFeedback = nullptr;
+            Serial.println("[BASE] Opened Action Menu");
+        }
+    } 
+    else if (currentScreen == SCREEN_MENU) {
+        // Step UP / DOWN with joystick
+        int8_t step = joystick.getMenuNavStep();
+        if (step != 0) {
+            menuSelectedIndex = (menuSelectedIndex + step + MENU_COUNT) % MENU_COUNT;
+            lastMenuActivityMs = now;
+        }
+
+        // Joystick Click: CONFIRM selected item
+        if (joystick.wasShortClicked() || joystick.wasLongClicked()) {
+            lastMenuActivityMs = now;
+            switch (menuSelectedIndex) {
+                case 0: // MODO MANUAL
+                    currentNavMode = 0;
+                    menuFeedback = "MODO MANUAL OK";
+                    break;
+                case 1: // HOLD STATION (ANCORA VIRTUAL)
+                    currentNavMode = 1;
+                    menuFeedback = "HOLD STATION OK";
+                    break;
+                case 2: // LANCAR ANCORA
+                    fleet.queueCommand(fleet.getSelectedRoverId(), ++localCmdId, ACTION_DROP_ANCHOR, 500);
+                    menuFeedback = "ANCORA A DESCER";
+                    break;
+                case 3: // RECOLHER ANCORA
+                    fleet.queueCommand(fleet.getSelectedRoverId(), ++localCmdId, ACTION_RETRIEVE_ANCHOR);
+                    menuFeedback = "A RECOLHER...";
+                    break;
+                case 4: // PARAR MOTORES
+                    fleet.queueCommand(fleet.getSelectedRoverId(), ++localCmdId, ACTION_STOP);
+                    currentNavMode = 0;
+                    menuFeedback = "MOTORES PARADOS";
+                    break;
+                case 5: // PROXIMO ROVER
+                    fleet.selectNextRover();
+                    menuFeedback = "ROVER ALTERADO";
+                    break;
+                case 6: // VOLTAR / SAIR
+                default:
+                    currentScreen = SCREEN_DASHBOARD;
+                    break;
+            }
+
+            if (currentScreen == SCREEN_MENU) {
+                menuFeedbackUntilMs = now + 800; // Show confirmation banner for 800ms
+            }
+        }
+
+        // Auto-dismiss confirmation banner
+        if (menuFeedback && now > menuFeedbackUntilMs) {
+            currentScreen = SCREEN_DASHBOARD;
+            menuFeedback = nullptr;
+        }
+
+        // Inactivity timeout: 8 seconds
+        if (now - lastMenuActivityMs > 8000) {
+            currentScreen = SCREEN_DASHBOARD;
+            menuFeedback = nullptr;
+        }
+    }
+}
+
 void loop() {
     uint32_t now = millis();
 
-    // 1. Process local inputs
-    joystick.update();
-    handleRoverCycleButton();
+    // 1. Process local inputs & menu state machine
+    handleInputsAndMenu(now);
 
     // 2. Receive LoRa telemetry from fleet rovers
     checkIncomingTelemetry();
@@ -177,7 +301,11 @@ void loop() {
     // 5. Update Rover online/offline status
     fleet.checkOnlineStatus();
 
-    // 6. Update LCD screen
-    display.update(fleet, network.isConnected(), network.isSyncSuccess(), 
-                   joystick.getThrottle(), joystick.getRudder());
+    // 6. Update LCD screen (Menu or Dashboard)
+    if (currentScreen == SCREEN_MENU) {
+        display.renderMenu(MENU_ITEMS, MENU_COUNT, menuSelectedIndex, menuFeedback);
+    } else {
+        display.update(fleet, network.isConnected(), network.isSyncSuccess(), 
+                       joystick.getThrottle(), joystick.getRudder(), currentNavMode);
+    }
 }
