@@ -130,7 +130,7 @@ void setup() {
     Serial.println("[BASE] A inicializar gestor WiFi...");
     wifiConfig.begin();
     Serial.println("[BASE] A verificar ligacoes WiFi guardadas...");
-    bool wifiOk = wifiConfig.autoConnect(8000);
+    bool wifiOk = wifiConfig.autoConnect(10000);
     if (!wifiOk) {
         Serial.println("[BASE] Sem ligacao WiFi no arranque -> A ATIVAR MODO AP!");
         wifiConfig.startAccessPoint("WindDragons-Base", "12345678");
@@ -143,7 +143,8 @@ void setup() {
     // Ecrã a indicar o modo no arranque (IP se WiFi, SSID se AP)
     display.renderNetworkScreen(wifiConfig.isAPMode(), wifiConfig.getSSID().c_str(), 
                                 wifiConfig.getIPAddress().c_str(), wifiConfig.getRSSI(), 
-                                wifiConfig.getAPStationCount());
+                                wifiConfig.getAPStationCount(),
+                                wifiConfig.getAPPassword().c_str());
     delay(3500);
 
     // 5. Iniciar Servidor HTTP Web
@@ -377,7 +378,8 @@ void loop() {
     } else if (currentScreen == SCREEN_NETWORK_INFO) {
         display.renderNetworkScreen(wifiConfig.isAPMode(), wifiConfig.getSSID().c_str(),
                                    wifiConfig.getIPAddress().c_str(), wifiConfig.getRSSI(),
-                                   wifiConfig.getAPStationCount());
+                                   wifiConfig.getAPStationCount(),
+                                   wifiConfig.getAPPassword().c_str());
     } else {
         display.update(fleet, network.isConnected(), network.isSyncSuccess(), 
                        joystick.getThrottle(), joystick.getRudder(), currentNavMode, sdCard.isReady());

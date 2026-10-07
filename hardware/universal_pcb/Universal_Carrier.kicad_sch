@@ -2303,16 +2303,6 @@
 	)
 	(wire
 		(pts
-			(xy 213.36 137.16) (xy 200.66 137.16)
-		)
-		(stroke
-			(width 0)
-			(type solid)
-		)
-		(uuid "166bb347-f790-4925-851b-3e8e0d7ee550")
-	)
-	(wire
-		(pts
 			(xy 328.93 55.88) (xy 340.36 55.88)
 		)
 		(stroke
@@ -2553,16 +2543,6 @@
 	)
 	(wire
 		(pts
-			(xy 213.36 139.7) (xy 200.66 139.7)
-		)
-		(stroke
-			(width 0)
-			(type solid)
-		)
-		(uuid "709a401b-e4f0-401f-b58e-5a1b0d0fd422")
-	)
-	(wire
-		(pts
 			(xy 109.22 163.83) (xy 96.52 163.83)
 		)
 		(stroke
@@ -2600,6 +2580,16 @@
 			(type default)
 		)
 		(uuid "7bf5ff98-0018-4c7a-a591-0045926973ed")
+	)
+	(wire
+		(pts
+			(xy 200.66 137.16) (xy 213.36 137.16)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "7c41118e-4cdc-4328-9919-9725ab80359a")
 	)
 	(wire
 		(pts
@@ -2800,6 +2790,16 @@
 			(type default)
 		)
 		(uuid "cce272d5-b4be-42c6-abc7-76cf6754ea01")
+	)
+	(wire
+		(pts
+			(xy 200.66 139.7) (xy 213.36 139.7)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "d0e209b5-b042-41c9-a997-90b8216dea35")
 	)
 	(wire
 		(pts
@@ -3652,7 +3652,7 @@
 		(uuid "eb9115e1-498b-4bed-9f78-9f011da87a55")
 	)
 	(label "IO16_GPS_RX"
-		(at 200.66 137.16 180)
+		(at 200.66 139.7 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -3722,7 +3722,7 @@
 		(uuid "fa579377-f95b-4598-9008-65c1d8f80013")
 	)
 	(label "IO17_GPS_TX"
-		(at 200.66 139.7 180)
+		(at 200.66 137.16 180)
 		(effects
 			(font
 				(size 1.27 1.27)

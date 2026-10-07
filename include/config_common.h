@@ -15,7 +15,7 @@
 #define PIN_LCD_BL     22
 #define LCD_WIDTH          172
 #define LCD_HEIGHT         320
-#define DISPLAY_ROTATION   1   // 1 = Landscape (320x172), 3 = Landscape 180°
+#define DISPLAY_ROTATION   3   // 1 = Landscape (320x172), 3 = Landscape 180°
 #define SCREEN_W           320
 #define SCREEN_H           172
 

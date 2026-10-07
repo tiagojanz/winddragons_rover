@@ -9,6 +9,7 @@
 #include "gps_tracker.h"
 #include "battery_monitor.h"
 #include "actuators.h"
+#include "logo_bmp.h"
 
 // Colors (RGB565)
 #define UI_BLACK     0x0000
@@ -33,9 +34,17 @@ enum RoverScreenPage {
     ROVER_PAGE_COUNT = 4
 };
 
+struct BootLogItem {
+    char text[34];
+    uint16_t color;
+};
+
+static const uint8_t BOOT_MAX_LINES = 24;
+static const uint8_t BOOT_VISIBLE_LINES = 13;
+
 class RoverDisplay {
 public:
-    RoverDisplay() : canvas(nullptr), currentPage(ROVER_PAGE_NAV), lastRender(0) {}
+    RoverDisplay() : canvas(nullptr), currentPage(ROVER_PAGE_NAV), lastRender(0), _bootLogCount(0), _bootProgress(0) {}
 
     void begin() {
         // Disable onboard TF/MicroSD card CS (GPIO 4) to prevent SPI bus collision
@@ -46,13 +55,140 @@ public:
         display.begin();
         display.setBacklight(85); // 85% brightness
 
-        // Create high-speed in-memory canvas configured in Landscape (DISPLAY_ROTATION = 1)
+        // Create high-speed in-memory canvas configured in Landscape
         canvas = new Arduino_Canvas(LCD_WIDTH, LCD_HEIGHT, nullptr, 0, 0, DISPLAY_ROTATION);
         if (canvas) {
             canvas->begin();
             canvas->fillScreen(UI_BLACK);
             display.drawPixelBuffer(0, 0, LCD_WIDTH - 1, LCD_HEIGHT - 1, canvas->getFramebuffer());
         }
+    }
+
+    void showBootScreen(uint8_t roverId = 1) {
+        if (!canvas) return;
+        _bootLogCount = 0;
+        _bootProgress = 0;
+
+        // Limpar ecran
+        canvas->fillScreen(UI_BLACK);
+
+        // Painel Esquerdo: Logotipo + Marca + ID + Barra de Progresso (w=101, h=164)
+        canvas->fillRect(4, 4, 101, 164, UI_PANEL_BG);
+        canvas->drawRect(4, 4, 101, 164, UI_CARD_BG);
+
+        // Desenhar Logotipo Dragao centrado (85x80) em Ciano
+        // x = 4 + (101 - 85)/2 = 12, y = 10
+        canvas->drawBitmap(12, 10, LOGO_BMP, LOGO_BMP_W, LOGO_BMP_H, UI_CYAN);
+
+        // Texto Marca "WINDDRAGONS" centrado
+        canvas->setTextSize(1);
+        canvas->setTextColor(UI_WHITE);
+        canvas->setCursor(20, 94);
+        canvas->print("WINDDRAGONS");
+
+        // Identificador Rover
+        canvas->setTextSize(2);
+        canvas->setTextColor(UI_YELLOW);
+        canvas->setCursor(18, 106);
+        canvas->printf("RVR-%02d", roverId);
+
+        // Subtitulo do sistema
+        canvas->setTextSize(1);
+        canvas->setTextColor(UI_CYAN);
+        canvas->setCursor(16, 126);
+        canvas->print("AUTONOMOUS");
+        canvas->setTextColor(UI_LIGHTGREY);
+        canvas->setCursor(24, 136);
+        canvas->print("BUOY v2");
+
+        // Moldura da barra de progresso no fundo do painel esquerdo
+        canvas->drawRect(12, 150, 85, 10, UI_CARD_BG);
+        canvas->fillRect(14, 152, 81, 6, UI_BLACK);
+
+        // Painel Direito: Consola de Arranque (Scroll vertical, w=208, h=164)
+        canvas->fillRect(108, 4, 208, 164, UI_PANEL_BG);
+        canvas->drawRect(108, 4, 208, 164, UI_CARD_BG);
+
+        // Barra de Titulo da Consola
+        canvas->fillRect(109, 5, 206, 17, UI_NAVY);
+        canvas->drawFastHLine(109, 22, 206, UI_CARD_BG);
+
+        canvas->setTextSize(1);
+        canvas->setTextColor(UI_YELLOW);
+        canvas->setCursor(115, 9);
+        canvas->print("CONSOLA DE ARRANQUE");
+
+        canvas->setTextColor(UI_CYAN);
+        canvas->setCursor(270, 9);
+        canvas->print("[POST]");
+
+        // Enviar imagem inicial para o display
+        display.drawPixelBuffer(0, 0, LCD_WIDTH - 1, LCD_HEIGHT - 1, canvas->getFramebuffer());
+    }
+
+    void bootLog(const char* msg, uint16_t color = UI_LIGHTGREY, uint8_t progressPct = 0) {
+        if (!canvas) return;
+
+        // Adicionar mensagem ao buffer de logs
+        if (_bootLogCount < BOOT_MAX_LINES) {
+            strncpy(_bootLogs[_bootLogCount].text, msg, sizeof(_bootLogs[_bootLogCount].text) - 1);
+            _bootLogs[_bootLogCount].text[sizeof(_bootLogs[_bootLogCount].text) - 1] = '\0';
+            _bootLogs[_bootLogCount].color = color;
+            _bootLogCount++;
+        } else {
+            // Fazer scroll interno descartando o mais antigo
+            memmove(&_bootLogs[0], &_bootLogs[1], sizeof(BootLogItem) * (BOOT_MAX_LINES - 1));
+            strncpy(_bootLogs[BOOT_MAX_LINES - 1].text, msg, sizeof(_bootLogs[BOOT_MAX_LINES - 1].text) - 1);
+            _bootLogs[BOOT_MAX_LINES - 1].text[sizeof(_bootLogs[BOOT_MAX_LINES - 1].text) - 1] = '\0';
+            _bootLogs[BOOT_MAX_LINES - 1].color = color;
+        }
+
+        // Atualizar barra de progresso se especificado
+        if (progressPct > 0) {
+            _bootProgress = constrain(progressPct, 0, 100);
+            int barW = map(_bootProgress, 0, 100, 0, 81);
+            canvas->fillRect(14, 152, 81, 6, UI_BLACK);
+            if (barW > 0) {
+                uint16_t barColor = (_bootProgress == 100) ? UI_GREEN : UI_CYAN;
+                canvas->fillRect(14, 152, barW, 6, barColor);
+            }
+        }
+
+        // Redesenhar a area de texto da consola (scroll vertical)
+        canvas->fillRect(110, 24, 204, 142, UI_PANEL_BG);
+
+        uint8_t startIdx = 0;
+        uint8_t count = _bootLogCount;
+        if (_bootLogCount > BOOT_VISIBLE_LINES) {
+            startIdx = _bootLogCount - BOOT_VISIBLE_LINES;
+            count = BOOT_VISIBLE_LINES;
+        }
+
+        canvas->setTextSize(1);
+        for (uint8_t i = 0; i < count; i++) {
+            uint8_t idx = startIdx + i;
+            int y = 26 + i * 10;
+            canvas->setTextColor(_bootLogs[idx].color);
+            canvas->setCursor(114, y);
+            canvas->print(_bootLogs[idx].text);
+        }
+
+        // Atualizar ecran LCD
+        display.drawPixelBuffer(0, 0, LCD_WIDTH - 1, LCD_HEIGHT - 1, canvas->getFramebuffer());
+    }
+
+    void bootLogf(uint16_t color, uint8_t progressPct, const char* format, ...) {
+        char buf[36];
+        va_list args;
+        va_start(args, format);
+        vsnprintf(buf, sizeof(buf), format, args);
+        va_end(args);
+        bootLog(buf, color, progressPct);
+    }
+
+    void endBootScreen(uint32_t delayMs = 1200) {
+        bootLogf(UI_GREEN, 100, "[SYS ] Rover operacional!");
+        if (delayMs > 0) delay(delayMs);
     }
 
     void nextPage() {
@@ -73,7 +209,7 @@ public:
                 ActuatorController &actuators, uint8_t motorStatus,
                 int16_t lastRssi, bool failsafeActive, bool force = false, bool sdOk = false,
                 bool isApMode = false, const char* ip = nullptr, const char* ssid = nullptr,
-                int8_t wifiRssi = 0, uint8_t apClients = 0) {
+                int8_t wifiRssi = 0, uint8_t apClients = 0, const char* apPassword = nullptr) {
         uint32_t now = millis();
         if (!force && (now - lastRender < 200)) return; // 5Hz UI refresh unless forced
         lastRender = now;
@@ -122,7 +258,7 @@ public:
                 renderActuatorsPage(actuators, motorStatus, lastRssi, failsafeActive);
                 break;
             case ROVER_PAGE_NETWORK:
-                renderNetworkPage(isApMode, ip, ssid, wifiRssi, apClients);
+                renderNetworkPage(isApMode, ip, ssid, wifiRssi, apClients, apPassword);
                 break;
             default:
                 break;
@@ -355,7 +491,7 @@ private:
         }
     }
 
-    void renderNetworkPage(bool isApMode, const char* ip, const char* ssid, int8_t wifiRssi, uint8_t apClients) {
+    void renderNetworkPage(bool isApMode, const char* ip, const char* ssid, int8_t wifiRssi, uint8_t apClients, const char* apPassword = nullptr) {
         int cardY = 26;
         int cardH = 122;
 
@@ -436,7 +572,7 @@ private:
             canvas->setTextSize(2);
             canvas->setTextColor(UI_YELLOW);
             canvas->setCursor(55, cardY + 22);
-            canvas->printf("%.18s", ssid ? ssid : "ROVER-01-AP");
+            canvas->printf("%.21s", ssid ? ssid : "ROVER-01-AP");
 
             // Password em TAMANHO GRANDE (Size 2)
             canvas->setTextSize(1);
@@ -447,7 +583,7 @@ private:
             canvas->setTextSize(2);
             canvas->setTextColor(UI_WHITE);
             canvas->setCursor(55, cardY + 45);
-            canvas->print("12345678");
+            canvas->printf("%.21s", (apPassword && strlen(apPassword) > 0) ? apPassword : "password123");
 
             // Endereço IP em TAMANHO GIGANTE (Size 3)
             canvas->setTextSize(1);
@@ -466,4 +602,7 @@ private:
     Arduino_Canvas *canvas;
     RoverScreenPage currentPage;
     uint32_t lastRender;
+    BootLogItem _bootLogs[BOOT_MAX_LINES];
+    uint8_t _bootLogCount;
+    uint8_t _bootProgress;
 };

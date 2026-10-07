@@ -78,6 +78,7 @@ private:
         _server.on("/api/wifi/save", [this]() { handleApiWifiSave(); });
         _server.on("/api/wifi/setdefault", [this]() { handleApiWifiSetDefault(); });
         _server.on("/api/wifi/delete", [this]() { handleApiWifiDelete(); });
+        _server.on("/api/wifi/connect", [this]() { handleApiWifiConnect(); });
         _server.on("/api/wifi/reconnect", [this]() { handleApiWifiReconnect(); });
         
         // Configuração geral do Rover (ID, SSID AP, Password AP)
@@ -222,15 +223,24 @@ private:
         } else {
             html += "<table><thead><tr><th>SSID</th><th>Estado</th><th>Ações</th></tr></thead><tbody>";
             for (const auto &n : nets) {
+                bool isCurrent = _wifi.isConnected() && _wifi.getSSID().equalsIgnoreCase(n.ssid);
                 html += "<tr><td><strong>" + n.ssid + "</strong></td>";
                 html += "<td>";
+                if (isCurrent) {
+                    html += "<span class='badge' style='background:#059669;color:#fff;margin-right:4px;'>● LIGADA</span> ";
+                }
                 if (n.is_default) {
-                    html += "<span class='badge' style='background:#065f46;color:#6ee7b7;'>★ PADRÃO (DEFAULT)</span>";
-                } else {
+                    html += "<span class='badge' style='background:#065f46;color:#6ee7b7;'>★ PADRÃO</span>";
+                } else if (!isCurrent) {
                     html += "<span style='color:var(--muted);font-size:0.8rem;'>Secundária</span>";
                 }
                 html += "</td>";
                 html += "<td><div class='btn-group'>";
+                if (isCurrent) {
+                    html += "<button disabled class='btn' style='padding:6px 10px;background:#334155;color:#94a3b8;cursor:default;'>Ativa</button>";
+                } else {
+                    html += "<button onclick='connectNetwork(\"" + n.ssid + "\")' class='btn btn-primary' style='padding:6px 10px;background:#2563eb;'>Ligar</button>";
+                }
                 if (!n.is_default) {
                     html += "<button onclick='setDefault(\"" + n.ssid + "\")' class='btn btn-secondary' style='padding:6px 10px;'>Definir Padrão</button>";
                 }
@@ -258,6 +268,9 @@ private:
             html += "<button type='button' onclick='reconnectSTA()' class='btn' style='background:var(--green);color:#fff;'>Tentar Ligar e Sair do AP</button>";
         }
         html += "</div></form>";
+        html += "<div id='scanResults' style='margin-top:16px;'></div>";
+        html += "</div>";
+
         // Card 4: Configuração Geral do Rover e AP (/config.json)
         html += "<div class='card'>";
         html += "<div class='card-title'><span>Identificação do Rover & Ponto de Acesso (AP)</span> <span style='font-size:0.8rem;color:var(--muted);'>NVS + Cartão SD (/config.json)</span></div>";
@@ -277,6 +290,7 @@ private:
         html += "function saveWifi(e){e.preventDefault();const s=document.getElementById('ssid').value;const p=document.getElementById('pass').value;const d=document.getElementById('is_default').checked;";
         html += "fetch('/api/wifi/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:s,password:p,is_default:d})})";
         html += ".then(r=>r.json()).then(res=>{alert(res.msg);location.reload();});}";
+        html += "function connectNetwork(s){if(confirm('Ligar à rede WiFi \"'+s+'\" agora?')){fetch('/api/wifi/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:s})}).then(r=>r.json()).then(res=>{alert(res.msg||('A ligar à rede '+s+'...'));setTimeout(()=>location.reload(),6000);}).catch(()=>{alert('Comando enviado. A recarregar em 6 segundos...');setTimeout(()=>location.reload(),6000);});}}";
         html += "function setDefault(s){fetch('/api/wifi/setdefault',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:s})}).then(()=>location.reload());}";
         html += "function deleteNetwork(s){if(confirm('Eliminar rede '+s+'?')){fetch('/api/wifi/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:s})}).then(()=>location.reload());}}";
         html += "function scanNetworks(){const d=document.getElementById('scanResults');d.innerHTML='<p style=\"color:var(--muted);\">A pesquisar redes WiFi próximas...</p>';";
@@ -799,6 +813,40 @@ private:
         _server.send(200, "application/json", res);
     }
 
+    void handleApiWifiConnect() {
+        if (!_server.hasArg("plain")) {
+            _server.send(400, "application/json", "{\"error\":\"Missing body\"}");
+            return;
+        }
+
+        JsonDocument doc;
+        DeserializationError err = deserializeJson(doc, _server.arg("plain"));
+        if (err) {
+            _server.send(400, "application/json", "{\"error\":\"JSON invalido\"}");
+            return;
+        }
+
+        String ssid = doc["ssid"] | "";
+        if (ssid.length() == 0) {
+            _server.send(400, "application/json", "{\"error\":\"SSID vazio\"}");
+            return;
+        }
+
+        JsonDocument resDoc;
+        resDoc["success"] = true;
+        resDoc["msg"] = "A tentar ligar à rede '" + ssid + "'... Verifique o visor LCD do Rover para o novo IP.";
+        String res;
+        serializeJson(resDoc, res);
+        _server.send(200, "application/json", res);
+
+        delay(400);
+        bool ok = _wifi.connectTo(ssid, 10000);
+        if (!ok) {
+            Serial.println("[ROVER] Ligacao manual falhou. A restaurar Ponto de Acesso...");
+            _wifi.startAccessPoint(_config.getApSsid().c_str(), _config.getApPassword().c_str());
+        }
+    }
+
     void handleApiWifiReconnect() {
         JsonDocument resDoc;
         resDoc["success"] = true;
@@ -808,9 +856,9 @@ private:
         _server.send(200, "application/json", res);
 
         delay(500);
-        bool connected = _wifi.autoConnect(8000);
+        bool connected = _wifi.autoConnect(10000);
         if (!connected) {
-            _wifi.startAccessPoint();
+            _wifi.startAccessPoint(_config.getApSsid().c_str(), _config.getApPassword().c_str());
         }
     }
 

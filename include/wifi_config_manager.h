@@ -4,6 +4,7 @@
 #include <WiFi.h>
 #include <Preferences.h>
 #include <vector>
+#include <functional>
 #include <ArduinoJson.h>
 #include "network_config.h"
 #include "sd_card_manager.h"
@@ -241,15 +242,18 @@ public:
      * Tenta conectar-se ao WiFi: primeiro a rede default, e se falhar, as outras.
      * Retorna true se conectou, false se todas falharam.
      */
-    bool autoConnect(uint32_t timeoutPerNetworkMs = 8000) {
-        WiFi.disconnect(true);
-        delay(100);
+    bool autoConnect(uint32_t timeoutPerNetworkMs = 10000, std::function<void(const char* ssid)> onAttempt = nullptr) {
         WiFi.mode(WIFI_STA);
+        delay(50);
+        WiFi.disconnect(false);
+        delay(100);
 
         // 1. Tentar primeiro a rede marcada como default
         for (const auto &n : _networks) {
+            if (n.ssid == "WIFI_NETWORK_NAME" || n.ssid.isEmpty()) continue;
             if (n.is_default) {
                 Serial.printf("[WIFI] A tentar ligar a rede DEFAULT: %s ...\n", n.ssid.c_str());
+                if (onAttempt) onAttempt(n.ssid.c_str());
                 if (attemptConnection(n.ssid, n.password, timeoutPerNetworkMs)) {
                     _isApMode = false;
                     _connectedSsid = n.ssid;
@@ -262,8 +266,10 @@ public:
 
         // 2. Tentar as restantes redes guardadas
         for (const auto &n : _networks) {
+            if (n.ssid == "WIFI_NETWORK_NAME" || n.ssid.isEmpty()) continue;
             if (n.is_default) continue; // ja tentada
             Serial.printf("[WIFI] A tentar ligar a rede alternativa: %s ...\n", n.ssid.c_str());
+            if (onAttempt) onAttempt(n.ssid.c_str());
             if (attemptConnection(n.ssid, n.password, timeoutPerNetworkMs)) {
                 _isApMode = false;
                 _connectedSsid = n.ssid;
@@ -276,15 +282,57 @@ public:
     }
 
     /**
+     * Tenta conectar-se diretamente a uma rede guardada especificada pelo seu SSID.
+     * Retorna true se conectou, false se falhou ou nao foi encontrada.
+     */
+    bool connectTo(const String &ssid, uint32_t timeoutMs = 10000) {
+        String pass = "";
+        bool found = false;
+        for (const auto &n : _networks) {
+            if (n.ssid.equalsIgnoreCase(ssid)) {
+                pass = n.password;
+                found = true;
+                break;
+            }
+        }
+
+        if (!found) {
+            Serial.printf("[WIFI] Rede '%s' nao encontrada na lista de guardadas!\n", ssid.c_str());
+            return false;
+        }
+
+        WiFi.mode(WIFI_STA);
+        delay(50);
+        WiFi.disconnect(false);
+        delay(100);
+
+        Serial.printf("[WIFI] A tentar ligar manualmente a: %s ...\n", ssid.c_str());
+        if (attemptConnection(ssid, pass, timeoutMs)) {
+            _isApMode = false;
+            _connectedSsid = ssid;
+            Serial.printf("[WIFI] Conectado com sucesso a %s! IP: %s\n", ssid.c_str(), WiFi.localIP().toString().c_str());
+            return true;
+        }
+
+        Serial.printf("[WIFI] Falhou a ligacao a %s.\n", ssid.c_str());
+        return false;
+    }
+
+    bool isConnectedTo(const String &ssid) const {
+        return isConnected() && getSSID().equalsIgnoreCase(ssid);
+    }
+
+    /**
      * Inicia o modo Ponto de Acesso (Access Point)
      */
     void startAccessPoint(const char* ssid = nullptr, const char* pass = nullptr) {
         if (ssid) _apSsid = ssid;
         if (pass) _apPass = pass;
 
-        WiFi.disconnect(true);
-        delay(100);
         WiFi.mode(WIFI_AP);
+        delay(50);
+        WiFi.disconnect(false);
+        delay(50);
 
         // IP padrão 192.168.4.1
         IPAddress apIP(192, 168, 4, 1);
@@ -335,6 +383,10 @@ public:
         return WiFi.softAPgetStationNum();
     }
 
+    String getAPPassword() const {
+        return _apPass;
+    }
+
 private:
     bool _isApMode;
     String _apSsid;
@@ -344,6 +396,10 @@ private:
     SDCardManager *_sdCard;
 
     bool attemptConnection(const String &ssid, const String &pass, uint32_t timeoutMs) {
+        // Assegurar cancelamento de qualquer ligacao anterior pendente
+        WiFi.disconnect(false);
+        delay(100);
+
         WiFi.begin(ssid.c_str(), pass.c_str());
         uint32_t start = millis();
         while (WiFi.status() != WL_CONNECTED && (millis() - start < timeoutMs)) {
@@ -351,6 +407,14 @@ private:
             Serial.print(".");
         }
         Serial.println();
-        return (WiFi.status() == WL_CONNECTED);
+
+        if (WiFi.status() == WL_CONNECTED) {
+            return true;
+        }
+
+        // Interromper a tentativa pendente para libertar o estado do ESP-IDF antes da proxima rede
+        WiFi.disconnect(false);
+        delay(100);
+        return false;
     }
 };

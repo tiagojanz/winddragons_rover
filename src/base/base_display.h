@@ -220,7 +220,7 @@ public:
         display.drawPixelBuffer(0, 0, LCD_WIDTH - 1, LCD_HEIGHT - 1, canvas->getFramebuffer());
     }
 
-    void renderNetworkScreen(bool isApMode, const char* ssid, const char* ip, int8_t rssi, uint8_t clients = 0) {
+    void renderNetworkScreen(bool isApMode, const char* ssid, const char* ip, int8_t rssi, uint8_t clients = 0, const char* apPassword = nullptr) {
         if (!canvas) return;
 
         drawStaticHeader();
@@ -307,7 +307,7 @@ public:
             canvas->print("PASSWORD WIFI:");
             canvas->setCursor(14, 124);
             canvas->setTextColor(UI_WHITE);
-            canvas->print("12345678");
+            canvas->printf("%.18s", (apPassword && strlen(apPassword) > 0) ? apPassword : "12345678");
 
             // Endereço IP do AP
             canvas->setTextColor(UI_LIGHTGREY);

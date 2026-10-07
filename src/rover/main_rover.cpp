@@ -331,21 +331,6 @@ void setup() {
     delay(200);
     Serial.printf("\n=== WINDDRAGONS ROVER-%02d BOOTING ===\n", ROVER_ID);
 
-    rgbLed.begin();
-    setRgbColor(20, 20, 0); // Yellow: Booting
-
-    // Initialize Battery Monitor (APM 28V 90A Module for LiPo 4S)
-    battery.begin();
-    Serial.println("[ROVER] APM Battery Monitor initialized (ADC Pins V=0, I=3)");
-
-    // Initialize Actuators (ESC, Leme, Guincho, Cremalheira, Alarme)
-    actuators.begin();
-    Serial.println("[ROVER] Actuators initialized (ESC + 3 Servos: Leme, Guincho, Cremalheira)");
-
-    // Initialize GPS
-    gps.begin();
-    Serial.println("[ROVER] Quectel LC29H GPS UART initialized");
-
     // De-assert all SPI Chip Selects before bus init
     pinMode(PIN_LCD_CS, OUTPUT);
     digitalWrite(PIN_LCD_CS, HIGH);
@@ -354,37 +339,64 @@ void setup() {
     pinMode(PIN_SD_CS, OUTPUT);
     digitalWrite(PIN_SD_CS, HIGH); // MicroSD CS
 
-    // Initialize Display ST7789 1.47"
+    // 1. Initialize Display ST7789 1.47" and show Boot Screen IMMEDIATELY!
     roverDisplay.begin();
-    pinMode(PIN_BTN_BOOT, INPUT_PULLUP);
-    attachInterrupt(digitalPinToInterrupt(PIN_BTN_BOOT), isrBootButton, FALLING);
-    Serial.println("[ROVER] ST7789 Diagnostic LCD initialized (Landscape)");
+    roverDisplay.showBootScreen(ROVER_ID);
+    roverDisplay.bootLogf(UI_CYAN, 10, "[BOOT] WindDragons OS v2.0");
 
-    // Initialize MicroSD Card
+    // 2. Status RGB NeoPixel LED
+    rgbLed.begin();
+    setRgbColor(20, 20, 0); // Yellow: Booting
+    roverDisplay.bootLogf(UI_LIGHTGREY, 20, "[LED ] NeoPixel RGB ativo");
+
+    // 3. Initialize Battery Monitor (APM 28V 90A Module for LiPo 4S)
+    battery.begin();
+    battery.update();
+    Serial.println("[ROVER] APM Battery Monitor initialized (ADC Pins V=0, I=3)");
+    roverDisplay.bootLogf(UI_GREEN, 30, "[PWR ] LiPo 4S: %.2fV (%u%%)", 
+                          battery.getVoltageMv() / 1000.0f, battery.getPercentage());
+
+    // 4. Initialize Actuators (ESC, Leme, Guincho, Cremalheira, Alarme)
+    actuators.begin();
+    Serial.println("[ROVER] Actuators initialized (ESC + 3 Servos: Leme, Guincho, Cremalheira)");
+    roverDisplay.bootLogf(UI_LIGHTGREY, 40, "[ACT ] ESC + 3 Servos calib.");
+
+    // 5. Initialize GPS
+    gps.begin();
+    Serial.println("[ROVER] Quectel LC29H GPS UART initialized");
+    roverDisplay.bootLogf(UI_LIGHTGREY, 50, "[GPS ] Quectel LC29H pronto");
+
+    // 6. Initialize MicroSD Card
     Serial.print("[ROVER] A inicializar cartao MicroSD... ");
     if (sdCard.begin()) {
         Serial.println("OK!");
+        roverDisplay.bootLogf(UI_GREEN, 60, "[SD  ] MicroSD FAT32 pronto");
         sdCard.printCardInfo();
         sdCard.printDirectory("/", 1);
 
         if (sdCard.fileExists("/waypoints.txt")) {
             Serial.println("[ROVER] Encontrado /waypoints.txt no cartao SD:");
             Serial.println(sdCard.readFile("/waypoints.txt"));
+            roverDisplay.bootLogf(UI_CYAN, 65, "[SD  ] /waypoints.txt lido");
         }
 
         if (!sdCard.fileExists("/telemetry.csv")) {
             sdCard.writeFile("/telemetry.csv", "timestamp_ms,lat,lng,speed_kn,heading_deg,batt_pct,batt_mv,motor_status\n");
+            roverDisplay.bootLogf(UI_LIGHTGREY, 68, "[SD  ] /telemetry.csv criado");
         }
     } else {
         Serial.println("Nenhum cartao detetado (ou formato nao suportado).");
+        roverDisplay.bootLogf(UI_YELLOW, 60, "[SD  ] Sem cartao presente");
     }
 
-    // Carregar configurações principais (/config.json no SD ou NVS)
+    // 7. Carregar configurações principais (/config.json no SD ou NVS)
     roverConfig.begin(&sdCard);
     webServer.setRoverId(roverConfig.getRoverId());
     Serial.printf("[ROVER] Configuracao Ativa: ID=%u | SSID AP=%s\n", 
                   roverConfig.getRoverId(), roverConfig.getApSsid().c_str());
-    
+    roverDisplay.bootLogf(UI_CYAN, 72, "[CFG ] ID=%u | AP=%s", 
+                          roverConfig.getRoverId(), roverConfig.getApSsid().c_str());
+
 #if ENABLE_LORA
     Serial.print("[ROVER] Initializing LoRa SX1278 (433MHz)... ");
     loraSPI.begin(PIN_LORA_SCK, PIN_LORA_MISO, PIN_LORA_MOSI, PIN_LORA_NSS);
@@ -396,27 +408,49 @@ void setup() {
         loraReady = true;
         setRgbColor(0, 30, 0); // Green
         radio.startReceive();
+        roverDisplay.bootLogf(UI_GREEN, 78, "[LORA] SX1278 433MHz pronto");
     } else {
         Serial.printf("FAILED! (code: %d)\n", state);
         loraReady = false;
         loraSPI.end();
         setRgbColor(50, 0, 0); // Red
+        roverDisplay.bootLogf(UI_RED, 78, "[LORA] Falha SX1278 (%d)", state);
     }
 #else
     Serial.println("[ROVER] LoRa em repouso (barramento SPI dedicado ao Display ST7789 e MicroSD)");
     loraReady = false;
+    roverDisplay.bootLogf(UI_LIGHTGREY, 78, "[LORA] SX1278 em repouso");
 #endif
 
-    // Initialize WiFi with Auto-Connect / Fallback to AP Mode (Synchronized with MicroSD Card)
+    // 8. Initialize WiFi with Auto-Connect / Fallback to AP Mode
     wifiConfig.begin(&sdCard);
     Serial.println("[ROVER] A ligar WiFi (STA)...");
-    bool wifiOk = wifiConfig.autoConnect(8000);
-    if (!wifiOk) {
+    roverDisplay.bootLogf(UI_YELLOW, 82, "[NET ] A ligar WiFi (STA)...");
+
+    bool wifiOk = wifiConfig.autoConnect(8000, [](const char* ssid) {
+        roverDisplay.bootLogf(UI_YELLOW, 86, "[NET ] A testar '%s'...", ssid);
+    });
+
+    if (wifiOk) {
+        roverDisplay.bootLogf(UI_GREEN, 92, "[NET ] IP: %s", wifiConfig.getIPAddress().c_str());
+    } else {
         wifiConfig.startAccessPoint(roverConfig.getApSsid().c_str(), roverConfig.getApPassword().c_str());
+        roverDisplay.bootLogf(UI_YELLOW, 88, "[NET ] Falhou STA -> Iniciar AP");
+        roverDisplay.bootLogf(UI_CYAN, 92, "[NET ] AP: %s", roverConfig.getApSsid().c_str());
+        roverDisplay.bootLogf(UI_WHITE, 94, "[NET ] IP: 192.168.4.1");
     }
 
-    // Initialize HTTP Web Server (port 80)
+    // 9. Initialize HTTP Web Server (port 80)
     webServer.begin();
+    roverDisplay.bootLogf(UI_GREEN, 97, "[HTTP] Servidor Web porta 80");
+
+    // Configure BOOT button interrupt for runtime page cycling
+    pinMode(PIN_BTN_BOOT, INPUT_PULLUP);
+    attachInterrupt(digitalPinToInterrupt(PIN_BTN_BOOT), isrBootButton, FALLING);
+    flagPageChange = false; // ensure clean start on Page 0
+
+    // Finalize boot screen with pause so user can see complete boot log
+    roverDisplay.endBootScreen(1600);
 }
 
 void loop() {
@@ -440,7 +474,8 @@ void loop() {
                             currentRssi, failsafeActive, true, sdCard.isReady(),
                             wifiConfig.isAPMode(), wifiConfig.getIPAddress().c_str(),
                             wifiConfig.getSSID().c_str(), wifiConfig.getRSSI(),
-                            wifiConfig.getAPStationCount());
+                            wifiConfig.getAPStationCount(),
+                            wifiConfig.getAPPassword().c_str());
         Serial.printf("[ROVER] Display page switched to: %d (1:NAV, 2:BATT, 3:ACT, 4:NET)\n", roverDisplay.getCurrentPage() + 1);
     }
 
@@ -530,5 +565,6 @@ void loop() {
                         currentRssi, failsafeActive, forceDisplay, sdCard.isReady(),
                         wifiConfig.isAPMode(), wifiConfig.getIPAddress().c_str(),
                         wifiConfig.getSSID().c_str(), wifiConfig.getRSSI(),
-                        wifiConfig.getAPStationCount());
+                        wifiConfig.getAPStationCount(),
+                        wifiConfig.getAPPassword().c_str());
 }
