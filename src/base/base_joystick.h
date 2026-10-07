@@ -14,14 +14,18 @@ public:
         analogReadResolution(12); // 0 to 4095
         pinMode(PIN_JOYSTICK_X, INPUT);
         pinMode(PIN_JOYSTICK_Y, INPUT);
-        pinMode(PIN_JOYSTICK_SW, INPUT_PULLUP);
+        if (PIN_JOYSTICK_SW >= 0) {
+            pinMode(PIN_JOYSTICK_SW, INPUT_PULLUP);
+        }
 
-        // Optional anchor buttons
+        // Optional anchor and mode buttons
         pinMode(PIN_BTN_ANCHOR_UP, INPUT_PULLUP);
         pinMode(PIN_BTN_ANCHOR_DOWN, INPUT_PULLUP);
+        pinMode(PIN_BTN_MODE, INPUT_PULLUP);
     }
 
     bool isClicked() const {
+        if (PIN_JOYSTICK_SW < 0) return false;
         return digitalRead(PIN_JOYSTICK_SW) == LOW;
     }
 
@@ -78,26 +82,28 @@ public:
         rudder   = constrain(diffY * 100 / (2048 - deadband), -100, 100);
 
         // 2. Handle Joystick Switch Click (Debounced Short & Long Press)
-        bool btnState = (digitalRead(PIN_JOYSTICK_SW) == LOW);
-        uint32_t now = millis();
+        if (PIN_JOYSTICK_SW >= 0) {
+            bool btnState = (digitalRead(PIN_JOYSTICK_SW) == LOW);
+            uint32_t now = millis();
 
-        if (btnState && !lastBtnState) {
-            // Button just pressed down
-            pressStartTime = now;
-            longPressFired = false;
-        } else if (btnState && lastBtnState) {
-            // Button currently held down
-            if (!longPressFired && (now - pressStartTime >= 700)) {
-                longPressFired = true;
-                longPressOccurred = true;
+            if (btnState && !lastBtnState) {
+                // Button just pressed down
+                pressStartTime = now;
+                longPressFired = false;
+            } else if (btnState && lastBtnState) {
+                // Button currently held down
+                if (!longPressFired && (now - pressStartTime >= 700)) {
+                    longPressFired = true;
+                    longPressOccurred = true;
+                }
+            } else if (!btnState && lastBtnState) {
+                // Button just released
+                if (!longPressFired && (now - pressStartTime >= 40)) {
+                    shortPressOccurred = true;
+                }
             }
-        } else if (!btnState && lastBtnState) {
-            // Button just released
-            if (!longPressFired && (now - pressStartTime >= 40)) {
-                shortPressOccurred = true;
-            }
+            lastBtnState = btnState;
         }
-        lastBtnState = btnState;
     }
 
     int8_t getThrottle() const { return throttle; }

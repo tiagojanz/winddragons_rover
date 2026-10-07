@@ -23,10 +23,13 @@ SDCardManager     sdCard;
 BaseWebServer     webServer(wifiConfig, fleet);
 Adafruit_NeoPixel rgbLed(1, PIN_RGB_LED, NEO_GRB + NEO_KHZ800);
 
+#if ENABLE_LORA
 // Dedicated SPI bus for LoRa SX1278 on header pins (avoids display conflict)
 SPIClass loraSPI(FSPI);
 Module loraModule(PIN_LORA_NSS, PIN_LORA_DIO0, PIN_LORA_RST, RADIOLIB_NC, loraSPI);
 SX1278 radio(&loraModule);
+bool loraReady = false;
+#endif
 
 // Loop timers
 uint32_t lastControlTxTime = 0;
@@ -37,11 +40,10 @@ uint8_t currentNavMode = 0; // 0 = MANUAL, 1 = HOLD STATION
 uint16_t localCmdId = 1000;
 
 enum UiScreen {
-    SCREEN_DASHBOARD,
-    SCREEN_MENU,
-    SCREEN_NETWORK_INFO
+    SCREEN_PAGES,
+    SCREEN_MENU
 };
-UiScreen currentScreen = SCREEN_DASHBOARD;
+UiScreen currentScreen = SCREEN_PAGES;
 
 const char* const MENU_ITEMS[] = {
     "1. MODO MANUAL",
@@ -59,9 +61,17 @@ uint32_t lastMenuActivityMs = 0;
 const char* menuFeedback = nullptr;
 uint32_t menuFeedbackUntilMs = 0;
 
-// Button state
-bool lastBootBtnState = HIGH;
-uint32_t lastDebounceTime = 0;
+// BOOT Button Navigation Interrupt (Same as Rover)
+volatile bool flagPageChange = false;
+volatile uint32_t lastBtnPressTime = 0;
+
+void IRAM_ATTR isrBootButton() {
+    uint32_t now = millis();
+    if (now - lastBtnPressTime > 200) {
+        lastBtnPressTime = now;
+        flagPageChange = true;
+    }
+}
 
 void setRgbColor(uint8_t r, uint8_t g, uint8_t b) {
     rgbLed.setPixelColor(0, rgbLed.Color(r, g, b));
@@ -70,11 +80,9 @@ void setRgbColor(uint8_t r, uint8_t g, uint8_t b) {
 
 void setup() {
     Serial.begin(115200);
-    delay(1000);
+    Serial.setTxTimeoutMs(0); // Non-blocking USB CDC TX (prevents stalls)
+    delay(200);
     Serial.println("\n=== WINDDRAGONS BASE STATION BOOTING ===");
-
-    rgbLed.begin();
-    setRgbColor(20, 20, 0); // Yellow
 
     // De-assert all SPI Chip Selects before bus init
     pinMode(PIN_LCD_CS, OUTPUT);
@@ -84,30 +92,42 @@ void setup() {
     pinMode(PIN_SD_CS, OUTPUT);
     digitalWrite(PIN_SD_CS, HIGH); // MicroSD CS
 
-    // 1. Initialize Display
+    // 1. Initialize Display & Boot Screen
     display.begin();
+    display.showBootScreen();
+    display.bootLogf(UI_CYAN, 10, "[BOOT] WindDragons Base v2");
     Serial.println("[BASE] LCD ST7789 initialized");
 
-    // 2. Initialize MicroSD Card
+    // 2. Status RGB NeoPixel LED
+    rgbLed.begin();
+    setRgbColor(20, 20, 0); // Yellow: Booting
+    display.bootLogf(UI_LIGHTGREY, 20, "[LED ] NeoPixel RGB ativo");
+
+    // 3. Initialize MicroSD Card
     Serial.print("[BASE] A inicializar cartao MicroSD... ");
     if (sdCard.begin()) {
         Serial.println("OK!");
+        display.bootLogf(UI_GREEN, 35, "[SD  ] MicroSD FAT32 pronto");
         sdCard.printCardInfo();
         sdCard.printDirectory("/", 1);
 
         if (sdCard.fileExists("/config.txt")) {
             Serial.println("[BASE] Leitura de /config.txt:");
             Serial.println(sdCard.readFile("/config.txt"));
+            display.bootLogf(UI_CYAN, 45, "[SD  ] /config.txt lido");
         }
     } else {
         Serial.println("Nenhum cartao detetado (ou formato nao suportado).");
+        display.bootLogf(UI_YELLOW, 35, "[SD  ] Sem cartao presente");
     }
 
-    // 3. Initialize Joystick
+    // 4. Initialize Joystick
     joystick.begin();
     Serial.println("[BASE] Joystick inputs initialized");
+    display.bootLogf(UI_LIGHTGREY, 55, "[JOY ] Joystick calib. OK");
 
-    // 3. Initialize LoRa
+#if ENABLE_LORA
+    // 5. Initialize LoRa
     Serial.print("[BASE] Initializing LoRa SX1278 (433MHz)... ");
     loraSPI.begin(PIN_LORA_SCK, PIN_LORA_MISO, PIN_LORA_MOSI, PIN_LORA_NSS);
     int state = radio.begin(LORA_FREQUENCY, LORA_BANDWIDTH, LORA_SPREAD_FACTOR,
@@ -115,46 +135,79 @@ void setup() {
                             LORA_PREAMBLE_LEN);
     if (state == RADIOLIB_ERR_NONE) {
         Serial.println("OK!");
+        loraReady = true;
         setRgbColor(0, 30, 0); // Green
         radio.startReceive();
+        display.bootLogf(UI_GREEN, 70, "[LORA] SX1278 433MHz OK");
     } else {
         Serial.printf("FAILED! (code: %d)\n", state);
+        loraReady = false;
         loraSPI.end();
         setRgbColor(50, 0, 0); // Red
+        display.bootLogf(UI_RED, 70, "[LORA] Falha SX1278 (%d)", state);
     }
+#else
+    Serial.println("[BASE] LoRa em repouso (barramento SPI dedicado ao Display ST7789 e MicroSD)");
+    display.bootLogf(UI_LIGHTGREY, 70, "[LORA] SX1278 em repouso");
+#endif
 
     sdCard.prepareBus();
     digitalWrite(PIN_SD_CS, HIGH);
 
-    // 4. Initialize Network (WiFi + AP Fallback + Web Server)
+    // 6. Initialize Network (WiFi + AP Fallback + Web Server)
     Serial.println("[BASE] A inicializar gestor WiFi...");
-    wifiConfig.begin();
+    display.bootLogf(UI_YELLOW, 78, "[NET ] A ligar WiFi (STA)...");
+    wifiConfig.begin(&sdCard);
     Serial.println("[BASE] A verificar ligacoes WiFi guardadas...");
-    bool wifiOk = wifiConfig.autoConnect(10000);
+    bool wifiOk = wifiConfig.autoConnect(8000, [](const char* ssid) {
+        display.bootLogf(UI_YELLOW, 82, "[NET ] A testar '%s'...", ssid);
+    });
+
     if (!wifiOk) {
         Serial.println("[BASE] Sem ligacao WiFi no arranque -> A ATIVAR MODO AP!");
         wifiConfig.startAccessPoint("WindDragons-Base", "12345678");
         setRgbColor(30, 15, 0); // Orange / AP mode
+        display.bootLogf(UI_YELLOW, 84, "[NET ] Falha STA -> Modo AP");
+        display.bootLogf(UI_CYAN, 87, "[NET ] AP: WindDragons-Base");
+        display.bootLogf(UI_WHITE, 90, "[NET ] IP: 192.168.4.1");
     } else {
         Serial.printf("[BASE] Conectado ao WiFi: %s | IP: %s\n", wifiConfig.getSSID().c_str(), wifiConfig.getIPAddress().c_str());
         setRgbColor(0, 30, 0);  // Green / STA connected
+        display.bootLogf(UI_GREEN, 90, "[NET ] IP: %s", wifiConfig.getIPAddress().c_str());
     }
 
-    // Ecrã a indicar o modo no arranque (IP se WiFi, SSID se AP)
-    display.renderNetworkScreen(wifiConfig.isAPMode(), wifiConfig.getSSID().c_str(), 
-                                wifiConfig.getIPAddress().c_str(), wifiConfig.getRSSI(), 
-                                wifiConfig.getAPStationCount(),
-                                wifiConfig.getAPPassword().c_str());
-    delay(3500);
-
-    // 5. Iniciar Servidor HTTP Web
+    // 7. Iniciar Servidor HTTP Web
     webServer.begin();
+    display.bootLogf(UI_GREEN, 95, "[HTTP] Servidor Web OK");
 
-    // 6. Iniciar sincronizacao Cloud
+    // 8. Iniciar sincronizacao Cloud
     network.begin();
+    display.bootLogf(UI_CYAN, 98, "[SYNC] Sincronizacao Cloud");
+
+    // Finalizar ecrã de arranque
+    display.endBootScreen(1200);
+
+    // Ecrã a indicar o modo de rede no arranque (igual ao Rover)
+    display.setPage(BASE_PAGE_NETWORK);
+    display.update(fleet, network.isConnected(), network.isSyncSuccess(),
+                   0, 0, currentNavMode, sdCard.isReady(),
+                   wifiConfig.isAPMode(), wifiConfig.getIPAddress().c_str(),
+                   wifiConfig.getSSID().c_str(), wifiConfig.getRSSI(),
+                   wifiConfig.getAPStationCount(), wifiConfig.getAPPassword().c_str(),
+                   true);
+    delay(2000);
+    display.setPage(BASE_PAGE_CONTROL);
+
+    // Configure BOOT button interrupt for runtime page cycling (Control -> Fleet -> Network)
+    pinMode(PIN_BTN_BOOT, INPUT_PULLUP);
+    attachInterrupt(digitalPinToInterrupt(PIN_BTN_BOOT), isrBootButton, FALLING);
+    flagPageChange = false; // ensure clean start on Page 0
 }
 
 void transmitControlOrCommand() {
+#if ENABLE_LORA
+    if (!loraReady) return;
+
     // Priority 1: Transmit any pending cloud or local action command (e.g. DROP_ANCHOR)
     if (fleet.hasPendingCommand()) {
         QueuedCommand qCmd = fleet.popPendingCommand();
@@ -191,8 +244,8 @@ void transmitControlOrCommand() {
     packet.msg_type        = MSG_MANUAL_CONTROL;
     packet.target_rover_id = fleet.getSelectedRoverId();
 
-    // In menu browsing or network info screen, zero throttle & rudder to prevent boat movement
-    if (currentScreen == SCREEN_MENU || currentScreen == SCREEN_NETWORK_INFO) {
+    // In menu browsing or non-control pages, zero throttle & rudder to prevent boat movement
+    if (currentScreen == SCREEN_MENU || display.getCurrentPage() != BASE_PAGE_CONTROL) {
         packet.throttle = 0;
         packet.rudder   = 0;
         packet.anchor_jog = 0;
@@ -214,9 +267,13 @@ void transmitControlOrCommand() {
     radio.standby();
     radio.transmit(reinterpret_cast<uint8_t*>(&packet), sizeof(packet));
     radio.startReceive();
+#endif
 }
 
 void checkIncomingTelemetry() {
+#if ENABLE_LORA
+    if (!loraReady) return;
+
     int packetLen = radio.getPacketLength();
     if (packetLen > 0) {
         uint8_t buffer[64];
@@ -233,47 +290,57 @@ void checkIncomingTelemetry() {
         }
         radio.startReceive();
     }
-}
-
-void handleRoverCycleButton() {
-    bool currentBtn = digitalRead(PIN_BTN_BOOT);
-    if (currentBtn != lastBootBtnState) {
-        lastDebounceTime = millis();
-    }
-    if ((millis() - lastDebounceTime) > 50) {
-        if (lastBootBtnState == HIGH && currentBtn == LOW) {
-            // Button pressed
-            fleet.selectNextRover();
-            Serial.printf("[BASE] Cycled to %s\n", fleet.getSelectedRover()->code);
-        }
-    }
-    lastBootBtnState = currentBtn;
+#endif
 }
 
 void handleInputsAndMenu(uint32_t now) {
     joystick.update();
-    handleRoverCycleButton();
 
     bool btnModePressed = (digitalRead(PIN_BTN_MODE) == LOW);
 
-    if (currentScreen == SCREEN_DASHBOARD) {
-        // Short Click: Toggle navigation mode directly (MANUAL <-> HOLD STATION)
-        if (joystick.wasShortClicked()) {
-            currentNavMode = (currentNavMode == 0) ? 1 : 0;
-            Serial.printf("[BASE] Nav Mode Toggled: %s\n", currentNavMode == 1 ? "HOLD STATION" : "MANUAL");
-            if (currentNavMode == 1) {
-                setRgbColor(0, 30, 30); // Cyan
-            } else {
-                setRgbColor(0, 30, 0);  // Green
+    if (currentScreen == SCREEN_PAGES) {
+        BaseScreenPage page = display.getCurrentPage();
+
+        if (page == BASE_PAGE_CONTROL) {
+            // Long Press (>700ms) or physical MODE button: Open Action Menu
+            if (joystick.wasLongClicked() || btnModePressed) {
+                currentScreen = SCREEN_MENU;
+                menuSelectedIndex = 0;
+                lastMenuActivityMs = now;
+                menuFeedback = nullptr;
+                Serial.println("[BASE] Abriu Menu de Controlo");
             }
         }
-        // Long Press (>700ms) or physical MODE button: Open Action Menu
-        else if (joystick.wasLongClicked() || btnModePressed) {
-            currentScreen = SCREEN_MENU;
-            menuSelectedIndex = 0;
-            lastMenuActivityMs = now;
-            menuFeedback = nullptr;
-            Serial.println("[BASE] Opened Action Menu");
+        else if (page == BASE_PAGE_FLEET) {
+            // Navegar entre rovers da frota com o joystick
+            int8_t step = joystick.getMenuNavStep();
+            if (step != 0) {
+                fleet.selectNextRover();
+                Serial.printf("[BASE] Frota: Rover alterado para %s\n", fleet.getSelectedRover()->code);
+            }
+
+            if (btnModePressed) {
+                display.setPage(BASE_PAGE_CONTROL);
+                Serial.printf("[BASE] Rover %s selecionado para comando!\n", fleet.getSelectedRover()->code);
+            }
+            else if (joystick.wasLongClicked()) {
+                currentScreen = SCREEN_MENU;
+                menuSelectedIndex = 0;
+                lastMenuActivityMs = now;
+                menuFeedback = nullptr;
+            }
+        }
+        else if (page == BASE_PAGE_NETWORK) {
+            // Botão MODE: Voltar à página de comando
+            if (btnModePressed) {
+                display.setPage(BASE_PAGE_CONTROL);
+            }
+            else if (joystick.wasLongClicked()) {
+                currentScreen = SCREEN_MENU;
+                menuSelectedIndex = 0;
+                lastMenuActivityMs = now;
+                menuFeedback = nullptr;
+            }
         }
     } 
     else if (currentScreen == SCREEN_MENU) {
@@ -311,14 +378,16 @@ void handleInputsAndMenu(uint32_t now) {
                     break;
                 case 5: // PROXIMO ROVER
                     fleet.selectNextRover();
+                    display.setPage(BASE_PAGE_CONTROL);
                     menuFeedback = "ROVER ALTERADO";
                     break;
                 case 6: // INFO REDE / IP
-                    currentScreen = SCREEN_NETWORK_INFO;
+                    display.setPage(BASE_PAGE_NETWORK);
+                    currentScreen = SCREEN_PAGES;
                     break;
                 case 7: // VOLTAR / SAIR
                 default:
-                    currentScreen = SCREEN_DASHBOARD;
+                    currentScreen = SCREEN_PAGES;
                     break;
             }
 
@@ -329,21 +398,14 @@ void handleInputsAndMenu(uint32_t now) {
 
         // Auto-dismiss confirmation banner
         if (menuFeedback && now > menuFeedbackUntilMs) {
-            currentScreen = SCREEN_DASHBOARD;
+            currentScreen = SCREEN_PAGES;
             menuFeedback = nullptr;
         }
 
         // Inactivity timeout: 8 seconds
         if (now - lastMenuActivityMs > 8000) {
-            currentScreen = SCREEN_DASHBOARD;
+            currentScreen = SCREEN_PAGES;
             menuFeedback = nullptr;
-        }
-    }
-    else if (currentScreen == SCREEN_NETWORK_INFO) {
-        // Any click or mode button returns to dashboard
-        if (joystick.wasShortClicked() || joystick.wasLongClicked() || btnModePressed) {
-            currentScreen = SCREEN_DASHBOARD;
-            Serial.println("[BASE] Fechou ecrã de Informação de Rede");
         }
     }
 }
@@ -351,37 +413,49 @@ void handleInputsAndMenu(uint32_t now) {
 void loop() {
     uint32_t now = millis();
 
-    // 1. Process local inputs & menu state machine
+    // 1. Screen Navigation Button (Instant Hardware Interrupt on BOOT / GPIO 9)
+    bool forceDisplay = false;
+    if (flagPageChange) {
+        flagPageChange = false;
+        if (currentScreen == SCREEN_MENU) {
+            currentScreen = SCREEN_PAGES;
+        } else {
+            display.nextPage();
+        }
+        forceDisplay = true;
+        Serial.printf("[BASE] Ecrã alterado para página %d (0:CONTROL, 1:FLEET, 2:NETWORK)\n", display.getCurrentPage());
+    }
+
+    // 2. Process local inputs & menu state machine
     handleInputsAndMenu(now);
 
-    // 2. Handle HTTP Web Server requests (WiFi / AP)
+    // 3. Handle HTTP Web Server requests (WiFi / AP)
     webServer.handleClient();
 
-    // 3. Receive LoRa telemetry from fleet rovers
+    // 4. Receive LoRa telemetry from fleet rovers
     checkIncomingTelemetry();
 
-    // 4. Send LoRa commands to Rover (10Hz)
+    // 5. Send LoRa commands to Rover (10Hz)
     if (now - lastControlTxTime >= CONTROL_TX_INTERVAL_MS) {
         lastControlTxTime = now;
         transmitControlOrCommand();
     }
 
-    // 5. Update WiFi & sync with Winddragons Cloud API (only in STA mode)
+    // 6. Update WiFi & sync with Winddragons Cloud API (only in STA mode)
     network.update();
 
-    // 6. Update Rover online/offline status
+    // 7. Update Rover online/offline status
     fleet.checkOnlineStatus();
 
-    // 7. Update LCD screen (Menu, Network Info or Dashboard)
+    // 8. Update LCD screen (Menu or Active Page: Control, Fleet, Network)
     if (currentScreen == SCREEN_MENU) {
         display.renderMenu(MENU_ITEMS, MENU_COUNT, menuSelectedIndex, menuFeedback);
-    } else if (currentScreen == SCREEN_NETWORK_INFO) {
-        display.renderNetworkScreen(wifiConfig.isAPMode(), wifiConfig.getSSID().c_str(),
-                                   wifiConfig.getIPAddress().c_str(), wifiConfig.getRSSI(),
-                                   wifiConfig.getAPStationCount(),
-                                   wifiConfig.getAPPassword().c_str());
     } else {
         display.update(fleet, network.isConnected(), network.isSyncSuccess(), 
-                       joystick.getThrottle(), joystick.getRudder(), currentNavMode, sdCard.isReady());
+                       joystick.getThrottle(), joystick.getRudder(), currentNavMode, sdCard.isReady(),
+                       wifiConfig.isAPMode(), wifiConfig.getIPAddress().c_str(),
+                       wifiConfig.getSSID().c_str(), wifiConfig.getRSSI(),
+                       wifiConfig.getAPStationCount(), wifiConfig.getAPPassword().c_str(),
+                       forceDisplay);
     }
 }

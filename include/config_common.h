@@ -89,7 +89,7 @@
 // 4-pin Joystick connector on Top Header
 #define PIN_JOYSTICK_X  0   // ADC1_CH0 (Top Header Pin 6)
 #define PIN_JOYSTICK_Y  1   // ADC1_CH1 (Top Header Pin 5)
-#define PIN_JOYSTICK_SW 9   // Joystick push click (Bottom Header Pin 1 - BOOT)
+#define PIN_JOYSTICK_SW -1  // Desativado no joystick: GPIO 9 e o botao BOOT com interrupcao dedicada para mudar de pagina
 
 // Physical buttons on Base (Bottom Header)
 #define PIN_BTN_ANCHOR_UP   18  // External button to hoist anchor (Bottom Header Pin 2)

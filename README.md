@@ -82,8 +82,8 @@ O slot MicroSD está integrado diretamente na placa ESP32-C6-LCD-1.47 e partilha
 | | VRy (Direção) | `IO1` | Entrada Analógica ADC1_CH1 (Leme) |
 | **Botões de Âncora** | Subir Âncora | `IO18` | Entrada Digital (Pull-up interno) |
 | | Descer Âncora | `IO19` | Entrada Digital (Pull-up interno) |
-| **Botão BOOT** | Onboard | `IO9` | Cicla entre ROVER-01 a ROVER-08 |
-| **Ecrã LCD 1.47"** | Integrado ST7789 | `IO14, 15, 21, 22` | Dashboard completo de telemetria e controlo |
+| **Botão BOOT** | Onboard | `IO9` | Cicla páginas de ecrã (Comando -> Frota -> Rede) |
+| **Ecrã LCD 1.47"** | Integrado ST7789 | `IO14, 15, 21, 22` | Dashboard multi-ecrã Landscape 320x172 (Comando, Frota de Rovers e Rede WiFi) |
 
 ---
 
