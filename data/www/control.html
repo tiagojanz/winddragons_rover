@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Comandar Boia - WindDragons Rover</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js"></script>
+</head>
+<body>
+  <header class="navbar">
+    <a href="/" class="brand">
+      <i class="fa-solid fa-robot"></i> WindDragons <span id="navRoverId">Rover</span>
+    </a>
+    <nav class="nav-links">
+      <a href="/wifi" class="nav-item "><i class="fa-solid fa-wifi"></i> WiFi</a>
+<a href="/gps" class="nav-item "><i class="fa-solid fa-location-dot"></i> GPS</a>
+<a href="/battery" class="nav-item "><i class="fa-solid fa-battery-three-quarters"></i> Bateria</a>
+<a href="/control" class="nav-item active"><i class="fa-solid fa-gamepad"></i> Comandos</a>
+<a href="/config" class="nav-item "><i class="fa-solid fa-gear"></i> Configurações</a>
+<a href="/sd" class="nav-item "><i class="fa-solid fa-folder"></i> Cartão SD</a>
+
+    </nav>
+    <div>
+      <span id="navWifiBadge" class="badge badge-sta">
+        <i class="fa-solid fa-wifi"></i> A carregar...
+      </span>
+    </div>
+  </header>
+
+  <main class="container">
+    
+<div class="card">
+  <div class="card-title">
+    <span><i class="fa-solid fa-gamepad"></i> Painel de Controlo Direto da Boia</span>
+  </div>
+  <div class="grid-4" style="margin-bottom:16px;">
+    <div class="stat-box">
+      <div class="stat-label">Modo Motor</div>
+      <div class="stat-value" id="curMotor" style="color:var(--yellow);font-size:1.1rem;">idle</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Estado Âncora</div>
+      <div class="stat-value" id="curAnchor" style="color:var(--primary);font-size:1.1rem;">recolhida</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Profundidade</div>
+      <div class="stat-value" id="curDepth">0.0 m</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Cremalheira</div>
+      <div class="stat-value" id="curRack" style="color:var(--green);font-size:1.1rem;">TRAVADA</div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">
+    <i class="fa-solid fa-gauge-high"></i> Motor Principal (ESC) & Leme de Direção
+  </div>
+  <div class="grid-2">
+    <div>
+      <div class="stat-label">Aceleração ESC: <span id="thrVal" style="font-size:1.1rem;color:var(--primary);">0%</span></div>
+      <input type="range" id="throttleSlider" min="-100" max="100" value="0" class="slider" oninput="updateSliders()" onchange="sendActuators()">
+      <div class="btn-group" style="margin-top:12px;">
+        <button type="button" onclick="setThrottle(0)" class="btn btn-secondary">0% (Stop)</button>
+        <button type="button" onclick="setThrottle(25)" class="btn btn-secondary">+25%</button>
+        <button type="button" onclick="setThrottle(50)" class="btn btn-secondary">+50%</button>
+        <button type="button" onclick="setThrottle(100)" class="btn btn-primary">+100%</button>
+        <button type="button" onclick="setThrottle(-50)" class="btn btn-secondary">-50% (Ré)</button>
+      </div>
+    </div>
+
+    <div>
+      <div class="stat-label">Ângulo do Leme: <span id="rudVal" style="font-size:1.1rem;color:var(--primary);">0%</span></div>
+      <input type="range" id="rudderSlider" min="-100" max="100" value="0" class="slider" oninput="updateSliders()" onchange="sendActuators()">
+      <div class="btn-group" style="margin-top:12px;">
+        <button type="button" onclick="setRudder(-75)" class="btn btn-secondary"><i class="fa-solid fa-arrow-left"></i> Bombordo (-75%)</button>
+        <button type="button" onclick="setRudder(0)" class="btn btn-secondary"><i class="fa-solid fa-compass"></i> Centro (0%)</button>
+        <button type="button" onclick="setRudder(75)" class="btn btn-secondary">Estibordo (+75%) <i class="fa-solid fa-arrow-right"></i></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title"><i class="fa-solid fa-anchor"></i> Guincho da Âncora & Cremalheira de Travão</div>
+  <div class="btn-group">
+    <button type="button" onclick="sendAction(3)" class="btn btn-primary"><i class="fa-solid fa-anchor"></i> Lançar Âncora (Soltar)</button>
+    <button type="button" onclick="sendAction(4)" class="btn btn-primary"><i class="fa-solid fa-arrow-up"></i> Recolher Âncora (Guincho)</button>
+    <button type="button" onclick="sendAction(5)" class="btn btn-secondary"><i class="fa-solid fa-stop"></i> Parar Guincho</button>
+    <button type="button" onclick="sendAction(6)" class="btn btn-secondary"><i class="fa-solid fa-lock"></i> Alternar Travão Cremalheira</button>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title"><i class="fa-solid fa-sliders"></i> Modos de Operação & Paragem Imediata</div>
+  <div class="btn-group">
+    <button type="button" onclick="sendAction(1)" class="btn" style="background:#0284c7;color:#fff;"><i class="fa-solid fa-location-dot"></i> Hold Station (GPS)</button>
+    <button type="button" onclick="sendAction(7)" class="btn" style="background:#7c3aed;color:#fff;"><i class="fa-solid fa-house"></i> Return to Launch (RTL)</button>
+    <button type="button" onclick="sendAction(10)" class="btn btn-secondary"><i class="fa-solid fa-gamepad"></i> Modo Manual</button>
+    <button type="button" onclick="sendAction(8)" class="btn" style="background:var(--yellow);color:#0f172a;"><i class="fa-solid fa-bell"></i> Alarme Sonoro / Strobe</button>
+    <button type="button" onclick="sendEmergencyStop()" class="btn btn-danger" style="font-size:1rem;padding:12px 24px;"><i class="fa-solid fa-hand"></i> PARAGEM DE EMERGÊNCIA</button>
+  </div>
+</div>
+
+<script>
+function updateSliders() {
+  document.getElementById('thrVal').innerText = document.getElementById('throttleSlider').value + '%';
+  document.getElementById('rudVal').innerText = document.getElementById('rudderSlider').value + '%';
+}
+function setThrottle(v) {
+  document.getElementById('throttleSlider').value = v;
+  updateSliders();
+  sendActuators();
+}
+function setRudder(v) {
+  document.getElementById('rudderSlider').value = v;
+  updateSliders();
+  sendActuators();
+}
+function sendActuators() {
+  const t = parseInt(document.getElementById('throttleSlider').value);
+  const r = parseInt(document.getElementById('rudderSlider').value);
+  fetch('/api/control/actuator', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ throttle: t, rudder: r })
+  });
+}
+function sendAction(a) {
+  fetch('/api/control/action', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: a })
+  })
+  .then(r => r.json())
+  .then(res => showToast(res.msg));
+}
+function sendEmergencyStop() {
+  setThrottle(0);
+  setRudder(0);
+  sendAction(2);
+}
+setInterval(() => {
+  fetch('/api/status')
+    .then(r => r.json())
+    .then(data => {
+      const a = data.actuators;
+      if (!a) return;
+      document.getElementById('curMotor').innerText = a.motor_status_str || 'idle';
+      document.getElementById('curAnchor').innerText = a.anchor_status_str || 'recolhida';
+      document.getElementById('curDepth').innerText = (a.anchor_depth_m || 0).toFixed(1) + ' m';
+      document.getElementById('curRack').innerText = a.rack_released ? 'LIVRE' : 'TRAVADA';
+    }).catch(() => {});
+}, 1000);
+</script>
+
+  </main>
+
+  <footer style="text-align:center;color:var(--muted);font-size:0.75rem;margin-top:24px;">
+    WindDragons Autonomous Surface Rover / Buoy &copy; 2026 &bull; MicroSD /www/ Frontend
+  </footer>
+</body>
+</html>

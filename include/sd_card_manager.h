@@ -296,6 +296,44 @@ public:
         prepareBus();
         bool ok = SD.remove(path);
         digitalWrite(_csPin, HIGH);
+        if (ok) refreshStorageInfo();
+        return ok;
+    }
+
+    /**
+     * Cria um novo directório
+     */
+    bool createDir(const char* path) {
+        if (!_initialized || !path || strlen(path) == 0) return false;
+        prepareBus();
+        bool ok = SD.mkdir(path);
+        digitalWrite(_csPin, HIGH);
+        return ok;
+    }
+
+    /**
+     * Apaga um directório (recursivamente com todo o conteúdo ou apenas se vazio).
+     * Não permite apagar a raiz ("/").
+     */
+    bool deleteDir(const char* path, bool recursive = true) {
+        if (!_initialized || !path || strlen(path) == 0) return false;
+
+        String p = String(path);
+        if (!p.startsWith("/")) p = "/" + p;
+        while (p.length() > 1 && p.endsWith("/")) {
+            p = p.substring(0, p.length() - 1);
+        }
+        if (p == "/" || p.length() == 0) return false;
+
+        prepareBus();
+        bool ok = true;
+        if (recursive) {
+            ok = removeDirRecursive(p.c_str());
+        } else {
+            ok = SD.rmdir(p.c_str());
+        }
+        digitalWrite(_csPin, HIGH);
+        if (ok) refreshStorageInfo();
         return ok;
     }
 
@@ -449,6 +487,66 @@ private:
     uint64_t _totalBytes;
     uint64_t _usedBytes;
     uint64_t _freeBytes;
+
+    bool removeDirRecursive(const char* dirPath) {
+        File dir = SD.open(dirPath);
+        if (!dir) return false;
+        if (!dir.isDirectory()) {
+            dir.close();
+            return SD.remove(dirPath);
+        }
+
+        struct EntryItem {
+            String path;
+            bool isDir;
+        };
+        std::vector<EntryItem> entries;
+
+        String baseDir = String(dirPath);
+        if (!baseDir.startsWith("/")) baseDir = "/" + baseDir;
+        while (baseDir.length() > 1 && baseDir.endsWith("/")) {
+            baseDir = baseDir.substring(0, baseDir.length() - 1);
+        }
+
+        File child = dir.openNextFile();
+        while (child) {
+            EntryItem item;
+            item.isDir = child.isDirectory();
+            const char* ep = child.path();
+            if (ep && strlen(ep) > 0) {
+                item.path = String(ep);
+            } else {
+                const char* fn = child.name();
+                String fname = String(fn ? fn : "");
+                int lastSlash = fname.lastIndexOf('/');
+                if (lastSlash >= 0) fname = fname.substring(lastSlash + 1);
+                item.path = baseDir + "/" + fname;
+            }
+            entries.push_back(item);
+            child.close();
+            child = dir.openNextFile();
+        }
+        dir.close();
+
+        bool allOk = true;
+        for (const auto& item : entries) {
+            if (item.isDir) {
+                if (!removeDirRecursive(item.path.c_str())) {
+                    allOk = false;
+                }
+            } else {
+                if (!SD.remove(item.path.c_str())) {
+                    allOk = false;
+                }
+            }
+        }
+
+        if (!SD.rmdir(dirPath)) {
+            allOk = false;
+        }
+
+        return allOk;
+    }
 
     void printDirInternal(File &dir, uint8_t currentDepth, uint8_t maxDepth, Stream &out) {
         if (currentDepth > maxDepth) return;

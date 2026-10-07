@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Telemetria GPS - WindDragons Rover</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js"></script>
+</head>
+<body>
+  <header class="navbar">
+    <a href="/" class="brand">
+      <i class="fa-solid fa-robot"></i> WindDragons <span id="navRoverId">Rover</span>
+    </a>
+    <nav class="nav-links">
+      <a href="/wifi" class="nav-item "><i class="fa-solid fa-wifi"></i> WiFi</a>
+<a href="/gps" class="nav-item active"><i class="fa-solid fa-location-dot"></i> GPS</a>
+<a href="/battery" class="nav-item "><i class="fa-solid fa-battery-three-quarters"></i> Bateria</a>
+<a href="/control" class="nav-item "><i class="fa-solid fa-gamepad"></i> Comandos</a>
+<a href="/config" class="nav-item "><i class="fa-solid fa-gear"></i> Configurações</a>
+<a href="/sd" class="nav-item "><i class="fa-solid fa-folder"></i> Cartão SD</a>
+
+    </nav>
+    <div>
+      <span id="navWifiBadge" class="badge badge-sta">
+        <i class="fa-solid fa-wifi"></i> A carregar...
+      </span>
+    </div>
+  </header>
+
+  <main class="container">
+    
+<div class="card">
+  <div class="card-title">
+    <span><i class="fa-solid fa-location-dot"></i> Posicionamento e Navegação Quectel LC29H</span>
+  </div>
+
+  <div class="grid-4">
+    <div class="stat-box">
+      <div class="stat-label">Estado Satélites</div>
+      <div class="stat-value" id="gpsFix" style="color:var(--red);">A ler...</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Velocidade</div>
+      <div class="stat-value" id="gpsSpeed" style="color:var(--primary);">0.0 kn</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Rumo Proa</div>
+      <div class="stat-value" id="gpsHeading">0°</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Modo Motor</div>
+      <div class="stat-value" id="motorMode" style="color:var(--yellow);">idle</div>
+    </div>
+  </div>
+
+  <div class="grid-2" style="margin-top:16px;">
+    <div class="stat-box">
+      <div class="stat-label">Latitude (WGS84)</div>
+      <div class="stat-value" id="gpsLat" style="font-size:1.6rem;">0.000000</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Longitude (WGS84)</div>
+      <div class="stat-value" id="gpsLng" style="font-size:1.6rem;">0.000000</div>
+    </div>
+  </div>
+
+  <div style="margin-top:20px;" class="btn-group">
+    <a id="osmLink" href="https://www.openstreetmap.org" target="_blank" class="btn btn-primary">
+      <i class="fa-solid fa-map"></i> Ver no OpenStreetMap
+    </a>
+    <a id="gmapsLink" href="https://maps.google.com" target="_blank" class="btn btn-secondary">
+      <i class="fa-solid fa-location-dot"></i> Google Maps
+    </a>
+  </div>
+</div>
+
+<script>
+setInterval(() => {
+  fetch('/api/status')
+    .then(r => r.json())
+    .then(data => {
+      const g = data.gps;
+      if (!g) return;
+      document.getElementById('gpsFix').innerText = g.fix ? ('FIX (' + g.satellites + ' sats)') : 'SEM FIX';
+      document.getElementById('gpsFix').style.color = g.fix ? 'var(--green)' : 'var(--red)';
+      document.getElementById('gpsSpeed').innerText = (g.speed_kn || 0).toFixed(1) + ' kn';
+      document.getElementById('gpsHeading').innerText = (g.heading || 0).toFixed(0) + '°';
+      document.getElementById('motorMode').innerText = (data.actuators && data.actuators.motor_status_str) ? data.actuators.motor_status_str : 'idle';
+      document.getElementById('gpsLat').innerText = (g.lat || 0).toFixed(6);
+      document.getElementById('gpsLng').innerText = (g.lng || 0).toFixed(6);
+      document.getElementById('osmLink').href = 'https://www.openstreetmap.org/?mlat=' + g.lat + '&mlon=' + g.lng + '#map=18/' + g.lat + '/' + g.lng;
+      document.getElementById('gmapsLink').href = 'https://maps.google.com/?q=' + g.lat + ',' + g.lng;
+    }).catch(() => {});
+}, 1000);
+</script>
+
+  </main>
+
+  <footer style="text-align:center;color:var(--muted);font-size:0.75rem;margin-top:24px;">
+    WindDragons Autonomous Surface Rover / Buoy &copy; 2026 &bull; MicroSD /www/ Frontend
+  </footer>
+</body>
+</html>

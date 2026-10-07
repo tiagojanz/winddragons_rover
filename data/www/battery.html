@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Monitor da Bateria LiPo 4S - WindDragons Rover</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js"></script>
+</head>
+<body>
+  <header class="navbar">
+    <a href="/" class="brand">
+      <i class="fa-solid fa-robot"></i> WindDragons <span id="navRoverId">Rover</span>
+    </a>
+    <nav class="nav-links">
+      <a href="/wifi" class="nav-item "><i class="fa-solid fa-wifi"></i> WiFi</a>
+<a href="/gps" class="nav-item "><i class="fa-solid fa-location-dot"></i> GPS</a>
+<a href="/battery" class="nav-item active"><i class="fa-solid fa-battery-three-quarters"></i> Bateria</a>
+<a href="/control" class="nav-item "><i class="fa-solid fa-gamepad"></i> Comandos</a>
+<a href="/config" class="nav-item "><i class="fa-solid fa-gear"></i> Configurações</a>
+<a href="/sd" class="nav-item "><i class="fa-solid fa-folder"></i> Cartão SD</a>
+
+    </nav>
+    <div>
+      <span id="navWifiBadge" class="badge badge-sta">
+        <i class="fa-solid fa-wifi"></i> A carregar...
+      </span>
+    </div>
+  </header>
+
+  <main class="container">
+    
+<div class="card">
+  <div class="card-title">
+    <span><i class="fa-solid fa-battery-full"></i> Monitoramento APM Power Module (28V / 90A)</span>
+  </div>
+
+  <div style="text-align:center;padding:16px 0;">
+    <div style="font-size:3.5rem;font-weight:800;color:var(--green);" id="batPct">--%</div>
+    <div class="progress-bg" style="max-width:400px;margin:0 auto;">
+      <div id="batBar" class="progress-bar" style="width:0%;background:var(--green);"></div>
+    </div>
+  </div>
+
+  <div class="grid-4">
+    <div class="stat-box">
+      <div class="stat-label">Tensão Total</div>
+      <div class="stat-value" id="vTotVal" style="color:var(--text);">-- V</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Média p/ Célula</div>
+      <div class="stat-value" id="vCellVal" style="color:var(--primary);">-- V/cel</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Corrente Instantânea</div>
+      <div class="stat-value" id="currVal" style="color:var(--text);">-- A</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Consumo Acumulado</div>
+      <div class="stat-value" id="consVal" style="color:var(--yellow);">-- mAh</div>
+    </div>
+  </div>
+
+  <div style="margin-top:20px;">
+    <div class="stat-label" style="margin-bottom:8px;">Distribuição Estimada de Tensão (4S LiPo):</div>
+    <div class="grid-4">
+      <div class="stat-box" style="text-align:center;">
+        <div class="stat-label">Célula 1</div>
+        <div class="stat-value cell-v" style="font-size:1.2rem;color:var(--primary);">-- V</div>
+      </div>
+      <div class="stat-box" style="text-align:center;">
+        <div class="stat-label">Célula 2</div>
+        <div class="stat-value cell-v" style="font-size:1.2rem;color:var(--primary);">-- V</div>
+      </div>
+      <div class="stat-box" style="text-align:center;">
+        <div class="stat-label">Célula 3</div>
+        <div class="stat-value cell-v" style="font-size:1.2rem;color:var(--primary);">-- V</div>
+      </div>
+      <div class="stat-box" style="text-align:center;">
+        <div class="stat-label">Célula 4</div>
+        <div class="stat-value cell-v" style="font-size:1.2rem;color:var(--primary);">-- V</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+setInterval(() => {
+  fetch('/api/status')
+    .then(r => r.json())
+    .then(data => {
+      const b = data.battery;
+      if (!b) return;
+      const p = b.pct || 0;
+      const v = b.voltage || 0;
+      const vc = b.cell_avg || 0;
+      const col = p < 25 ? 'var(--red)' : (p < 50 ? 'var(--yellow)' : 'var(--green)');
+      document.getElementById('batPct').innerText = p + '%';
+      document.getElementById('batPct').style.color = col;
+      document.getElementById('batBar').style.width = p + '%';
+      document.getElementById('batBar').style.background = col;
+      document.getElementById('vTotVal').innerText = v.toFixed(2) + ' V';
+      document.getElementById('vCellVal').innerText = vc.toFixed(2) + ' V/cel';
+      document.getElementById('currVal').innerText = (b.current_a || 0).toFixed(2) + ' A';
+      document.getElementById('consVal').innerText = (b.consumed_mah || 0).toFixed(0) + ' mAh';
+      document.querySelectorAll('.cell-v').forEach(el => el.innerText = vc.toFixed(2) + ' V');
+    }).catch(() => {});
+}, 1000);
+</script>
+
+  </main>
+
+  <footer style="text-align:center;color:var(--muted);font-size:0.75rem;margin-top:24px;">
+    WindDragons Autonomous Surface Rover / Buoy &copy; 2026 &bull; MicroSD /www/ Frontend
+  </footer>
+</body>
+</html>

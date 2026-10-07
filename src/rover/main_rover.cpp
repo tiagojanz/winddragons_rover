@@ -544,9 +544,9 @@ void loop() {
         }
     }
 
-    // 9. Log telemetry to SD card periodically (every 5000ms if SD card is ready)
+    // 9. Log telemetry to SD card periodically (every 5000ms if SD card is ready and not busy)
     static uint32_t lastSdLogTime = 0;
-    if (sdCard.isReady() && (now - lastSdLogTime >= 5000)) {
+    if (!webServer.isBusy() && sdCard.isReady() && (now - lastSdLogTime >= 5000)) {
         lastSdLogTime = now;
         char logBuf[128];
         snprintf(logBuf, sizeof(logBuf), "%lu,%.6f,%.6f,%.1f,%.1f,%u,%u,%u\n",
@@ -556,16 +556,18 @@ void loop() {
         sdCard.appendFile("/telemetry.csv", logBuf);
     }
 
-    // 10. Update Rover Onboard LCD Display (Instant if forced, or 5Hz periodically)
-    bool failsafeActive = (currentMotorStatus == MOTOR_FAILSAFE);
-    int16_t currentRssi = 0;
+    // 10. Update Rover Onboard LCD Display (Instant if forced, or 5Hz periodically - paused during SD transfers)
+    if (!webServer.isBusy()) {
+        bool failsafeActive = (currentMotorStatus == MOTOR_FAILSAFE);
+        int16_t currentRssi = 0;
 #if ENABLE_LORA
-    if (loraReady) currentRssi = static_cast<int16_t>(radio.getRSSI());
+        if (loraReady) currentRssi = static_cast<int16_t>(radio.getRSSI());
 #endif
-    roverDisplay.update(roverConfig.getRoverId(), gps, battery, actuators, currentMotorStatus, 
-                        currentRssi, failsafeActive, forceDisplay, sdCard.isReady(),
-                        wifiConfig.isAPMode(), wifiConfig.getIPAddress().c_str(),
-                        wifiConfig.getSSID().c_str(), wifiConfig.getRSSI(),
-                        wifiConfig.getAPStationCount(),
-                        wifiConfig.getAPPassword().c_str());
+        roverDisplay.update(roverConfig.getRoverId(), gps, battery, actuators, currentMotorStatus, 
+                            currentRssi, failsafeActive, forceDisplay, sdCard.isReady(),
+                            wifiConfig.isAPMode(), wifiConfig.getIPAddress().c_str(),
+                            wifiConfig.getSSID().c_str(), wifiConfig.getRSSI(),
+                            wifiConfig.getAPStationCount(),
+                            wifiConfig.getAPPassword().c_str());
+    }
 }

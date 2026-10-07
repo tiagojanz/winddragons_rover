@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Configuração WiFi - WindDragons Rover</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js"></script>
+</head>
+<body>
+  <header class="navbar">
+    <a href="/" class="brand">
+      <i class="fa-solid fa-robot"></i> WindDragons <span id="navRoverId">Rover</span>
+    </a>
+    <nav class="nav-links">
+      <a href="/wifi" class="nav-item active"><i class="fa-solid fa-wifi"></i> WiFi</a>
+<a href="/gps" class="nav-item "><i class="fa-solid fa-location-dot"></i> GPS</a>
+<a href="/battery" class="nav-item "><i class="fa-solid fa-battery-three-quarters"></i> Bateria</a>
+<a href="/control" class="nav-item "><i class="fa-solid fa-gamepad"></i> Comandos</a>
+<a href="/config" class="nav-item "><i class="fa-solid fa-gear"></i> Configurações</a>
+<a href="/sd" class="nav-item "><i class="fa-solid fa-folder"></i> Cartão SD</a>
+
+    </nav>
+    <div>
+      <span id="navWifiBadge" class="badge badge-sta">
+        <i class="fa-solid fa-wifi"></i> A carregar...
+      </span>
+    </div>
+  </header>
+
+  <main class="container">
+    
+<div class="card">
+  <div class="card-title">
+    <span><i class="fa-solid fa-wifi"></i> Gestão de Redes Wi-Fi</span>
+    <button onclick="scanNetworks()" id="scanBtn" class="btn btn-secondary" style="padding:6px 12px;font-size:0.8rem;">
+      <i class="fa-solid fa-rotate"></i> Procurar Redes
+    </button>
+  </div>
+  <p style="color:var(--muted);font-size:0.875rem;margin-bottom:16px;">
+    Ligue o Rover ao router Wi-Fi do cais ou centro de comando para telemetria em tempo real e acesso local direto.
+  </p>
+
+  <div id="scanStatus" style="display:none;color:var(--primary);margin-bottom:12px;font-size:0.85rem;">
+    <i class="fa-solid fa-rotate fa-spin"></i> A procurar redes Wi-Fi nas imediações...
+  </div>
+
+  <div id="networksList" style="overflow-x:auto;">
+    <table>
+      <thead>
+        <tr>
+          <th>Rede (SSID)</th>
+          <th>Sinal</th>
+          <th>Segurança</th>
+          <th>Ação</th>
+        </tr>
+      </thead>
+      <tbody id="scanTableBody">
+        <tr><td colspan="4" style="text-align:center;color:var(--muted);">Clique em "Procurar Redes" para ver redes Wi-Fi disponíveis.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">
+    <span><i class="fa-solid fa-floppy-disk"></i> Redes Guardadas no Rover</span>
+  </div>
+  <div id="savedNetworksList" style="overflow-x:auto;">
+    <table>
+      <thead>
+        <tr>
+          <th>SSID</th>
+          <th>Estado / Predefinição</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="savedTableBody">
+        <tr><td colspan="3" style="text-align:center;color:var(--muted);">A carregar redes guardadas...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Modal Conectar -->
+<div id="connectModal" class="modal-overlay">
+  <div class="modal-card">
+    <div class="card-title">
+      <span><i class="fa-solid fa-plug"></i> Conectar à Rede Wi-Fi</span>
+      <button onclick="closeConnectModal()" class="btn btn-secondary" style="padding:4px 8px;"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <form onsubmit="submitConnect(event)">
+      <div class="form-group">
+        <label class="stat-label">Nome da Rede (SSID):</label>
+        <input type="text" id="modalSsid" readonly style="background:#0b1120;color:var(--primary);">
+      </div>
+      <div class="form-group">
+        <label class="stat-label">Palavra-passe:</label>
+        <input type="password" id="modalPass" placeholder="Introduza a palavra-passe">
+      </div>
+      <div class="btn-group" style="justify-content:flex-end;margin-top:16px;">
+        <button type="button" onclick="closeConnectModal()" class="btn btn-secondary">Cancelar</button>
+        <button type="submit" class="btn btn-primary"><i class="fa-solid fa-plug"></i> Guardar e Ligar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function scanNetworks() {
+  const status = document.getElementById('scanStatus');
+  const tbody = document.getElementById('scanTableBody');
+  status.style.display = 'block';
+  tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--muted);"><i class="fa-solid fa-rotate fa-spin"></i> A varrer frequências 2.4 GHz...</td></tr>';
+
+  fetch('/api/scan')
+    .then(r => r.json())
+    .then(networks => {
+      status.style.display = 'none';
+      if (!networks || networks.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--yellow);">Nenhuma rede encontrada. Tente novamente.</td></tr>';
+        return;
+      }
+      let html = '';
+      networks.forEach(n => {
+        const lockIcon = n.secure ? '<i class="fa-solid fa-lock" style="color:var(--yellow);"></i> Protegida' : '<i class="fa-solid fa-lock-open" style="color:var(--muted);"></i> Aberta';
+        html += '<tr>';
+        html += '<td><strong>' + n.ssid + '</strong></td>';
+        html += '<td>' + n.rssi + ' dBm</td>';
+        html += '<td>' + lockIcon + '</td>';
+        html += '<td><button onclick="openConnectModal(\'' + n.ssid + '\')" class="btn btn-primary" style="padding:4px 10px;font-size:0.75rem;"><i class="fa-solid fa-plug"></i> Conectar</button></td>';
+        html += '</tr>';
+      });
+      tbody.innerHTML = html;
+    })
+    .catch(() => {
+      status.style.display = 'none';
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--red);">Erro ao pesquisar redes.</td></tr>';
+    });
+}
+
+function openConnectModal(ssid) {
+  document.getElementById('modalSsid').value = ssid;
+  document.getElementById('modalPass').value = '';
+  document.getElementById('connectModal').style.display = 'flex';
+}
+function closeConnectModal() {
+  document.getElementById('connectModal').style.display = 'none';
+}
+
+function submitConnect(e) {
+  e.preventDefault();
+  const ssid = document.getElementById('modalSsid').value;
+  const pass = document.getElementById('modalPass').value;
+  closeConnectModal();
+  showToast('A enviar credenciais ao Rover...');
+
+  fetch('/api/wifi/save', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ssid: ssid, pass: pass })
+  })
+  .then(r => r.json())
+  .then(res => {
+    showToast(res.msg || 'Rede guardada!');
+    loadSavedNetworks();
+  });
+}
+
+function loadSavedNetworks() {
+  fetch('/api/status')
+    .then(r => r.json())
+    .then(data => {
+      const tbody = document.getElementById('savedTableBody');
+      const curSsid = (data.wifi && !data.wifi.is_ap) ? data.wifi.ssid : '';
+      if (!curSsid) {
+        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--muted);">Modo AP Ativo ou nenhuma rede conectada no momento.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = '<tr><td><strong>' + curSsid + '</strong></td><td><span class="badge badge-sta"><i class="fa-solid fa-circle-check"></i> Conectada</span></td><td><button onclick="disconnectWifi()" class="btn btn-secondary" style="padding:4px 8px;font-size:0.75rem;"><i class="fa-solid fa-rotate"></i> Reconectar</button></td></tr>';
+    }).catch(() => {});
+}
+
+function disconnectWifi() {
+  fetch('/api/wifi/reconnect', { method: 'POST' })
+    .then(() => showToast('A reconectar...'));
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  loadSavedNetworks();
+  scanNetworks();
+});
+</script>
+
+  </main>
+
+  <footer style="text-align:center;color:var(--muted);font-size:0.75rem;margin-top:24px;">
+    WindDragons Autonomous Surface Rover / Buoy &copy; 2026 &bull; MicroSD /www/ Frontend
+  </footer>
+</body>
+</html>

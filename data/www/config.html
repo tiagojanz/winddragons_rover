@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Configuração do Rover - WindDragons Rover</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js"></script>
+</head>
+<body>
+  <header class="navbar">
+    <a href="/" class="brand">
+      <i class="fa-solid fa-robot"></i> WindDragons <span id="navRoverId">Rover</span>
+    </a>
+    <nav class="nav-links">
+      <a href="/wifi" class="nav-item "><i class="fa-solid fa-wifi"></i> WiFi</a>
+<a href="/gps" class="nav-item "><i class="fa-solid fa-location-dot"></i> GPS</a>
+<a href="/battery" class="nav-item "><i class="fa-solid fa-battery-three-quarters"></i> Bateria</a>
+<a href="/control" class="nav-item "><i class="fa-solid fa-gamepad"></i> Comandos</a>
+<a href="/config" class="nav-item active"><i class="fa-solid fa-gear"></i> Configurações</a>
+<a href="/sd" class="nav-item "><i class="fa-solid fa-folder"></i> Cartão SD</a>
+
+    </nav>
+    <div>
+      <span id="navWifiBadge" class="badge badge-sta">
+        <i class="fa-solid fa-wifi"></i> A carregar...
+      </span>
+    </div>
+  </header>
+
+  <main class="container">
+    
+<div class="card">
+  <div class="card-title">
+    <span><i class="fa-solid fa-gear"></i> Definições Gerais do Rover</span>
+  </div>
+  <p style="color:var(--muted);font-size:0.875rem;margin-bottom:14px;">
+    As opções abaixo são gravadas sincronizadamente no ficheiro <code>/config.json</code> do Cartão MicroSD e na partição não-volátil NVS do ESP32.
+  </p>
+
+  <div class="grid-4">
+    <div class="stat-box">
+      <div class="stat-label">ID Ativo</div>
+      <div class="stat-value" id="summaryId" style="color:var(--primary);">Rover-1</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Brilho do Ecrã</div>
+      <div class="stat-value" id="summaryBright" style="color:var(--yellow);">80%</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">SSID AP Local</div>
+      <div class="stat-value" id="summarySsid" style="font-size:0.95rem;word-break:break-all;">WindDragon-AP</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Estado do MicroSD</div>
+      <div class="stat-value" id="summarySd" style="font-size:0.95rem;color:var(--green);">Cartão Pronto</div>
+    </div>
+  </div>
+</div>
+
+<form id="configForm" onsubmit="saveAllConfig(event)">
+  <div class="card">
+    <div class="card-title">
+      <span><i class="fa-solid fa-sun"></i> Brilho do Ecrã (Display LCD ST7789)</span>
+      <span id="brightValBadge" class="badge" style="background:#1e293b;color:var(--primary);font-size:0.9rem;font-weight:700;">80%</span>
+    </div>
+    <p style="color:var(--muted);font-size:0.875rem;margin-bottom:16px;">
+      Ajuste o brilho da retroiluminação por PWM (LEDC GPIO 22). Ao mover o cursor, o ecrã atualiza em tempo real.
+    </p>
+
+    <div style="background:rgba(0,0,0,0.25);padding:18px;border-radius:12px;border:1px solid var(--card-border);">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <span style="font-size:0.85rem;color:var(--muted);"><i class="fa-solid fa-moon"></i> 5% Mínimo</span>
+        <span id="brightDisplayVal" style="font-size:1.8rem;font-weight:700;color:var(--primary);">80%</span>
+        <span style="font-size:0.85rem;color:var(--muted);"><i class="fa-solid fa-sun"></i> 100% Máximo</span>
+      </div>
+      <input type="range" id="cfg_bright" min="5" max="100" step="1" value="80" class="slider" oninput="onBrightSlide(this.value)" onchange="onBrightChange(this.value)">
+
+      <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;">
+        <button type="button" onclick="setPreset(25)" class="btn btn-secondary" style="padding:6px 12px;font-size:0.8rem;"><i class="fa-solid fa-moon"></i> 25% (Poupança)</button>
+        <button type="button" onclick="setPreset(50)" class="btn btn-secondary" style="padding:6px 12px;font-size:0.8rem;"><i class="fa-solid fa-cloud-sun"></i> 50% (Normal)</button>
+        <button type="button" onclick="setPreset(75)" class="btn btn-secondary" style="padding:6px 12px;font-size:0.8rem;"><i class="fa-solid fa-sun"></i> 75% (Dia)</button>
+        <button type="button" onclick="setPreset(100)" class="btn btn-secondary" style="padding:6px 12px;font-size:0.8rem;"><i class="fa-solid fa-bolt"></i> 100% (Sol Máximo)</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">
+      <span><i class="fa-solid fa-robot"></i> Identificação do Rover & Rádio LoRa</span>
+    </div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label class="stat-label">ID do Rover (1 - 254):</label>
+        <input type="number" id="cfg_id" min="1" max="254" required value="1" oninput="updateIdPreview(this.value)">
+        <small style="color:var(--muted);font-size:0.75rem;margin-top:4px;display:block;">
+          Identificador único: <strong id="roverTag" style="color:var(--primary);">ROVER-01</strong>
+        </small>
+      </div>
+      <div class="form-group">
+        <label class="stat-label">Tipo de Equipamento:</label>
+        <input type="text" disabled value="WindDragons Autonomous Surface Rover / Buoy" style="background:#0b1120;color:var(--muted);cursor:not-allowed;">
+        <small style="color:var(--muted);font-size:0.75rem;margin-top:4px;display:block;">Hardware: ESP32-C6 + ST7789 1.47" + LoRa SX1278 + MicroSD</small>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">
+      <span><i class="fa-solid fa-tower-broadcast"></i> Ponto de Acesso Local (WiFi AP)</span>
+    </div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label class="stat-label">Nome da Rede AP (SSID):</label>
+        <input type="text" id="cfg_ssid" required value="WindDragon-AP">
+        <small style="color:var(--muted);font-size:0.75rem;margin-top:4px;display:block;">Nome do WiFi emitido quando em modo AP</small>
+      </div>
+      <div class="form-group">
+        <label class="stat-label">Palavra-passe do AP (mín. 8 caracteres):</label>
+        <div style="display:flex;gap:6px;">
+          <input type="password" id="cfg_pass" minlength="8" required value="12345678" style="margin-top:0;">
+          <button type="button" onclick="togglePass()" class="btn btn-secondary" style="padding:0 12px;font-size:0.85rem;"><i id="passEye" class="fa-solid fa-eye"></i></button>
+        </div>
+        <small style="color:var(--muted);font-size:0.75rem;margin-top:4px;display:block;">Segurança WPA2-PSK para acesso local</small>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="border-color:var(--primary);">
+    <div class="card-title">
+      <span><i class="fa-solid fa-floppy-disk"></i> Gravar e Sincronizar</span>
+    </div>
+    <div id="statusMsg" style="display:none;padding:12px;border-radius:8px;margin-bottom:14px;font-size:0.9rem;"></div>
+    <div class="btn-group">
+      <button type="submit" class="btn btn-primary" style="padding:12px 24px;font-size:1rem;">
+        <i class="fa-solid fa-floppy-disk"></i> Guardar no Ficheiro (/config.json + NVS)
+      </button>
+      <button type="button" onclick="loadConfig()" class="btn btn-secondary">
+        <i class="fa-solid fa-rotate"></i> Recarregar do Ficheiro
+      </button>
+      <a href="/sd" class="btn btn-secondary">
+        <i class="fa-solid fa-folder-open"></i> Explorar Ficheiros MicroSD
+      </a>
+    </div>
+  </div>
+</form>
+
+<script>
+let slideTimer = null;
+function onBrightSlide(v) {
+  document.getElementById('brightDisplayVal').innerText = v + '%';
+  document.getElementById('brightValBadge').innerText = v + '%';
+  document.getElementById('summaryBright').innerText = v + '%';
+  if (slideTimer) clearTimeout(slideTimer);
+  slideTimer = setTimeout(() => {
+    fetch('/api/display/brightness?val=' + v, { method: 'POST' }).catch(() => {});
+  }, 60);
+}
+function onBrightChange(v) {
+  fetch('/api/display/brightness?val=' + v, { method: 'POST' }).catch(() => {});
+}
+function setPreset(v) {
+  document.getElementById('cfg_bright').value = v;
+  onBrightSlide(v);
+  onBrightChange(v);
+}
+function updateIdPreview(id) {
+  const num = parseInt(id) || 1;
+  const tag = 'ROVER-' + (num < 10 ? '0' : '') + num;
+  const el = document.getElementById('roverTag');
+  if (el) el.innerText = tag;
+}
+function togglePass() {
+  const p = document.getElementById('cfg_pass');
+  const eye = document.getElementById('passEye');
+  const isPass = (p.type === 'password');
+  p.type = isPass ? 'text' : 'password';
+  if (eye) eye.className = isPass ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye';
+}
+function showStatus(msg, isErr = false) {
+  const d = document.getElementById('statusMsg');
+  d.style.display = 'block';
+  d.style.background = isErr ? '#450a0a' : '#064e3b';
+  d.style.color = isErr ? '#fecaca' : '#a7f3d0';
+  d.innerHTML = (isErr ? '<i class="fa-solid fa-triangle-exclamation"></i> ' : '<i class="fa-solid fa-circle-check"></i> ') + msg;
+  setTimeout(() => { d.style.display = 'none'; }, 4000);
+}
+
+function loadConfig() {
+  fetch('/api/rover/config')
+    .then(r => r.json())
+    .then(data => {
+      document.getElementById('cfg_id').value = data.rover_id || 1;
+      updateIdPreview(data.rover_id || 1);
+      document.getElementById('cfg_bright').value = data.screen_brightness || 80;
+      onBrightSlide(data.screen_brightness || 80);
+      document.getElementById('cfg_ssid').value = data.ap_ssid || 'WindDragon-AP';
+      document.getElementById('cfg_pass').value = data.ap_password || '12345678';
+      document.getElementById('summaryId').innerText = 'Rover-' + (data.rover_id || 1);
+      document.getElementById('summarySsid').innerText = data.ap_ssid || 'WindDragon-AP';
+    })
+    .catch(() => {});
+}
+
+function saveAllConfig(e) {
+  e.preventDefault();
+  const id = parseInt(document.getElementById('cfg_id').value);
+  const bright = parseInt(document.getElementById('cfg_bright').value);
+  const ssid = document.getElementById('cfg_ssid').value;
+  const pass = document.getElementById('cfg_pass').value;
+
+  fetch('/api/rover/config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      rover_id: id,
+      screen_brightness: bright,
+      ap_ssid: ssid,
+      ap_password: pass
+    })
+  })
+  .then(r => r.json())
+  .then(res => {
+    if (res.success) {
+      showStatus('Configurações guardadas com sucesso no /config.json e na NVS!');
+      loadConfig();
+    } else {
+      showStatus('Erro ao guardar configurações: ' + (res.error || 'Erro desconhecido'), true);
+    }
+  })
+  .catch(err => {
+    showStatus('Falha de rede ao comunicar com o Rover', true);
+  });
+}
+
+document.addEventListener('DOMContentLoaded', loadConfig);
+</script>
+
+  </main>
+
+  <footer style="text-align:center;color:var(--muted);font-size:0.75rem;margin-top:24px;">
+    WindDragons Autonomous Surface Rover / Buoy &copy; 2026 &bull; MicroSD /www/ Frontend
+  </footer>
+</body>
+</html>
