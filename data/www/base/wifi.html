@@ -3,25 +3,24 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Configuração WiFi - WindDragons Rover</title>
+  <title>Configuração WiFi da Base - WindDragons Base Station</title>
   <link rel="stylesheet" href="/style.css">
   <script src="/app.js"></script>
 </head>
 <body>
   <header class="navbar">
     <a href="/" class="brand">
-      <i class="fa-solid fa-robot"></i> WindDragons <span id="navRoverId">Rover</span>
+      <i class="fa-solid fa-tower-broadcast"></i> WindDragons <span>Base Station</span>
     </a>
     <nav class="nav-links">
-      <a href="/wifi" class="nav-item active"><i class="fa-solid fa-wifi"></i> WiFi</a>
-<a href="/gps" class="nav-item "><i class="fa-solid fa-location-dot"></i> GPS</a>
-<a href="/battery" class="nav-item "><i class="fa-solid fa-battery-three-quarters"></i> Bateria</a>
+      <a href="/wifi" class="nav-item active"><i class="fa-solid fa-wifi"></i> WiFi Base</a>
+<a href="/gps" class="nav-item "><i class="fa-solid fa-location-dot"></i> GPS Frota</a>
+<a href="/battery" class="nav-item "><i class="fa-solid fa-battery-three-quarters"></i> Bateria Frota</a>
 <a href="/control" class="nav-item "><i class="fa-solid fa-gamepad"></i> Comandos</a>
-<a href="/config" class="nav-item "><i class="fa-solid fa-gear"></i> Configurações</a>
 <a href="/sd" class="nav-item "><i class="fa-solid fa-folder"></i> Cartão SD</a>
 
     </nav>
-    <div>
+    <div style="display:flex;align-items:center;gap:10px;">
       <span id="navWifiBadge" class="badge badge-sta">
         <i class="fa-solid fa-wifi"></i> A carregar...
       </span>
@@ -38,7 +37,7 @@
     </button>
   </div>
   <p style="color:var(--muted);font-size:0.875rem;margin-bottom:16px;">
-    Ligue o Rover ao router Wi-Fi do cais ou centro de comando para telemetria em tempo real e acesso local direto.
+    Ligue a Base Station ao router Wi-Fi local para permitir controlo via browser e telemetria da frota em tempo real.
   </p>
 
   <div id="scanStatus" style="display:none;color:var(--primary);margin-bottom:12px;font-size:0.85rem;">
@@ -64,7 +63,7 @@
 
 <div class="card">
   <div class="card-title">
-    <span><i class="fa-solid fa-floppy-disk"></i> Redes Guardadas no Rover</span>
+    <span><i class="fa-solid fa-floppy-disk"></i> Redes Guardadas na Base Station</span>
   </div>
   <div id="savedNetworksList" style="overflow-x:auto;">
     <table>
@@ -195,7 +194,7 @@ document.addEventListener('DOMContentLoaded', () => {
   </main>
 
   <footer style="text-align:center;color:var(--muted);font-size:0.75rem;margin-top:24px;">
-    WindDragons Autonomous Surface Rover / Buoy &copy; 2026 &bull; MicroSD /www/rover/ Frontend
+    WindDragons Telemetry Base Station &copy; 2026 &bull; MicroSD /www/base/ Frontend
   </footer>
 </body>
 </html>

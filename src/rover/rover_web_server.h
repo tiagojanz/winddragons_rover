@@ -115,14 +115,24 @@ private:
     }
 
     bool tryServeSdFile(const String &path) {
-        if (!_sd.isReady() || !_sd.fileExists(path.c_str())) {
+        if (!_sd.isReady()) {
+            return false;
+        }
+        // Tentar prioritariamente o caminho especializado do Rover: /www/rover/xxx
+        if (path.startsWith("/www/") && !path.startsWith("/www/rover/") && !path.startsWith("/www/base/")) {
+            String roverPath = "/www/rover/" + path.substring(5);
+            if (_sd.fileExists(roverPath.c_str())) {
+                return handleStaticFile(roverPath);
+            }
+        }
+        if (!_sd.fileExists(path.c_str())) {
             return false;
         }
         return handleStaticFile(path);
     }
 
     void setupRoutes() {
-        // Rotas principais (Prioridade ao Cartão SD /www/... com fallback automático em Flash)
+        // Rotas principais (Prioridade ao Cartão SD /www/rover/... com fallback para /www/... e Flash)
         _server.on("/", [this]() {
             if (_wifi.isAPMode()) {
                 if (tryServeSdFile("/www/wifi.html")) return;
@@ -226,6 +236,9 @@ private:
                 return;
             }
             if (_server.uri().startsWith("/") && !_server.uri().startsWith("/www/")) {
+                if (handleStaticFile("/www/rover" + _server.uri())) {
+                    return;
+                }
                 if (handleStaticFile("/www" + _server.uri())) {
                     return;
                 }

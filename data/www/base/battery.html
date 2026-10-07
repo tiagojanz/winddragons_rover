@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Monitor de Bateria da Frota - WindDragons Base Station</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js"></script>
+</head>
+<body>
+  <header class="navbar">
+    <a href="/" class="brand">
+      <i class="fa-solid fa-tower-broadcast"></i> WindDragons <span>Base Station</span>
+    </a>
+    <nav class="nav-links">
+      <a href="/wifi" class="nav-item "><i class="fa-solid fa-wifi"></i> WiFi Base</a>
+<a href="/gps" class="nav-item "><i class="fa-solid fa-location-dot"></i> GPS Frota</a>
+<a href="/battery" class="nav-item active"><i class="fa-solid fa-battery-three-quarters"></i> Bateria Frota</a>
+<a href="/control" class="nav-item "><i class="fa-solid fa-gamepad"></i> Comandos</a>
+<a href="/sd" class="nav-item "><i class="fa-solid fa-folder"></i> Cartão SD</a>
+
+    </nav>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span id="navWifiBadge" class="badge badge-sta">
+        <i class="fa-solid fa-wifi"></i> A carregar...
+      </span>
+    </div>
+  </header>
+
+  <main class="container">
+    
+<div class="card">
+  <div class="card-title">
+    <span><i class="fa-solid fa-battery-full"></i> Telemetria de Bateria LiPo 4S da Frota</span>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <label class="stat-label" style="margin:0;">Rover:</label>
+      <select id="roverSelect" onchange="changeRover(this.value)" style="width:auto;margin:0;padding:6px 12px;background:#090e1a;color:var(--primary);font-weight:700;border:1px solid var(--primary);border-radius:8px;">
+        <option value="1">Rover-1</option>
+      </select>
+    </div>
+  </div>
+
+  <div style="text-align:center;padding:20px 0;">
+    <div id="batPct" style="font-size:3.5rem;font-weight:800;color:var(--green);">0%</div>
+    <div class="progress-bg" style="max-width:400px;margin:0 auto;">
+      <div id="batBar" class="progress-bar" style="width:0%;background:var(--green);"></div>
+    </div>
+  </div>
+
+  <div class="grid-4">
+    <div class="stat-box">
+      <div class="stat-label">Tensão Total (Pack)</div>
+      <div class="stat-value" id="vTotVal">0.00 V</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Média por Célula</div>
+      <div class="stat-value" id="vCellVal" style="color:var(--primary);">0.00 V/cel</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Química do Pack</div>
+      <div class="stat-value">LiPo 4S</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Estado Pack</div>
+      <div class="stat-value" id="batHealth" style="color:var(--green);">NORMAL</div>
+    </div>
+  </div>
+
+  <div style="margin-top:20px;">
+    <div class="stat-label" style="margin-bottom:8px;">Distribuição Estimada de Tensão por Célula (LiPo 4S):</div>
+    <div class="grid-4">
+      <div class="stat-box" style="text-align:center;">
+        <div class="stat-label">Célula 1</div>
+        <div class="stat-value cell-v" style="font-size:1.2rem;color:var(--primary);">0.00 V</div>
+      </div>
+      <div class="stat-box" style="text-align:center;">
+        <div class="stat-label">Célula 2</div>
+        <div class="stat-value cell-v" style="font-size:1.2rem;color:var(--primary);">0.00 V</div>
+      </div>
+      <div class="stat-box" style="text-align:center;">
+        <div class="stat-label">Célula 3</div>
+        <div class="stat-value cell-v" style="font-size:1.2rem;color:var(--primary);">0.00 V</div>
+      </div>
+      <div class="stat-box" style="text-align:center;">
+        <div class="stat-label">Célula 4</div>
+        <div class="stat-value cell-v" style="font-size:1.2rem;color:var(--primary);">0.00 V</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function changeRover(id) {
+  fetch('/api/select_rover', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({rover_id: parseInt(id)})
+  }).then(() => refreshData());
+}
+
+function refreshData() {
+  fetch('/api/status')
+    .then(r => r.json())
+    .then(data => {
+      const sel = data.selected;
+      if (!sel) return;
+      const p = sel.battery_pct || 0;
+      const v = sel.battery_voltage || 0;
+      const vc = (v / 4.0);
+      const col = p < 25 ? 'var(--red)' : (p < 50 ? 'var(--yellow)' : 'var(--green)');
+
+      document.getElementById('batPct').innerText = p + '%';
+      document.getElementById('batPct').style.color = col;
+      document.getElementById('batBar').style.width = p + '%';
+      document.getElementById('batBar').style.background = col;
+      document.getElementById('vTotVal').innerText = v.toFixed(2) + ' V';
+      document.getElementById('vCellVal').innerText = vc.toFixed(2) + ' V/cel';
+      document.querySelectorAll('.cell-v').forEach(el => el.innerText = vc.toFixed(2) + ' V');
+
+      const h = document.getElementById('batHealth');
+      h.innerText = p < 20 ? 'CRÍTICO' : (p < 40 ? 'BAIXA' : 'NORMAL');
+      h.style.color = col;
+
+      if (data.rovers && data.rovers.length) {
+        let opt = '';
+        data.rovers.forEach(rov => {
+          opt += `<option value="${rov.id}" ${sel.id === rov.id ? 'selected' : ''}>${rov.code} (${rov.battery_pct}%)</option>`;
+        });
+        document.getElementById('roverSelect').innerHTML = opt;
+      }
+    }).catch(() => {});
+}
+
+setInterval(refreshData, 1500);
+document.addEventListener('DOMContentLoaded', refreshData);
+</script>
+
+  </main>
+
+  <footer style="text-align:center;color:var(--muted);font-size:0.75rem;margin-top:24px;">
+    WindDragons Telemetry Base Station &copy; 2026 &bull; MicroSD /www/base/ Frontend
+  </footer>
+</body>
+</html>

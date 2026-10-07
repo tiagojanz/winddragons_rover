@@ -3,25 +3,24 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Explorador do Cartão MicroSD - WindDragons Rover</title>
+  <title>Explorador MicroSD da Base - WindDragons Base Station</title>
   <link rel="stylesheet" href="/style.css">
   <script src="/app.js"></script>
 </head>
 <body>
   <header class="navbar">
     <a href="/" class="brand">
-      <i class="fa-solid fa-robot"></i> WindDragons <span id="navRoverId">Rover</span>
+      <i class="fa-solid fa-tower-broadcast"></i> WindDragons <span>Base Station</span>
     </a>
     <nav class="nav-links">
-      <a href="/wifi" class="nav-item "><i class="fa-solid fa-wifi"></i> WiFi</a>
-<a href="/gps" class="nav-item "><i class="fa-solid fa-location-dot"></i> GPS</a>
-<a href="/battery" class="nav-item "><i class="fa-solid fa-battery-three-quarters"></i> Bateria</a>
+      <a href="/wifi" class="nav-item "><i class="fa-solid fa-wifi"></i> WiFi Base</a>
+<a href="/gps" class="nav-item "><i class="fa-solid fa-location-dot"></i> GPS Frota</a>
+<a href="/battery" class="nav-item "><i class="fa-solid fa-battery-three-quarters"></i> Bateria Frota</a>
 <a href="/control" class="nav-item "><i class="fa-solid fa-gamepad"></i> Comandos</a>
-<a href="/config" class="nav-item "><i class="fa-solid fa-gear"></i> Configurações</a>
 <a href="/sd" class="nav-item active"><i class="fa-solid fa-folder"></i> Cartão SD</a>
 
     </nav>
-    <div>
+    <div style="display:flex;align-items:center;gap:10px;">
       <span id="navWifiBadge" class="badge badge-sta">
         <i class="fa-solid fa-wifi"></i> A carregar...
       </span>
@@ -173,7 +172,7 @@
 </div>
 
 <script>
-let currentDir = '/';
+let currentDir = '/www/base';
 let allEntries = [];
 let currentFilter = '';
 let currentView = 'grid'; // 'grid' | 'list'
@@ -486,7 +485,7 @@ document.addEventListener('DOMContentLoaded', () => {
   </main>
 
   <footer style="text-align:center;color:var(--muted);font-size:0.75rem;margin-top:24px;">
-    WindDragons Autonomous Surface Rover / Buoy &copy; 2026 &bull; MicroSD /www/rover/ Frontend
+    WindDragons Telemetry Base Station &copy; 2026 &bull; MicroSD /www/base/ Frontend
   </footer>
 </body>
 </html>

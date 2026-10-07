@@ -655,11 +655,60 @@ def generate_html_page(title, active_tab, body_content):
   </main>
 
   <footer style="text-align:center;color:var(--muted);font-size:0.75rem;margin-top:24px;">
-    WindDragons Autonomous Surface Rover / Buoy &copy; 2026 &bull; MicroSD /www/ Frontend
+    WindDragons Autonomous Surface Rover / Buoy &copy; 2026 &bull; MicroSD /www/rover/ Frontend
   </footer>
 </body>
 </html>
 """
+
+def generate_base_html_page(title, active_tab, body_content):
+    tabs = [
+        ("wifi", "/wifi", "fa-wifi", "WiFi Base"),
+        ("gps", "/gps", "fa-location-dot", "GPS Frota"),
+        ("battery", "/battery", "fa-battery-three-quarters", "Bateria Frota"),
+        ("control", "/control", "fa-gamepad", "Comandos"),
+        ("sd", "/sd", "fa-folder", "Cartão SD")
+    ]
+    nav_links = ""
+    for tid, url, icon, label in tabs:
+        act = "active" if active_tab == tid else ""
+        nav_links += f'<a href="{url}" class="nav-item {act}"><i class="fa-solid {icon}"></i> {label}</a>\n'
+
+    return f"""<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{title} - WindDragons Base Station</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js"></script>
+</head>
+<body>
+  <header class="navbar">
+    <a href="/" class="brand">
+      <i class="fa-solid fa-tower-broadcast"></i> WindDragons <span>Base Station</span>
+    </a>
+    <nav class="nav-links">
+      {nav_links}
+    </nav>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span id="navWifiBadge" class="badge badge-sta">
+        <i class="fa-solid fa-wifi"></i> A carregar...
+      </span>
+    </div>
+  </header>
+
+  <main class="container">
+    {body_content}
+  </main>
+
+  <footer style="text-align:center;color:var(--muted);font-size:0.75rem;margin-top:24px;">
+    WindDragons Telemetry Base Station &copy; 2026 &bull; MicroSD /www/base/ Frontend
+  </footer>
+</body>
+</html>
+"""
+
 
 # ----------------------------------------------------------------------
 # 3. PAGES
@@ -1773,58 +1822,493 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 """
 
-def main():
-    print(f"[*] A gerar ficheiros web em: {WWW_DIR}")
+# ----------------------------------------------------------------------
+# 4. PÁGINAS ESPECIALIZADAS DA BASE STATION (/www/base/)
+# ----------------------------------------------------------------------
 
-    # 1. style.css
+BASE_GPS_CONTENT = """
+<div class="card">
+  <div class="card-title">
+    <span><i class="fa-solid fa-satellite-dish"></i> Telemetria LoRa & Navegação da Frota</span>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <label class="stat-label" style="margin:0;">Rover:</label>
+      <select id="roverSelect" onchange="changeRover(this.value)" style="width:auto;margin:0;padding:6px 12px;background:#090e1a;color:var(--primary);font-weight:700;border:1px solid var(--primary);border-radius:8px;">
+        <option value="1">Rover-1</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="grid-4">
+    <div class="stat-box">
+      <div class="stat-label">Estado LoRa</div>
+      <div class="stat-value" id="fixStatus" style="color:var(--red);">A ler...</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Velocidade</div>
+      <div class="stat-value" id="speedVal" style="color:var(--primary);">0.0 kn</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Rumo Proa</div>
+      <div class="stat-value" id="headingVal">0°</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Sinal Rádio</div>
+      <div class="stat-value" id="rssiVal" style="color:var(--green);">0 dBm</div>
+    </div>
+  </div>
+
+  <div class="grid-2" style="margin-top:16px;">
+    <div class="stat-box">
+      <div class="stat-label">Latitude (WGS84)</div>
+      <div class="stat-value" id="latVal" style="font-size:1.6rem;color:var(--primary);">0.000000</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Longitude (WGS84)</div>
+      <div class="stat-value" id="lngVal" style="font-size:1.6rem;color:var(--primary);">0.000000</div>
+    </div>
+  </div>
+
+  <div style="margin-top:20px;" class="btn-group">
+    <a id="osmLink" href="https://www.openstreetmap.org" target="_blank" class="btn btn-primary">
+      <i class="fa-solid fa-map"></i> Ver no OpenStreetMap
+    </a>
+    <a id="mapsLink" href="https://maps.google.com" target="_blank" class="btn btn-secondary">
+      <i class="fa-solid fa-location-dot"></i> Google Maps
+    </a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">
+    <span><i class="fa-solid fa-ship"></i> Visão Geral da Frota de Rovers</span>
+  </div>
+  <div style="overflow-x:auto;">
+    <table>
+      <thead>
+        <tr>
+          <th>ID / Código</th>
+          <th>Estado</th>
+          <th>Coordenadas</th>
+          <th>Velocidade</th>
+          <th>Bateria</th>
+          <th>Sinal LoRa</th>
+          <th>Ação</th>
+        </tr>
+      </thead>
+      <tbody id="fleetTableBody">
+        <tr><td colspan="7" style="text-align:center;color:var(--muted);">A carregar telemetria da frota...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+function changeRover(id) {
+  fetch('/api/select_rover', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({rover_id: parseInt(id)})
+  }).then(() => refreshData());
+}
+
+function refreshData() {
+  fetch('/api/status')
+    .then(r => r.json())
+    .then(data => {
+      const sel = data.selected;
+      if (sel) {
+        document.getElementById('latVal').innerText = (sel.lat || 0).toFixed(6);
+        document.getElementById('lngVal').innerText = (sel.lng || 0).toFixed(6);
+        document.getElementById('speedVal').innerText = (sel.speed_knots || 0).toFixed(1) + ' kn';
+        document.getElementById('headingVal').innerText = (sel.heading_deg || 0).toFixed(0) + '°';
+        document.getElementById('rssiVal').innerText = (sel.rssi || 0) + ' dBm';
+        
+        const st = document.getElementById('fixStatus');
+        st.innerText = sel.is_online ? 'ONLINE' : 'OFFLINE';
+        st.style.color = sel.is_online ? 'var(--green)' : 'var(--red)';
+
+        document.getElementById('mapsLink').href = 'https://maps.google.com/?q=' + sel.lat + ',' + sel.lng;
+        document.getElementById('osmLink').href = 'https://www.openstreetmap.org/?mlat=' + sel.lat + '&mlon=' + sel.lng + '#map=17/' + sel.lat + '/' + sel.lng;
+      }
+
+      if (data.rovers && data.rovers.length) {
+        let optionsHtml = '';
+        let rowsHtml = '';
+        data.rovers.forEach(rov => {
+          const isSelected = sel && (sel.id === rov.id);
+          optionsHtml += `<option value="${rov.id}" ${isSelected ? 'selected' : ''}>${rov.code} ${rov.is_online ? '[ONLINE]' : '[OFFLINE]'}</option>`;
+          
+          rowsHtml += `<tr>
+            <td><strong>${rov.code}</strong></td>
+            <td><span class="badge" style="background:${rov.is_online ? '#065f46' : '#7f1d1d'};color:${rov.is_online ? '#6ee7b7' : '#fca5a5'};">${rov.is_online ? 'ONLINE' : 'OFFLINE'}</span></td>
+            <td>${(rov.lat || 0).toFixed(4)}, ${(rov.lng || 0).toFixed(4)}</td>
+            <td>${(rov.speed_knots || 0).toFixed(1)} kn</td>
+            <td><strong style="color:${rov.battery_pct < 25 ? 'var(--red)' : 'var(--green)'};">${rov.battery_pct || 0}%</strong> (${(rov.battery_voltage || 0).toFixed(1)}V)</td>
+            <td>${rov.rssi || 0} dBm</td>
+            <td><button onclick="changeRover(${rov.id})" class="btn ${isSelected ? 'btn-secondary' : 'btn-primary'}" style="padding:4px 10px;font-size:0.75rem;">${isSelected ? 'Selecionado' : 'Selecionar'}</button></td>
+          </tr>`;
+        });
+        document.getElementById('roverSelect').innerHTML = optionsHtml;
+        document.getElementById('fleetTableBody').innerHTML = rowsHtml;
+      }
+    }).catch(() => {});
+}
+
+setInterval(refreshData, 1500);
+document.addEventListener('DOMContentLoaded', refreshData);
+</script>
+"""
+
+BASE_BATTERY_CONTENT = """
+<div class="card">
+  <div class="card-title">
+    <span><i class="fa-solid fa-battery-full"></i> Telemetria de Bateria LiPo 4S da Frota</span>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <label class="stat-label" style="margin:0;">Rover:</label>
+      <select id="roverSelect" onchange="changeRover(this.value)" style="width:auto;margin:0;padding:6px 12px;background:#090e1a;color:var(--primary);font-weight:700;border:1px solid var(--primary);border-radius:8px;">
+        <option value="1">Rover-1</option>
+      </select>
+    </div>
+  </div>
+
+  <div style="text-align:center;padding:20px 0;">
+    <div id="batPct" style="font-size:3.5rem;font-weight:800;color:var(--green);">0%</div>
+    <div class="progress-bg" style="max-width:400px;margin:0 auto;">
+      <div id="batBar" class="progress-bar" style="width:0%;background:var(--green);"></div>
+    </div>
+  </div>
+
+  <div class="grid-4">
+    <div class="stat-box">
+      <div class="stat-label">Tensão Total (Pack)</div>
+      <div class="stat-value" id="vTotVal">0.00 V</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Média por Célula</div>
+      <div class="stat-value" id="vCellVal" style="color:var(--primary);">0.00 V/cel</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Química do Pack</div>
+      <div class="stat-value">LiPo 4S</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Estado Pack</div>
+      <div class="stat-value" id="batHealth" style="color:var(--green);">NORMAL</div>
+    </div>
+  </div>
+
+  <div style="margin-top:20px;">
+    <div class="stat-label" style="margin-bottom:8px;">Distribuição Estimada de Tensão por Célula (LiPo 4S):</div>
+    <div class="grid-4">
+      <div class="stat-box" style="text-align:center;">
+        <div class="stat-label">Célula 1</div>
+        <div class="stat-value cell-v" style="font-size:1.2rem;color:var(--primary);">0.00 V</div>
+      </div>
+      <div class="stat-box" style="text-align:center;">
+        <div class="stat-label">Célula 2</div>
+        <div class="stat-value cell-v" style="font-size:1.2rem;color:var(--primary);">0.00 V</div>
+      </div>
+      <div class="stat-box" style="text-align:center;">
+        <div class="stat-label">Célula 3</div>
+        <div class="stat-value cell-v" style="font-size:1.2rem;color:var(--primary);">0.00 V</div>
+      </div>
+      <div class="stat-box" style="text-align:center;">
+        <div class="stat-label">Célula 4</div>
+        <div class="stat-value cell-v" style="font-size:1.2rem;color:var(--primary);">0.00 V</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function changeRover(id) {
+  fetch('/api/select_rover', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({rover_id: parseInt(id)})
+  }).then(() => refreshData());
+}
+
+function refreshData() {
+  fetch('/api/status')
+    .then(r => r.json())
+    .then(data => {
+      const sel = data.selected;
+      if (!sel) return;
+      const p = sel.battery_pct || 0;
+      const v = sel.battery_voltage || 0;
+      const vc = (v / 4.0);
+      const col = p < 25 ? 'var(--red)' : (p < 50 ? 'var(--yellow)' : 'var(--green)');
+
+      document.getElementById('batPct').innerText = p + '%';
+      document.getElementById('batPct').style.color = col;
+      document.getElementById('batBar').style.width = p + '%';
+      document.getElementById('batBar').style.background = col;
+      document.getElementById('vTotVal').innerText = v.toFixed(2) + ' V';
+      document.getElementById('vCellVal').innerText = vc.toFixed(2) + ' V/cel';
+      document.querySelectorAll('.cell-v').forEach(el => el.innerText = vc.toFixed(2) + ' V');
+
+      const h = document.getElementById('batHealth');
+      h.innerText = p < 20 ? 'CRÍTICO' : (p < 40 ? 'BAIXA' : 'NORMAL');
+      h.style.color = col;
+
+      if (data.rovers && data.rovers.length) {
+        let opt = '';
+        data.rovers.forEach(rov => {
+          opt += `<option value="${rov.id}" ${sel.id === rov.id ? 'selected' : ''}>${rov.code} (${rov.battery_pct}%)</option>`;
+        });
+        document.getElementById('roverSelect').innerHTML = opt;
+      }
+    }).catch(() => {});
+}
+
+setInterval(refreshData, 1500);
+document.addEventListener('DOMContentLoaded', refreshData);
+</script>
+"""
+
+BASE_CONTROL_CONTENT = """
+<div class="card">
+  <div class="card-title">
+    <span><i class="fa-solid fa-gamepad"></i> Centro de Comando Remoto da Frota</span>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <label class="stat-label" style="margin:0;">Rover Alvo:</label>
+      <select id="targetRoverSelect" onchange="changeRover(this.value)" style="width:auto;margin:0;padding:6px 12px;background:#090e1a;color:var(--primary);font-weight:700;border:1px solid var(--primary);border-radius:8px;">
+        <option value="1">Rover-1</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="grid-4">
+    <div class="stat-box">
+      <div class="stat-label">Modo Motor</div>
+      <div class="stat-value" id="curMotor" style="color:var(--yellow);font-size:1.1rem;">idle</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Estado Âncora</div>
+      <div class="stat-value" id="curAnchor" style="color:var(--primary);font-size:1.1rem;">retracted</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Profundidade</div>
+      <div class="stat-value" id="curDepth">0.0 m</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Sinal Rádio</div>
+      <div class="stat-value" id="curRssi" style="color:var(--green);">0 dBm</div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">
+    <span><i class="fa-solid fa-fan"></i> Propulsão ESC & Leme de Direção</span>
+  </div>
+  <div class="grid-2">
+    <div>
+      <div class="stat-label">Aceleração ESC: <span id="thrVal" style="font-size:1.1rem;color:var(--primary);">0%</span></div>
+      <input type="range" id="throttleSlider" min="-100" max="100" value="0" class="slider" oninput="updateSliders()" onchange="sendActuators()">
+      <div class="btn-group" style="margin-top:12px;">
+        <button onclick="setThrottle(0)" class="btn btn-secondary">0% (Stop)</button>
+        <button onclick="setThrottle(25)" class="btn btn-secondary">+25%</button>
+        <button onclick="setThrottle(50)" class="btn btn-secondary">+50%</button>
+        <button onclick="setThrottle(100)" class="btn btn-primary">+100%</button>
+        <button onclick="setThrottle(-50)" class="btn btn-secondary">-50% (Ré)</button>
+      </div>
+    </div>
+
+    <div>
+      <div class="stat-label">Ângulo do Leme: <span id="rudVal" style="font-size:1.1rem;color:var(--primary);">0%</span></div>
+      <input type="range" id="rudderSlider" min="-100" max="100" value="0" class="slider" oninput="updateSliders()" onchange="sendActuators()">
+      <div class="btn-group" style="margin-top:12px;">
+        <button onclick="setRudder(-75)" class="btn btn-secondary">⬅ Bombordo (-75%)</button>
+        <button onclick="setRudder(0)" class="btn btn-secondary">Centro (0%)</button>
+        <button onclick="setRudder(75)" class="btn btn-secondary">Estibordo (+75%) ➡</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">
+    <span><i class="fa-solid fa-anchor"></i> Guincho da Âncora & Travão</span>
+  </div>
+  <div class="btn-group">
+    <button onclick="sendAction(3)" class="btn btn-primary"><i class="fa-solid fa-arrow-down"></i> Lançar Âncora (Soltar)</button>
+    <button onclick="sendAction(4)" class="btn btn-primary"><i class="fa-solid fa-arrow-up"></i> Recolher Âncora (Guincho)</button>
+    <button onclick="sendAction(5)" class="btn btn-secondary"><i class="fa-solid fa-stop"></i> Parar Guincho</button>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">
+    <span><i class="fa-solid fa-compass"></i> Modos de Navegação & Segurança</span>
+  </div>
+  <div class="btn-group">
+    <button onclick="sendAction(1)" class="btn" style="background:#0284c7;color:#fff;"><i class="fa-solid fa-location-crosshairs"></i> Hold Station (GPS)</button>
+    <button onclick="sendAction(7)" class="btn" style="background:#7c3aed;color:#fff;"><i class="fa-solid fa-house"></i> Return to Launch (RTL)</button>
+    <button onclick="sendAction(10)" class="btn btn-secondary"><i class="fa-solid fa-gamepad"></i> Modo Manual</button>
+    <button onclick="sendAction(8)" class="btn" style="background:var(--yellow);color:#0f172a;"><i class="fa-solid fa-bell"></i> Alarme Sonoro / Strobe</button>
+    <button onclick="sendEmergencyStop()" class="btn btn-danger" style="font-size:1rem;padding:12px 24px;"><i class="fa-solid fa-ban"></i> PARAGEM DE EMERGÊNCIA</button>
+  </div>
+</div>
+
+<script>
+function updateSliders() {
+  document.getElementById('thrVal').innerText = document.getElementById('throttleSlider').value + '%';
+  document.getElementById('rudVal').innerText = document.getElementById('rudderSlider').value + '%';
+}
+
+function setThrottle(v) {
+  document.getElementById('throttleSlider').value = v;
+  updateSliders();
+  sendActuators();
+}
+
+function setRudder(v) {
+  document.getElementById('rudderSlider').value = v;
+  updateSliders();
+  sendActuators();
+}
+
+function sendActuators() {
+  const t = parseInt(document.getElementById('throttleSlider').value);
+  const r = parseInt(document.getElementById('rudderSlider').value);
+  fetch('/api/control/actuator', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({throttle: t, rudder: r})
+  });
+}
+
+function sendAction(a) {
+  const rid = parseInt(document.getElementById('targetRoverSelect').value);
+  fetch('/api/control/action', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({action: a, rover_id: rid})
+  }).then(r => r.json()).then(res => {
+    showToast(res.msg || 'Comando enviado');
+  });
+}
+
+function sendEmergencyStop() {
+  setThrottle(0);
+  setRudder(0);
+  sendAction(2);
+}
+
+function changeRover(id) {
+  fetch('/api/select_rover', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({rover_id: parseInt(id)})
+  }).then(() => refreshData());
+}
+
+function refreshData() {
+  fetch('/api/status')
+    .then(r => r.json())
+    .then(data => {
+      const sel = data.selected;
+      if (sel) {
+        document.getElementById('curMotor').innerText = sel.motor_status !== undefined ? sel.motor_status : 'idle';
+        document.getElementById('curAnchor').innerText = sel.anchor_status !== undefined ? sel.anchor_status : 'retracted';
+        document.getElementById('curDepth').innerText = (sel.anchor_depth_m || 0).toFixed(1) + ' m';
+        document.getElementById('curRssi').innerText = (sel.rssi || 0) + ' dBm';
+      }
+      if (data.rovers && data.rovers.length) {
+        let opt = '';
+        data.rovers.forEach(rov => {
+          opt += `<option value="${rov.id}" ${sel && sel.id === rov.id ? 'selected' : ''}>${rov.code}</option>`;
+        });
+        document.getElementById('targetRoverSelect').innerHTML = opt;
+      }
+    }).catch(() => {});
+}
+
+setInterval(refreshData, 1500);
+document.addEventListener('DOMContentLoaded', refreshData);
+</script>
+"""
+
+BASE_WIFI_CONTENT = WIFI_CONTENT.replace(
+    "Ligue o Rover ao router Wi-Fi do cais ou centro de comando para telemetria em tempo real e acesso local direto.",
+    "Ligue a Base Station ao router Wi-Fi local para permitir controlo via browser e telemetria da frota em tempo real."
+).replace("Redes Guardadas no Rover", "Redes Guardadas na Base Station")
+
+BASE_SD_CONTENT = SD_CONTENT.replace("Explorador do Cartão MicroSD", "Explorador MicroSD - Base Station").replace("Cartão MicroSD - Rover", "Cartão MicroSD - Base Station").replace("let currentDir = '/';", "let currentDir = '/www/base';")
+
+
+def main():
+    ROVER_DIR = WWW_DIR / "rover"
+    BASE_DIR = WWW_DIR / "base"
+    ROVER_DIR.mkdir(parents=True, exist_ok=True)
+    BASE_DIR.mkdir(parents=True, exist_ok=True)
+
+    print(f"[*] A gerar ficheiros web em:")
+    print(f"    - Raiz partilhada: {WWW_DIR}")
+    print(f"    - Subpasta Rover:  {ROVER_DIR}")
+    print(f"    - Subpasta Base:   {BASE_DIR}")
+
+    # 1. style.css & app.js na raiz
     with open(WWW_DIR / "style.css", "w", encoding="utf-8") as f:
         f.write(STYLE_CSS.strip() + "\n")
     print(f"  [+] {WWW_DIR / 'style.css'} ({len(STYLE_CSS)} bytes)")
 
-    # 2. app.js
     with open(WWW_DIR / "app.js", "w", encoding="utf-8") as f:
         f.write(APP_JS.strip() + "\n")
     print(f"  [+] {WWW_DIR / 'app.js'} ({len(APP_JS)} bytes)")
 
-    # 3. index.html & gps.html
-    gps_full = generate_html_page("Telemetria GPS", "gps", GPS_CONTENT)
-    with open(WWW_DIR / "index.html", "w", encoding="utf-8") as f:
-        f.write(gps_full.strip() + "\n")
-    with open(WWW_DIR / "gps.html", "w", encoding="utf-8") as f:
-        f.write(gps_full.strip() + "\n")
-    print(f"  [+] {WWW_DIR / 'index.html'} & gps.html")
+    # 2. Páginas do Rover
+    gps_rover = generate_html_page("Telemetria GPS", "gps", GPS_CONTENT)
+    bat_rover = generate_html_page("Monitor da Bateria LiPo 4S", "battery", BATTERY_CONTENT)
+    ctrl_rover = generate_html_page("Comandar Boia", "control", CONTROL_CONTENT)
+    cfg_rover = generate_html_page("Configuração do Rover", "config", CONFIG_CONTENT)
+    wifi_rover = generate_html_page("Configuração WiFi", "wifi", WIFI_CONTENT)
+    sd_rover = generate_html_page("Explorador do Cartão MicroSD", "sd", SD_CONTENT)
 
-    # 4. battery.html
-    battery_full = generate_html_page("Monitor da Bateria LiPo 4S", "battery", BATTERY_CONTENT)
-    with open(WWW_DIR / "battery.html", "w", encoding="utf-8") as f:
-        f.write(battery_full.strip() + "\n")
-    print(f"  [+] {WWW_DIR / 'battery.html'}")
+    rover_files = [
+        ("index.html", gps_rover),
+        ("gps.html", gps_rover),
+        ("battery.html", bat_rover),
+        ("control.html", ctrl_rover),
+        ("config.html", cfg_rover),
+        ("wifi.html", wifi_rover),
+        ("sd.html", sd_rover)
+    ]
 
-    # 5. control.html
-    control_full = generate_html_page("Comandar Boia", "control", CONTROL_CONTENT)
-    with open(WWW_DIR / "control.html", "w", encoding="utf-8") as f:
-        f.write(control_full.strip() + "\n")
-    print(f"  [+] {WWW_DIR / 'control.html'}")
+    for fname, content in rover_files:
+        # Salva em /www/rover/
+        with open(ROVER_DIR / fname, "w", encoding="utf-8") as f:
+            f.write(content.strip() + "\n")
+        # Mantém cópia de compatibilidade em /www/
+        with open(WWW_DIR / fname, "w", encoding="utf-8") as f:
+            f.write(content.strip() + "\n")
+    print(f"  [+] 7 páginas geradas em {ROVER_DIR} e espelhadas em {WWW_DIR}")
 
-    # 6. config.html
-    config_full = generate_html_page("Configuração do Rover", "config", CONFIG_CONTENT)
-    with open(WWW_DIR / "config.html", "w", encoding="utf-8") as f:
-        f.write(config_full.strip() + "\n")
-    print(f"  [+] {WWW_DIR / 'config.html'}")
+    # 3. Páginas especializadas da Base Station
+    gps_base = generate_base_html_page("Telemetria GPS da Frota", "gps", BASE_GPS_CONTENT)
+    bat_base = generate_base_html_page("Monitor de Bateria da Frota", "battery", BASE_BATTERY_CONTENT)
+    ctrl_base = generate_base_html_page("Centro de Comando da Frota", "control", BASE_CONTROL_CONTENT)
+    wifi_base = generate_base_html_page("Configuração WiFi da Base", "wifi", BASE_WIFI_CONTENT)
+    sd_base = generate_base_html_page("Explorador MicroSD da Base", "sd", BASE_SD_CONTENT)
 
-    # 7. wifi.html
-    wifi_full = generate_html_page("Configuração WiFi", "wifi", WIFI_CONTENT)
-    with open(WWW_DIR / "wifi.html", "w", encoding="utf-8") as f:
-        f.write(wifi_full.strip() + "\n")
-    print(f"  [+] {WWW_DIR / 'wifi.html'}")
+    base_files = [
+        ("index.html", gps_base),
+        ("gps.html", gps_base),
+        ("battery.html", bat_base),
+        ("control.html", ctrl_base),
+        ("wifi.html", wifi_base),
+        ("sd.html", sd_base)
+    ]
 
-    # 8. sd.html
-    sd_full = generate_html_page("Explorador do Cartão MicroSD", "sd", SD_CONTENT)
-    with open(WWW_DIR / "sd.html", "w", encoding="utf-8") as f:
-        f.write(sd_full.strip() + "\n")
-    print(f"  [+] {WWW_DIR / 'sd.html'}")
+    for fname, content in base_files:
+        with open(BASE_DIR / fname, "w", encoding="utf-8") as f:
+            f.write(content.strip() + "\n")
+    print(f"  [+] 6 páginas especializadas geradas em {BASE_DIR}")
 
-    print("\n[OK] Todos os ficheiros web foram gerados com sucesso em data/www/")
+    print("\n[OK] Todas as páginas web do Rover e da Base Station foram geradas com sucesso!")
 
 if __name__ == "__main__":
     main()
+

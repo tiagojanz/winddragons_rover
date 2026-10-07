@@ -20,7 +20,7 @@ WiFiConfigManager wifiConfig;
 BaseNetwork       network(fleet, wifiConfig);
 BaseDisplay       display;
 SDCardManager     sdCard;
-BaseWebServer     webServer(wifiConfig, fleet);
+BaseWebServer     webServer(wifiConfig, fleet, &sdCard);
 Adafruit_NeoPixel rgbLed(1, PIN_RGB_LED, NEO_GRB + NEO_KHZ800);
 
 #if ENABLE_LORA
