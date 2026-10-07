@@ -395,8 +395,8 @@ def generate_kicad_pcb(path):
         (1, 16.00, "IO15", "rect"),
         (2, 18.54, "GPS_TX2", "circle"),
         (3, 21.08, "GPS_RX2", "circle"),
-        (4, 23.62, "IO16_GPS_RX", "circle"),
-        (5, 26.16, "IO17_GPS_TX", "circle"),
+        (4, 23.62, "IO17_GPS_TX", "circle"),
+        (5, 26.16, "IO16_GPS_RX", "circle"),
         (6, 28.70, "GND", "circle"),
         (7, 31.24, "+3V3", "circle"),
     ]
@@ -899,7 +899,7 @@ def generate_kicad_sch(path):
 
     # BLOCK 3: GNSS / GPS LC29H
     add_block("3. GNSS / GPS NAVIGATION (LC29H)", "UART Port (GP16 RX, GP17 TX) + 3V3", 152.40, 91.44, 264.16, 172.72)
-    gps_labels = ["IO15", "GPS_TX2", "GPS_RX2", "IO16_GPS_RX", "IO17_GPS_TX", "GND", "+3V3"]
+    gps_labels = ["IO15", "GPS_TX2", "GPS_RX2", "IO17_GPS_TX", "IO16_GPS_RX", "GND", "+3V3"]
     place_conn_1row("Connector_Generic:Conn_01x07", "J6", "GPS_LC29H_7PIN", "Connector_PinHeader_2.54mm:PinHeader_1x07_P2.54mm_Vertical", 218.44, 137.16, gps_labels)
 
     # BLOCK 4: Dual Joystick Interface & Pre-Launch Test Jumpers

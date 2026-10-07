@@ -18,6 +18,11 @@ public:
           buzzerHardwareEnabled(false) {}
 
     void begin() {
+        // Reservar explicitamente Timers 0 e 1 para os servos (50Hz)
+        // Isso impede a biblioteca ESP32Servo de se sobrepor ao Timer do display ST7789 (Canal 5, 1000Hz)
+        ESP32PWM::allocateTimer(0);
+        ESP32PWM::allocateTimer(1);
+
         motorServo.setPeriodHertz(50);
         rudderServo.setPeriodHertz(50);
         winchServo.setPeriodHertz(50);

@@ -44,16 +44,16 @@ static const uint8_t BOOT_VISIBLE_LINES = 13;
 
 class RoverDisplay {
 public:
-    RoverDisplay() : canvas(nullptr), currentPage(ROVER_PAGE_NAV), lastRender(0), _bootLogCount(0), _bootProgress(0) {}
+    RoverDisplay() : canvas(nullptr), currentPage(ROVER_PAGE_NAV), lastRender(0), _bootLogCount(0), _bootProgress(0), _brightness(85) {}
 
-    void begin() {
+    void begin(uint8_t initialBrightness = 85) {
         // Disable onboard TF/MicroSD card CS (GPIO 4) to prevent SPI bus collision
         pinMode(PIN_SD_CS, OUTPUT);
         digitalWrite(PIN_SD_CS, HIGH);
 
         // Initialize manufacturer ST7789 display driver
         display.begin();
-        display.setBacklight(85); // 85% brightness
+        setBrightness(initialBrightness);
 
         // Create high-speed in-memory canvas configured in Landscape
         canvas = new Arduino_Canvas(LCD_WIDTH, LCD_HEIGHT, nullptr, 0, 0, DISPLAY_ROTATION);
@@ -62,6 +62,16 @@ public:
             canvas->fillScreen(UI_BLACK);
             display.drawPixelBuffer(0, 0, LCD_WIDTH - 1, LCD_HEIGHT - 1, canvas->getFramebuffer());
         }
+    }
+
+    void setBrightness(uint8_t brightness) {
+        if (brightness > 100) brightness = 100;
+        _brightness = brightness;
+        display.setBacklight(_brightness);
+    }
+
+    uint8_t getBrightness() const {
+        return _brightness;
     }
 
     void showBootScreen(uint8_t roverId = 1) {
@@ -605,4 +615,5 @@ private:
     BootLogItem _bootLogs[BOOT_MAX_LINES];
     uint8_t _bootLogCount;
     uint8_t _bootProgress;
+    uint8_t _brightness;
 };

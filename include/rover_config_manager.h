@@ -13,10 +13,11 @@ struct RoverConfig {
     uint8_t roverId;
     String apSsid;
     String apPassword;
+    uint8_t screenBrightness; // 0 - 100%
 };
 
 /**
- * RoverConfigManager - Gere as configurações principais do Rover (ID, SSID, Password AP)
+ * RoverConfigManager - Gere as configurações principais do Rover (ID, SSID, Password AP, Brilho Ecrã)
  * Sincroniza bidirecionalmente entre o Cartão MicroSD (/config.json) e a memória NVS.
  */
 class RoverConfigManager {
@@ -25,6 +26,7 @@ public:
         _config.roverId = 1;
         _config.apSsid = "WindDragons-Rover-01";
         _config.apPassword = "password123";
+        _config.screenBrightness = 85;
     }
 
     void begin(SDCardManager *sd = nullptr) {
@@ -47,6 +49,7 @@ public:
     uint8_t getRoverId() const { return _config.roverId; }
     String getApSsid() const { return _config.apSsid; }
     String getApPassword() const { return _config.apPassword; }
+    uint8_t getScreenBrightness() const { return _config.screenBrightness; }
 
     void setRoverId(uint8_t id) {
         _config.roverId = id;
@@ -60,10 +63,18 @@ public:
         _config.apPassword = password;
     }
 
-    void updateConfig(uint8_t id, const String &ssid, const String &password) {
+    void setScreenBrightness(uint8_t brightness) {
+        if (brightness > 100) brightness = 100;
+        _config.screenBrightness = brightness;
+    }
+
+    void updateConfig(uint8_t id, const String &ssid, const String &password, uint8_t brightness = 255) {
         _config.roverId = (id > 0) ? id : 1;
         if (ssid.length() > 0) _config.apSsid = ssid;
         if (password.length() >= 8) _config.apPassword = password;
+        if (brightness <= 100) {
+            _config.screenBrightness = brightness;
+        }
         saveConfig();
     }
 
@@ -82,9 +93,10 @@ public:
             _config.roverId = prefs.getUChar("id", 1);
             _config.apSsid = prefs.getString("ssid", "WindDragons-Rover-01");
             _config.apPassword = prefs.getString("pass", "password123");
+            _config.screenBrightness = prefs.getUChar("bright", 85);
             prefs.end();
-            Serial.printf("[CONFIG] Carregado da memoria NVS -> ID: %u | SSID AP: %s\n", 
-                          _config.roverId, _config.apSsid.c_str());
+            Serial.printf("[CONFIG] Carregado da memoria NVS -> ID: %u | SSID AP: %s | Brilho: %u%%\n", 
+                          _config.roverId, _config.apSsid.c_str(), _config.screenBrightness);
         }
 
         // 3. Se o cartão SD estiver presente mas ainda não possuir o /config.json, criar com valores padrão
@@ -102,6 +114,7 @@ public:
         prefs.putUChar("id", _config.roverId);
         prefs.putString("ssid", _config.apSsid);
         prefs.putString("pass", _config.apPassword);
+        prefs.putUChar("bright", _config.screenBrightness);
         prefs.end();
 
         // Guarda no Cartão MicroSD
@@ -137,9 +150,15 @@ public:
         } else if (doc["password"].is<const char*>()) {
             _config.apPassword = doc["password"].as<String>();
         }
+        if (doc["screen_brightness"].is<uint8_t>()) {
+            _config.screenBrightness = doc["screen_brightness"].as<uint8_t>();
+        } else if (doc["brightness"].is<uint8_t>()) {
+            _config.screenBrightness = doc["brightness"].as<uint8_t>();
+        }
+        if (_config.screenBrightness > 100) _config.screenBrightness = 100;
 
-        Serial.printf("[CONFIG] Carregado de /config.json (MicroSD) -> ID: %u | SSID AP: %s\n", 
-                      _config.roverId, _config.apSsid.c_str());
+        Serial.printf("[CONFIG] Carregado de /config.json (MicroSD) -> ID: %u | SSID AP: %s | Brilho: %u%%\n", 
+                      _config.roverId, _config.apSsid.c_str(), _config.screenBrightness);
         return true;
     }
 
@@ -150,6 +169,7 @@ public:
         doc["rover_id"] = _config.roverId;
         doc["ap_ssid"] = _config.apSsid;
         doc["ap_password"] = _config.apPassword;
+        doc["screen_brightness"] = _config.screenBrightness;
 
         String jsonStr;
         serializeJsonPretty(doc, jsonStr);

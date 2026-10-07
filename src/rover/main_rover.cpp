@@ -33,7 +33,7 @@ RoverConfigManager roverConfig;
 extern uint8_t currentMotorStatus;
 extern uint32_t lastControlReceivedTime;
 
-RoverWebServer webServer(wifiConfig, gps, battery, actuators, currentMotorStatus, lastControlReceivedTime, roverConfig, sdCard);
+RoverWebServer webServer(wifiConfig, gps, battery, actuators, currentMotorStatus, lastControlReceivedTime, roverConfig, sdCard, &roverDisplay);
 
 #if ENABLE_LORA
 // Dedicated SPI bus for LoRa SX1278 on header pins (avoids display conflict)
@@ -391,11 +391,12 @@ void setup() {
 
     // 7. Carregar configurações principais (/config.json no SD ou NVS)
     roverConfig.begin(&sdCard);
+    roverDisplay.setBrightness(roverConfig.getScreenBrightness());
     webServer.setRoverId(roverConfig.getRoverId());
-    Serial.printf("[ROVER] Configuracao Ativa: ID=%u | SSID AP=%s\n", 
-                  roverConfig.getRoverId(), roverConfig.getApSsid().c_str());
-    roverDisplay.bootLogf(UI_CYAN, 72, "[CFG ] ID=%u | AP=%s", 
-                          roverConfig.getRoverId(), roverConfig.getApSsid().c_str());
+    Serial.printf("[ROVER] Configuracao Ativa: ID=%u | SSID AP=%s | Brilho=%u%%\n", 
+                  roverConfig.getRoverId(), roverConfig.getApSsid().c_str(), roverConfig.getScreenBrightness());
+    roverDisplay.bootLogf(UI_CYAN, 72, "[CFG ] ID=%u | Brilho=%u%%", 
+                          roverConfig.getRoverId(), roverConfig.getScreenBrightness());
 
 #if ENABLE_LORA
     Serial.print("[ROVER] Initializing LoRa SX1278 (433MHz)... ");

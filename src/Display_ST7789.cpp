@@ -224,10 +224,10 @@ void ST7789Display::initRegisters() {
  * Initialize backlight PWM
  */
 void ST7789Display::backlightInit() {
-    ledcAttach(_pin_backlight, _backlight_freq, _backlight_resolution);
-    // Default to 10% brightness
-    // 10-bit PWM: 10% = 100/1000
-    ledcWrite(_pin_backlight, 100); // 100 here is the 10% PWM value
+    // No ESP32-C6 (6 canais LEDC 0..5), isolar o backlight no canal 5
+    // evitando colisao com os canais 0..3 usados pelos servos
+    ledcAttachChannel(_pin_backlight, _backlight_freq, _backlight_resolution, 5);
+    setBacklight(85);
 }
 
 /**
@@ -330,9 +330,8 @@ void ST7789Display::clearScreen(uint16_t color) {
 void ST7789Display::setBacklight(uint8_t brightness) {
     if (brightness > 100) brightness = 100;
     
-    // 使用简单公式：brightness * 10
-    // 将百分比 0-100 映射到 PWM值 0-1000（10位PWM最大值1024）
-    // 与原始代码完全一致
-    uint32_t duty = brightness * 10;
+    // Mapear 0-100% para o valor exato da resolução (ex: 10 bits = 0..1023)
+    uint32_t maxDuty = (1 << _backlight_resolution) - 1;
+    uint32_t duty = (static_cast<uint32_t>(brightness) * maxDuty) / 100;
     ledcWrite(_pin_backlight, duty);
 }

@@ -528,7 +528,7 @@
     "last_paths": {
       "gencad": "",
       "idf": "",
-      "netlist": "",
+      "netlist": "Universal_Carrier.net",
       "plot": "gerbers/",
       "pos_files": "",
       "specctra_dsn": "",

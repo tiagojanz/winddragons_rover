@@ -10,15 +10,16 @@
 #include "gps_tracker.h"
 #include "battery_monitor.h"
 #include "actuators.h"
+#include "rover_display.h"
 
 class RoverWebServer {
 public:
     RoverWebServer(WiFiConfigManager &wifiMgr, GPSTracker &gps, BatteryMonitor &battery,
                    ActuatorController &actuators, uint8_t &motorStatus, uint32_t &lastControlTime,
-                   RoverConfigManager &configMgr, SDCardManager &sdCard)
+                   RoverConfigManager &configMgr, SDCardManager &sdCard, RoverDisplay *display = nullptr)
         : _server(80), _wifi(wifiMgr), _gps(gps), _battery(battery),
           _actuators(actuators), _motorStatus(motorStatus), _lastControlTime(lastControlTime),
-          _config(configMgr), _roverId(configMgr.getRoverId()), _sd(sdCard) {}
+          _config(configMgr), _roverId(configMgr.getRoverId()), _sd(sdCard), _display(display) {}
 
     void begin() {
         setupRoutes();
@@ -34,6 +35,10 @@ public:
         _roverId = id;
     }
 
+    void setDisplay(RoverDisplay *display) {
+        _display = display;
+    }
+
 private:
     WebServer _server;
     WiFiConfigManager &_wifi;
@@ -45,6 +50,7 @@ private:
     RoverConfigManager &_config;
     uint8_t _roverId;
     SDCardManager &_sd;
+    RoverDisplay *_display;
     File _uploadFile;
 
     void setupRoutes() {
@@ -58,6 +64,8 @@ private:
         });
 
         _server.on("/wifi", [this]() { handleWifiPage(); });
+        _server.on("/config", [this]() { handleConfigPage(); });
+        _server.on("/settings", [this]() { handleConfigPage(); });
         _server.on("/gps", [this]() { 
             if (_wifi.isAPMode()) { _server.sendHeader("Location", "/wifi"); _server.send(302, "text/plain", ""); return; }
             handleGpsPage(); 
@@ -81,9 +89,11 @@ private:
         _server.on("/api/wifi/connect", [this]() { handleApiWifiConnect(); });
         _server.on("/api/wifi/reconnect", [this]() { handleApiWifiReconnect(); });
         
-        // Configuração geral do Rover (ID, SSID AP, Password AP)
+        // Configuração geral do Rover (ID, SSID AP, Password AP, Brilho do Ecrã)
         _server.on("/api/rover/config", HTTP_GET, [this]() { handleApiRoverConfigGet(); });
         _server.on("/api/rover/config", HTTP_POST, [this]() { handleApiRoverConfigSave(); });
+        _server.on("/api/rover/config/reload", HTTP_POST, [this]() { handleApiRoverConfigReload(); });
+        _server.on("/api/display/brightness", HTTP_POST, [this]() { handleApiDisplayBrightness(); });
 
         // Controle de atuadores
         _server.on("/api/control/actuator", [this]() { handleApiActuator(); });
@@ -165,12 +175,14 @@ private:
         html += "<div class='nav-links'>";
         if (_wifi.isAPMode()) {
             html += "<a href='/wifi' class='nav-item " + String(activeTab == "wifi" ? "active" : "") + "'>Configuração WiFi</a>";
+            html += "<a href='/config' class='nav-item " + String(activeTab == "config" ? "active" : "") + "'>⚙️ Configurações</a>";
             html += "<a href='/sd' class='nav-item " + String(activeTab == "sd" ? "active" : "") + "'>📁 Cartão SD</a>";
         } else {
             html += "<a href='/wifi' class='nav-item " + String(activeTab == "wifi" ? "active" : "") + "'>📡 WiFi</a>";
             html += "<a href='/gps' class='nav-item " + String(activeTab == "gps" ? "active" : "") + "'>📍 GPS</a>";
             html += "<a href='/battery' class='nav-item " + String(activeTab == "battery" ? "active" : "") + "'>🔋 Bateria</a>";
             html += "<a href='/control' class='nav-item " + String(activeTab == "control" ? "active" : "") + "'>🎮 Comandos</a>";
+            html += "<a href='/config' class='nav-item " + String(activeTab == "config" ? "active" : "") + "'>⚙️ Configurações</a>";
             html += "<a href='/sd' class='nav-item " + String(activeTab == "sd" ? "active" : "") + "'>📁 Cartão SD</a>";
         }
         html += "</div>";
@@ -280,6 +292,7 @@ private:
         html += "<div class='form-group'><label class='stat-label'>Palavra-passe do AP (mín. 8 caracteres):</label><input type='password' id='cfg_pass' minlength='8' required value='" + _config.getApPassword() + "'></div>";
         html += "<div class='btn-group' style='margin-top:14px;'>";
         html += "<button type='submit' class='btn btn-primary'>Guardar Identificação (NVS + SD)</button>";
+        html += "<a href='/config' class='btn btn-secondary'>⚙️ Abrir Página de Configurações Completa (Brilho do Ecrã) &rarr;</a>";
         html += "</div></form></div>";
 
         // Script interativo
@@ -299,6 +312,165 @@ private:
         html += "nets.forEach(n=>{t+='<tr><td><strong>'+n.ssid+'</strong></td><td>'+n.rssi+' dBm</td><td><button class=\"btn btn-secondary\" style=\"padding:4px 8px;\" onclick=\"document.getElementById(\\'ssid\\').value=\\''+n.ssid+'\\'\">Selecionar</button></td></tr>';});";
         html += "t+='</tbody></table>';d.innerHTML=t;});}";
         html += "function reconnectSTA(){if(confirm('Tentar conectar às redes guardadas agora?')){fetch('/api/wifi/reconnect',{method:'POST'}).then(r=>r.json()).then(res=>{alert(res.msg);setTimeout(()=>location.reload(),4000);});}}";
+        html += "</script>";
+
+        html += getHtmlFooter();
+        _server.send(200, "text/html", html);
+    }
+
+    // -------------------------------------------------------------
+    // PÁGINA: CONFIGURAÇÕES GERAIS (/config.json & NVS)
+    // -------------------------------------------------------------
+    void handleConfigPage() {
+        String html = getHtmlHeader("Configurações", "config");
+
+        // Card 1: Estado do Armazenamento de Configurações
+        bool hasSd = _sd.isReady();
+        bool hasConfigFile = hasSd && _sd.fileExists("/config.json");
+        
+        html += "<div class='card'>";
+        html += "<div class='card-title'><span>💾 Ficheiro de Configurações do Sistema</span><span class='badge' style='background:" + String(hasConfigFile ? "#064e3b;color:#a7f3d0;" : "#78350f;color:#fde68a;") + "'>" + String(hasConfigFile ? "MicroSD: /config.json" : "Apenas Memória Flash NVS") + "</span></div>";
+        html += "<p style='color:var(--muted);font-size:0.875rem;margin-bottom:14px;'>As opções abaixo são gravadas sincronizadamente no ficheiro <code>/config.json</code> do Cartão MicroSD e na partição não-volátil NVS do ESP32.</p>";
+        
+        html += "<div class='grid-4'>";
+        html += "<div class='stat-box'><div class='stat-label'>ID Ativo</div><div class='stat-value' style='color:var(--primary);'>Rover-" + String(_config.getRoverId()) + "</div></div>";
+        html += "<div class='stat-box'><div class='stat-label'>Brilho do Ecrã</div><div class='stat-value' id='summaryBright' style='color:var(--yellow);'>" + String(_config.getScreenBrightness()) + "%</div></div>";
+        html += "<div class='stat-box'><div class='stat-label'>SSID AP Local</div><div class='stat-value' style='font-size:0.95rem;word-break:break-all;'>" + _config.getApSsid() + "</div></div>";
+        html += "<div class='stat-box'><div class='stat-label'>Estado do MicroSD</div><div class='stat-value' style='font-size:0.95rem;color:" + String(hasSd ? "var(--green)" : "var(--yellow)") + "'>" + (hasSd ? "Cartão Pronto" : "Sem Cartão") + "</div></div>";
+        html += "</div></div>";
+
+        // Formulário Principal
+        html += "<form id='configForm' onsubmit='saveAllConfig(event)'>";
+
+        // Card 2: Brilho do Ecrã
+        html += "<div class='card'>";
+        html += "<div class='card-title'><span>🔆 Brilho do Ecrã (Display LCD ST7789)</span><span id='brightValBadge' class='badge' style='background:#1e293b;color:var(--primary);font-size:0.9rem;font-weight:700;'>" + String(_config.getScreenBrightness()) + "%</span></div>";
+        html += "<p style='color:var(--muted);font-size:0.875rem;margin-bottom:16px;'>Ajuste o brilho da retroiluminação por PWM (LEDC GPIO 22). Ao mover o cursor, o ecrã atualiza em tempo real.</p>";
+        
+        html += "<div style='background:rgba(0,0,0,0.25);padding:18px;border-radius:12px;border:1px solid var(--card-border);'>";
+        html += "<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;'>";
+        html += "<span style='font-size:0.85rem;color:var(--muted);'>🌙 5% Mínimo</span>";
+        html += "<span id='brightDisplayVal' style='font-size:1.8rem;font-weight:700;color:var(--primary);'>" + String(_config.getScreenBrightness()) + "%</span>";
+        html += "<span style='font-size:0.85rem;color:var(--muted);'>☀️ 100% Máximo</span>";
+        html += "</div>";
+        html += "<input type='range' id='cfg_bright' min='5' max='100' step='1' value='" + String(_config.getScreenBrightness()) + "' class='slider' oninput='onBrightSlide(this.value)' onchange='onBrightChange(this.value)'>";
+        
+        html += "<div style='display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;'>";
+        html += "<button type='button' onclick='setPreset(25)' class='btn btn-secondary' style='padding:6px 12px;font-size:0.8rem;'>🌙 25% (Poupança)</button>";
+        html += "<button type='button' onclick='setPreset(50)' class='btn btn-secondary' style='padding:6px 12px;font-size:0.8rem;'>🌤️ 50% (Normal)</button>";
+        html += "<button type='button' onclick='setPreset(75)' class='btn btn-secondary' style='padding:6px 12px;font-size:0.8rem;'>☀️ 75% (Dia)</button>";
+        html += "<button type='button' onclick='setPreset(100)' class='btn btn-secondary' style='padding:6px 12px;font-size:0.8rem;'>⚡ 100% (Sol Máximo)</button>";
+        html += "</div>";
+        html += "</div></div>";
+
+        // Card 3: Identificação do Rover & Rádio
+        html += "<div class='card'>";
+        html += "<div class='card-title'><span>🤖 Identificação do Rover & Rádio LoRa</span></div>";
+        html += "<div class='grid-2'>";
+        html += "<div class='form-group'><label class='stat-label'>ID do Rover (1 - 254):</label>";
+        html += "<input type='number' id='cfg_id' min='1' max='254' required value='" + String(_config.getRoverId()) + "' oninput='updateIdPreview(this.value)'>";
+        html += "<small style='color:var(--muted);font-size:0.75rem;margin-top:4px;display:block;'>Identificador único em mensagens LoRa SX1278 e telemetria: <strong id='roverTag' style='color:var(--primary);'>ROVER-" + String(_config.getRoverId() < 10 ? "0" : "") + String(_config.getRoverId()) + "</strong></small>";
+        html += "</div>";
+        html += "<div class='form-group'><label class='stat-label'>Tipo de Equipamento:</label>";
+        html += "<input type='text' disabled value='WindDragons Autonomous Surface Rover / Buoy' style='background:#0b1120;color:var(--muted);cursor:not-allowed;'>";
+        html += "<small style='color:var(--muted);font-size:0.75rem;margin-top:4px;display:block;'>Hardware: ESP32-C6 + ST7789 1.47\" + LoRa SX1278 + MicroSD</small>";
+        html += "</div>";
+        html += "</div></div>";
+
+        // Card 4: Ponto de Acesso Local (WiFi AP)
+        html += "<div class='card'>";
+        html += "<div class='card-title'><span>📶 Ponto de Acesso Local (WiFi AP)</span></div>";
+        html += "<div class='grid-2'>";
+        html += "<div class='form-group'><label class='stat-label'>Nome da Rede AP (SSID):</label>";
+        html += "<input type='text' id='cfg_ssid' required value='" + _config.getApSsid() + "'>";
+        html += "<small style='color:var(--muted);font-size:0.75rem;margin-top:4px;display:block;'>Nome do WiFi emitido quando não conectado a um router</small>";
+        html += "</div>";
+        html += "<div class='form-group'><label class='stat-label'>Palavra-passe do AP (mín. 8 caracteres):</label>";
+        html += "<div style='display:flex;gap:6px;'>";
+        html += "<input type='password' id='cfg_pass' minlength='8' required value='" + _config.getApPassword() + "' style='margin-top:0;'>";
+        html += "<button type='button' onclick='togglePass()' class='btn btn-secondary' style='padding:0 12px;font-size:0.8rem;'>👁️</button>";
+        html += "</div>";
+        html += "<small style='color:var(--muted);font-size:0.75rem;margin-top:4px;display:block;'>Segurança WPA2-PSK para acesso à telemetria local</small>";
+        html += "</div>";
+        html += "</div></div>";
+
+        // Card 5: Ações de Gravação & Gestão
+        html += "<div class='card' style='border-color:var(--primary);'>";
+        html += "<div class='card-title'><span>Gravar e Sincronizar</span></div>";
+        html += "<div id='statusMsg' style='display:none;padding:12px;border-radius:8px;margin-bottom:14px;font-size:0.9rem;'></div>";
+        html += "<div class='btn-group'>";
+        html += "<button type='submit' class='btn btn-primary' style='padding:12px 24px;font-size:1rem;'>💾 Guardar no Ficheiro (/config.json + NVS)</button>";
+        html += "<button type='button' onclick='reloadConfig()' class='btn btn-secondary'>🔄 Recarregar do Ficheiro</button>";
+        if (hasSd) {
+            html += "<a href='/sd' class='btn btn-secondary'>📁 Explorar Ficheiros MicroSD</a>";
+        }
+        html += "</div>";
+        html += "</div>";
+        html += "</form>";
+
+        // Script interativo
+        html += "<script>";
+        html += "let slideTimer=null;";
+        html += "function onBrightSlide(v){";
+        html += "  document.getElementById('brightDisplayVal').innerText=v+'%';";
+        html += "  document.getElementById('brightValBadge').innerText=v+'%';";
+        html += "  document.getElementById('summaryBright').innerText=v+'%';";
+        html += "  if(slideTimer) clearTimeout(slideTimer);";
+        html += "  slideTimer=setTimeout(()=>{";
+        html += "    fetch('/api/display/brightness?val='+v,{method:'POST'}).catch(()=>{});";
+        html += "  },60);";
+        html += "}";
+        html += "function onBrightChange(v){";
+        html += "  fetch('/api/display/brightness?val='+v,{method:'POST'}).catch(()=>{});";
+        html += "}";
+        html += "function setPreset(v){";
+        html += "  document.getElementById('cfg_bright').value=v;";
+        html += "  onBrightSlide(v);";
+        html += "  onBrightChange(v);";
+        html += "}";
+        html += "function updateIdPreview(id){";
+        html += "  const num=parseInt(id)||1;";
+        html += "  const tag='ROVER-'+(num<10?'0':'')+num;";
+        html += "  const el=document.getElementById('roverTag');if(el)el.innerText=tag;";
+        html += "}";
+        html += "function togglePass(){";
+        html += "  const p=document.getElementById('cfg_pass');";
+        html += "  p.type=(p.type==='password'?'text':'password');";
+        html += "}";
+        html += "function showStatus(msg,isErr=false){";
+        html += "  const d=document.getElementById('statusMsg');";
+        html += "  d.style.display='block';";
+        html += "  d.style.background=isErr?'#450a0a':'#064e3b';";
+        html += "  d.style.color=isErr?'#fecaca':'#a7f3d0';";
+        html += "  d.style.border='1px solid '+(isErr?'#ef4444':'#10b981');";
+        html += "  d.innerHTML=(isErr?'❌ ':'✅ ')+msg;";
+        html += "  setTimeout(()=>{d.style.display='none';},6000);";
+        html += "}";
+        html += "function saveAllConfig(e){";
+        html += "  e.preventDefault();";
+        html += "  const id=parseInt(document.getElementById('cfg_id').value);";
+        html += "  const ssid=document.getElementById('cfg_ssid').value;";
+        html += "  const pass=document.getElementById('cfg_pass').value;";
+        html += "  const bright=parseInt(document.getElementById('cfg_bright').value);";
+        html += "  fetch('/api/rover/config',{";
+        html += "    method:'POST',";
+        html += "    headers:{'Content-Type':'application/json'},";
+        html += "    body:JSON.stringify({rover_id:id,ap_ssid:ssid,ap_password:pass,screen_brightness:bright})";
+        html += "  }).then(r=>r.json()).then(res=>{";
+        html += "    if(res.success){";
+        html += "      showStatus(res.msg||'Configurações guardadas com sucesso no ficheiro /config.json!');";
+        html += "    }else{";
+        html += "      showStatus(res.error||'Erro ao guardar configurações.',true);";
+        html += "    }";
+        html += "  }).catch(err=>showStatus('Erro de comunicação: '+err,true));";
+        html += "}";
+        html += "function reloadConfig(){";
+        html += "  if(confirm('Recarregar as configurações gravadas no ficheiro /config.json?')){";
+        html += "    fetch('/api/rover/config/reload',{method:'POST'}).then(r=>r.json()).then(res=>{";
+        html += "      alert(res.msg);location.reload();";
+        html += "    }).catch(err=>alert('Erro ao recarregar: '+err));";
+        html += "  }";
+        html += "}";
         html += "</script>";
 
         html += getHtmlFooter();
@@ -713,6 +885,9 @@ private:
         doc["rover_id"] = _config.getRoverId();
         doc["ap_ssid"] = _config.getApSsid();
         doc["ap_password"] = _config.getApPassword();
+        doc["screen_brightness"] = _config.getScreenBrightness();
+        doc["sd_ready"] = _sd.isReady();
+        doc["has_config_file"] = (_sd.isReady() && _sd.fileExists("/config.json"));
         String out;
         serializeJson(doc, out);
         _server.send(200, "application/json", out);
@@ -732,16 +907,68 @@ private:
         uint8_t id = doc["rover_id"] | _config.getRoverId();
         String ssid = doc["ap_ssid"] | _config.getApSsid();
         String pass = doc["ap_password"] | _config.getApPassword();
+        uint8_t bright = doc["screen_brightness"] | doc["brightness"] | _config.getScreenBrightness();
+        if (bright > 100) bright = 100;
 
-        _config.updateConfig(id, ssid, pass);
+        _config.updateConfig(id, ssid, pass, bright);
         _roverId = _config.getRoverId();
+
+        if (_display) {
+            _display->setBrightness(bright);
+        }
 
         JsonDocument res;
         res["success"] = true;
         res["msg"] = "Configuração do Rover guardada na NVS e no Cartão SD (/config.json)!";
         res["rover_id"] = _roverId;
         res["ap_ssid"] = _config.getApSsid();
+        res["screen_brightness"] = _config.getScreenBrightness();
 
+        String out;
+        serializeJson(res, out);
+        _server.send(200, "application/json", out);
+    }
+
+    void handleApiRoverConfigReload() {
+        _config.loadConfig();
+        if (_display) {
+            _display->setBrightness(_config.getScreenBrightness());
+        }
+        _roverId = _config.getRoverId();
+
+        JsonDocument res;
+        res["success"] = true;
+        res["msg"] = "Configurações recarregadas com sucesso do ficheiro /config.json (ou NVS)!";
+        res["rover_id"] = _roverId;
+        res["ap_ssid"] = _config.getApSsid();
+        res["screen_brightness"] = _config.getScreenBrightness();
+
+        String out;
+        serializeJson(res, out);
+        _server.send(200, "application/json", out);
+    }
+
+    void handleApiDisplayBrightness() {
+        uint8_t val = _config.getScreenBrightness();
+        if (_server.hasArg("val")) {
+            val = _server.arg("val").toInt();
+        } else if (_server.hasArg("plain")) {
+            JsonDocument doc;
+            deserializeJson(doc, _server.arg("plain"));
+            val = doc["screen_brightness"] | doc["brightness"] | val;
+        }
+        if (val > 100) val = 100;
+
+        if (_display) {
+            _display->setBrightness(val);
+        }
+        _config.setScreenBrightness(val);
+        _config.saveConfig();
+
+        JsonDocument res;
+        res["success"] = true;
+        res["screen_brightness"] = val;
+        res["msg"] = "Brilho do ecrã ajustado para " + String(val) + "%";
         String out;
         serializeJson(res, out);
         _server.send(200, "application/json", out);
