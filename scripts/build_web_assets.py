@@ -597,6 +597,18 @@ function pollGlobalStatus() {
           badge.innerHTML = '<i class="fa-solid fa-wifi"></i> ' + data.wifi.ip + ' (' + data.wifi.rssi + ' dBm)';
         }
       }
+      const stationSpan = document.getElementById('navStationId');
+      if (stationSpan && (data.station_id || data.mac_address)) {
+        stationSpan.innerText = data.station_id || data.mac_address;
+      }
+      const baseMacEl = document.getElementById('baseMacVal');
+      if (baseMacEl && (data.station_id || data.mac_address)) {
+        baseMacEl.innerText = data.station_id || data.mac_address;
+      }
+      const baseNameEl = document.getElementById('baseStationName');
+      if (baseNameEl && data.station_name) {
+        baseNameEl.innerText = data.station_name;
+      }
       const roverSpan = document.getElementById('navRoverId');
       if (roverSpan && data.rover_id) {
         roverSpan.innerText = 'Rover-' + data.rover_id;
@@ -663,6 +675,7 @@ def generate_html_page(title, active_tab, body_content):
 
 def generate_base_html_page(title, active_tab, body_content):
     tabs = [
+        ("portal", "/portal", "fa-cloud", "Portal Cloud"),
         ("wifi", "/wifi", "fa-wifi", "WiFi Base"),
         ("gps", "/gps", "fa-location-dot", "GPS Frota"),
         ("battery", "/battery", "fa-battery-three-quarters", "Bateria Frota"),
@@ -692,6 +705,9 @@ def generate_base_html_page(title, active_tab, body_content):
       {nav_links}
     </nav>
     <div style="display:flex;align-items:center;gap:10px;">
+      <span id="navStationBadge" class="badge" style="background:rgba(2,132,199,0.2);color:#38bdf8;border:1px solid rgba(56,189,248,0.3);font-family:monospace;">
+        <i class="fa-solid fa-fingerprint"></i> <span id="navStationId">ID Base</span>
+      </span>
       <span id="navWifiBadge" class="badge badge-sta">
         <i class="fa-solid fa-wifi"></i> A carregar...
       </span>
@@ -2231,12 +2247,222 @@ document.addEventListener('DOMContentLoaded', refreshData);
 </script>
 """
 
-BASE_WIFI_CONTENT = WIFI_CONTENT.replace(
+BASE_WIFI_CARD = """
+<div class="card">
+  <div class="card-title">
+    <span><i class="fa-solid fa-fingerprint"></i> Identificação Única da Base (Portal Cloud)</span>
+  </div>
+  <p style="color:var(--muted);font-size:0.875rem;margin-bottom:16px;">
+    Este endereço MAC de hardware é o identificador único e exclusivo desta Base Station utilizado nas comunicações com o portal WindDragons (<span style="color:var(--primary);">https://winddragons.app</span>).
+  </p>
+  <div class="grid-2">
+    <div class="stat-box">
+      <div class="stat-label">Endereço MAC de Hardware (Station ID)</div>
+      <div class="stat-value" id="baseMacVal" style="color:var(--primary);font-family:monospace;font-size:1.3rem;">--:--:--:--:--:--</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Nome da Estação Base</div>
+      <div class="stat-value" id="baseStationName" style="color:var(--yellow);font-size:1.3rem;">BASE-ALCOCHETE-01</div>
+    </div>
+  </div>
+</div>
+"""
+
+BASE_WIFI_CONTENT = BASE_WIFI_CARD + WIFI_CONTENT.replace(
     "Ligue o Rover ao router Wi-Fi do cais ou centro de comando para telemetria em tempo real e acesso local direto.",
     "Ligue a Base Station ao router Wi-Fi local para permitir controlo via browser e telemetria da frota em tempo real."
 ).replace("Redes Guardadas no Rover", "Redes Guardadas na Base Station")
 
 BASE_SD_CONTENT = SD_CONTENT.replace("Explorador do Cartão MicroSD", "Explorador MicroSD - Base Station").replace("Cartão MicroSD - Rover", "Cartão MicroSD - Base Station").replace("let currentDir = '/';", "let currentDir = '/www/base';")
+
+BASE_PORTAL_CONTENT = """
+<div class="card">
+  <div class="card-title">
+    <span><i class="fa-solid fa-cloud"></i> Estado da Ligação ao Portal Cloud</span>
+    <span id="portalBadge" class="badge" style="background:#065f46;color:#6ee7b7;font-size:0.85rem;">
+      <i class="fa-solid fa-circle-check"></i> A verificar...
+    </span>
+  </div>
+  <p style="color:var(--muted);font-size:0.875rem;margin-bottom:16px;">
+    A Base Station efetua polling e telemetria contínua por HTTPS POST com o portal WindDragons (<a href="https://winddragons.app" target="_blank" style="color:var(--primary);text-decoration:none;">https://winddragons.app</a>).
+  </p>
+
+  <div class="grid-4">
+    <div class="stat-box">
+      <div class="stat-label">Estado da Conexão</div>
+      <div class="stat-value" id="cloudConnVal" style="color:var(--green);">ONLINE</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Último Código HTTP</div>
+      <div class="stat-value" id="cloudHttpVal" style="color:var(--primary);">200 OK</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Sincronizações OK</div>
+      <div class="stat-value" id="cloudSuccessVal" style="color:var(--green);">0</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Falhas de Envio</div>
+      <div class="stat-value" id="cloudFailVal" style="color:var(--muted);">0</div>
+    </div>
+  </div>
+
+  <div style="margin-top:16px;" class="grid-2">
+    <div class="stat-box">
+      <div class="stat-label">Identificador Único (Hardware MAC)</div>
+      <div class="stat-value" id="portalMacVal" style="color:var(--primary);font-family:monospace;font-size:1.3rem;">--:--:--:--:--:--</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Nome da Estação Base</div>
+      <div class="stat-value" id="portalStationName" style="color:var(--yellow);font-size:1.3rem;">BASE-ALCOCHETE-01</div>
+    </div>
+  </div>
+
+  <div style="margin-top:16px;" class="stat-box">
+    <div class="stat-label">Endpoint de Telemetria & Comandos</div>
+    <div class="stat-value" style="font-size:0.95rem;font-family:monospace;color:var(--text);word-break:break-all;">
+      https://winddragons.app/api/circuits/station/telemetry
+    </div>
+  </div>
+
+  <div style="margin-top:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+    <div style="color:var(--muted);font-size:0.8rem;">
+      <i class="fa-solid fa-clock"></i> Ciclo de Envio: <strong>3.0 segundos</strong> &bull; <span id="lastSyncAgo">Último envio: a sincronizar...</span>
+    </div>
+    <button onclick="refreshData()" class="btn btn-secondary" style="padding:6px 12px;font-size:0.8rem;">
+      <i class="fa-solid fa-rotate"></i> Atualizar Agora
+    </button>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">
+    <span><i class="fa-solid fa-ship"></i> Telemetria da Frota Enviada para o Portal</span>
+    <span id="activeRoversCount" class="badge" style="background:rgba(255,255,255,0.1);color:var(--text);">0 Rovers Ativos</span>
+  </div>
+  <p style="color:var(--muted);font-size:0.875rem;margin-bottom:12px;">
+    Rovers que se encontram ativos/online e cujos dados (posição GPS, velocidade, bateria, âncora) estão a ser reportados em direto à cloud:
+  </p>
+  <div style="overflow-x:auto;">
+    <table>
+      <thead>
+        <tr>
+          <th>Código</th>
+          <th>Estado</th>
+          <th>Coordenadas (GPS)</th>
+          <th>Velocidade</th>
+          <th>Bateria</th>
+          <th>Motor / Âncora</th>
+          <th>Sinal LoRa</th>
+        </tr>
+      </thead>
+      <tbody id="cloudFleetTable">
+        <tr><td colspan="7" style="text-align:center;color:var(--muted);">A carregar telemetria...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+let lastSyncTimeMs = 0;
+
+function refreshData() {
+  fetch('/api/status')
+    .then(r => r.json())
+    .then(data => {
+      // 1. MAC & Nome
+      if (data.station_id || data.mac_address) {
+        document.getElementById('portalMacVal').innerText = data.mac_address || data.station_id;
+      }
+      if (data.station_name) {
+        document.getElementById('portalStationName').innerText = data.station_name;
+      }
+
+      // 2. Cloud status
+      const c = data.cloud;
+      const b = document.getElementById('portalBadge');
+      const cv = document.getElementById('cloudConnVal');
+      const hv = document.getElementById('cloudHttpVal');
+      const sv = document.getElementById('cloudSuccessVal');
+      const fv = document.getElementById('cloudFailVal');
+
+      if (c) {
+        if (c.sync_success) {
+          b.className = 'badge';
+          b.style.background = '#065f46';
+          b.style.color = '#6ee7b7';
+          b.innerHTML = '<i class="fa-solid fa-circle-check"></i> SINCRONIZADO (ONLINE)';
+
+          cv.innerText = 'ONLINE';
+          cv.style.color = 'var(--green)';
+
+          hv.innerText = (c.last_http_status || 200) + ' OK';
+          hv.style.color = 'var(--green)';
+        } else if (c.connected) {
+          b.className = 'badge';
+          b.style.background = '#78350f';
+          b.style.color = '#fde68a';
+          b.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> A CONECTAR...';
+
+          cv.innerText = 'A CONECTAR';
+          cv.style.color = 'var(--yellow)';
+
+          hv.innerText = c.last_http_status ? (c.last_http_status + ' ERRO') : 'A tentar';
+          hv.style.color = 'var(--red)';
+        } else {
+          b.className = 'badge';
+          b.style.background = '#7f1d1d';
+          b.style.color = '#fca5a5';
+          b.innerHTML = '<i class="fa-solid fa-circle-xmark"></i> DESCONECTADO';
+
+          cv.innerText = 'OFFLINE';
+          cv.style.color = 'var(--red)';
+
+          hv.innerText = '--';
+          hv.style.color = 'var(--muted)';
+        }
+
+        sv.innerText = c.success_count || 0;
+        fv.innerText = c.fail_count || 0;
+        fv.style.color = (c.fail_count > 0) ? 'var(--red)' : 'var(--muted)';
+        
+        lastSyncTimeMs = c.last_sync_ms || 0;
+      }
+
+      // 3. Tabela da Frota
+      if (data.rovers && data.rovers.length) {
+        let activeCount = 0;
+        let rows = '';
+        data.rovers.forEach(rov => {
+          if (rov.is_online) activeCount++;
+          rows += `<tr>
+            <td><strong>${rov.code}</strong></td>
+            <td><span class="badge" style="background:${rov.is_online ? '#065f46' : '#7f1d1d'};color:${rov.is_online ? '#6ee7b7' : '#fca5a5'};">${rov.is_online ? 'ONLINE' : 'OFFLINE'}</span></td>
+            <td>${(rov.lat || 0).toFixed(4)}, ${(rov.lng || 0).toFixed(4)}</td>
+            <td>${(rov.speed_knots || 0).toFixed(1)} kn</td>
+            <td><strong style="color:${rov.battery_pct < 25 ? 'var(--red)' : 'var(--green)'};">${rov.battery_pct || 0}%</strong> (${(rov.battery_voltage || 0).toFixed(1)}V)</td>
+            <td>Motor: ${rov.motor_status !== undefined ? rov.motor_status : 0} | Âncora: ${rov.anchor_status !== undefined ? rov.anchor_status : 0}</td>
+            <td>${rov.rssi || 0} dBm</td>
+          </tr>`;
+        });
+        document.getElementById('cloudFleetTable').innerHTML = rows;
+        document.getElementById('activeRoversCount').innerText = `${activeCount} / ${data.rovers.length} Rovers Ativos`;
+      }
+    })
+    .catch(() => {});
+}
+
+function updateTimer() {
+  if (lastSyncTimeMs > 0) {
+    const el = document.getElementById('lastSyncAgo');
+    if (el) el.innerText = 'Último sync: OK (em ciclo contínuo de 3s)';
+  }
+}
+
+setInterval(refreshData, 1500);
+setInterval(updateTimer, 1000);
+document.addEventListener('DOMContentLoaded', refreshData);
+</script>
+"""
 
 
 def main():
@@ -2287,6 +2513,7 @@ def main():
     print(f"  [+] 7 páginas geradas em {ROVER_DIR} e espelhadas em {WWW_DIR}")
 
     # 3. Páginas especializadas da Base Station
+    portal_base = generate_base_html_page("Estado da Ligação ao Portal", "portal", BASE_PORTAL_CONTENT)
     gps_base = generate_base_html_page("Telemetria GPS da Frota", "gps", BASE_GPS_CONTENT)
     bat_base = generate_base_html_page("Monitor de Bateria da Frota", "battery", BASE_BATTERY_CONTENT)
     ctrl_base = generate_base_html_page("Centro de Comando da Frota", "control", BASE_CONTROL_CONTENT)
@@ -2295,6 +2522,7 @@ def main():
 
     base_files = [
         ("index.html", gps_base),
+        ("portal.html", portal_base),
         ("gps.html", gps_base),
         ("battery.html", bat_base),
         ("control.html", ctrl_base),
@@ -2305,7 +2533,7 @@ def main():
     for fname, content in base_files:
         with open(BASE_DIR / fname, "w", encoding="utf-8") as f:
             f.write(content.strip() + "\n")
-    print(f"  [+] 6 páginas especializadas geradas em {BASE_DIR}")
+    print(f"  [+] 7 páginas especializadas geradas em {BASE_DIR}")
 
     print("\n[OK] Todas as páginas web do Rover e da Base Station foram geradas com sucesso!")
 

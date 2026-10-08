@@ -20,7 +20,7 @@ WiFiConfigManager wifiConfig;
 BaseNetwork       network(fleet, wifiConfig);
 BaseDisplay       display;
 SDCardManager     sdCard;
-BaseWebServer     webServer(wifiConfig, fleet, &sdCard);
+BaseWebServer     webServer(wifiConfig, fleet, &sdCard, &network);
 Adafruit_NeoPixel rgbLed(1, PIN_RGB_LED, NEO_GRB + NEO_KHZ800);
 
 #if ENABLE_LORA
@@ -53,7 +53,7 @@ const char* const MENU_ITEMS[] = {
     "5. PARAR MOTORES",
     "6. PROXIMO ROVER",
     "7. INFO REDE / IP",
-    "8. VOLTAR / SAIR"
+    "8. ESTADO PORTAL"
 };
 const uint8_t MENU_COUNT = sizeof(MENU_ITEMS) / sizeof(MENU_ITEMS[0]);
 uint8_t menuSelectedIndex = 0;
@@ -385,7 +385,10 @@ void handleInputsAndMenu(uint32_t now) {
                     display.setPage(BASE_PAGE_NETWORK);
                     currentScreen = SCREEN_PAGES;
                     break;
-                case 7: // VOLTAR / SAIR
+                case 7: // ESTADO PORTAL
+                    display.setPage(BASE_PAGE_CLOUD);
+                    currentScreen = SCREEN_PAGES;
+                    break;
                 default:
                     currentScreen = SCREEN_PAGES;
                     break;
@@ -423,7 +426,7 @@ void loop() {
             display.nextPage();
         }
         forceDisplay = true;
-        Serial.printf("[BASE] Ecrã alterado para página %d (0:CONTROL, 1:FLEET, 2:NETWORK)\n", display.getCurrentPage());
+        Serial.printf("[BASE] Ecrã alterado para página %d (0:CONTROL, 1:FLEET, 2:NETWORK, 3:CLOUD)\n", display.getCurrentPage());
     }
 
     // 2. Process local inputs & menu state machine
@@ -447,7 +450,7 @@ void loop() {
     // 7. Update Rover online/offline status
     fleet.checkOnlineStatus();
 
-    // 8. Update LCD screen (Menu or Active Page: Control, Fleet, Network)
+    // 8. Update LCD screen (Menu or Active Page: Control, Fleet, Network, Cloud)
     if (currentScreen == SCREEN_MENU) {
         display.renderMenu(MENU_ITEMS, MENU_COUNT, menuSelectedIndex, menuFeedback);
     } else {
@@ -456,6 +459,9 @@ void loop() {
                        wifiConfig.isAPMode(), wifiConfig.getIPAddress().c_str(),
                        wifiConfig.getSSID().c_str(), wifiConfig.getRSSI(),
                        wifiConfig.getAPStationCount(), wifiConfig.getAPPassword().c_str(),
-                       forceDisplay);
+                       forceDisplay,
+                       network.getLastHttpStatus(), network.getSuccessCount(),
+                       network.getFailCount(), network.getLastSyncTime(),
+                       webServer.getMacAddress().c_str());
     }
 }

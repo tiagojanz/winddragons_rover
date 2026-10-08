@@ -7,6 +7,8 @@
 #include "config_common.h"
 #include "fleet_manager.h"
 #include "logo_bmp.h"
+#include "network_config.h"
+#include <WiFi.h>
 
 // Standard 16-bit RGB565 color definitions
 #define UI_BLACK     0x0000
@@ -26,8 +28,9 @@
 enum BaseScreenPage {
     BASE_PAGE_CONTROL = 0, // Controlo e telemetria do Rover selecionado
     BASE_PAGE_FLEET   = 1, // Lista da frota de Rovers (1 a 8)
-    BASE_PAGE_NETWORK = 2, // Página de WiFi / Rede (igual à do Rover)
-    BASE_PAGE_COUNT   = 3
+    BASE_PAGE_NETWORK = 2, // Página de WiFi / Rede
+    BASE_PAGE_CLOUD   = 3, // Página de Ligação ao Portal Cloud
+    BASE_PAGE_COUNT   = 4
 };
 
 struct BootLogItem {
@@ -234,7 +237,9 @@ public:
                 int8_t throttle, int8_t rudder, uint8_t navMode, bool sdOk = false,
                 bool isApMode = false, const char* ip = nullptr, const char* ssid = nullptr,
                 int8_t wifiRssi = 0, uint8_t apClients = 0, const char* apPassword = nullptr,
-                bool force = false) {
+                bool force = false,
+                int lastHttpStatus = 0, uint32_t cloudSuccessCount = 0, uint32_t cloudFailCount = 0,
+                uint32_t lastCloudSyncMs = 0, const char* macStr = nullptr) {
         uint32_t now = millis();
         if (!force && (now - lastRender < 200)) return; // 5Hz refresh
         lastRender = now;
@@ -254,6 +259,9 @@ public:
                 break;
             case BASE_PAGE_NETWORK:
                 renderNetworkPage(isApMode, ip, ssid, wifiRssi, apClients, apPassword);
+                break;
+            case BASE_PAGE_CLOUD:
+                renderCloudPage(wifiOk, cloudOk, lastHttpStatus, cloudSuccessCount, cloudFailCount, lastCloudSyncMs, fleet, macStr);
                 break;
             default:
                 break;
@@ -438,6 +446,128 @@ public:
         canvas->print("BOOT: Próx Ecrã | JOY CLIQUE: Voltar");
     }
 
+    // =========================================================================
+    // PÁGINA 4: ESTADO DA LIGAÇÃO AO PORTAL CLOUD
+    // =========================================================================
+    void renderCloudPage(bool wifiOk, bool cloudOk, int lastHttpStatus, 
+                         uint32_t successCount, uint32_t failCount, 
+                         uint32_t lastSyncMs, FleetManager &fleet, const char* macStr = nullptr) {
+        int cardY = 26;
+        int cardH = 122;
+
+        // Card de Largura Total (x=4..316, w=312, h=122)
+        canvas->fillRect(4, cardY, 312, cardH, UI_PANEL_BG);
+        canvas->drawRect(4, cardY, 312, cardH, UI_CARD_BG);
+
+        // Barra superior do card: ESTADO DO PORTAL CLOUD
+        canvas->setTextSize(1);
+        if (!wifiOk) {
+            canvas->setTextColor(UI_RED);
+            canvas->setCursor(12, cardY + 6);
+            canvas->print("ESTADO: SEM LIGACAO WIFI");
+            canvas->setTextColor(UI_LIGHTGREY);
+            canvas->setCursor(205, cardY + 6);
+            canvas->print("PORTAL: DESLIGADO");
+        } else if (cloudOk) {
+            canvas->setTextColor(UI_GREEN);
+            canvas->setCursor(12, cardY + 6);
+            canvas->print("ESTADO: SINCRONIZADO (ONLINE)");
+            canvas->setTextColor(UI_CYAN);
+            canvas->setCursor(225, cardY + 6);
+            canvas->printf("HTTP: %d", lastHttpStatus > 0 ? lastHttpStatus : 200);
+        } else {
+            canvas->setTextColor(UI_YELLOW);
+            canvas->setCursor(12, cardY + 6);
+            canvas->print("ESTADO: A LIGAR / ERRO");
+            canvas->setTextColor(UI_RED);
+            canvas->setCursor(215, cardY + 6);
+            canvas->printf("HTTP: %d", lastHttpStatus);
+        }
+
+        canvas->drawFastHLine(8, cardY + 18, 304, UI_CARD_BG);
+
+        // Linha 1: ENDPOINT & ID DA ESTAÇÃO
+        canvas->setTextSize(1);
+        canvas->setTextColor(UI_LIGHTGREY);
+        canvas->setCursor(12, cardY + 24);
+        canvas->print("PORTAL:");
+        canvas->setTextColor(UI_WHITE);
+        canvas->setCursor(65, cardY + 24);
+        canvas->print("winddragons.app/api/circuits");
+
+        // MAC ID único de hardware em destaque (Size 2)
+        canvas->setTextColor(UI_LIGHTGREY);
+        canvas->setCursor(12, cardY + 39);
+        canvas->print("ID MAC:");
+
+        canvas->setTextSize(2);
+        canvas->setTextColor(UI_CYAN);
+        canvas->setCursor(65, cardY + 36);
+        if (macStr && strlen(macStr) > 0) {
+            canvas->print(macStr);
+        } else {
+            canvas->print(WiFi.macAddress().c_str());
+        }
+
+        // Linha 2: Estatísticas de Sincronização (Cards internos)
+        int boxY = cardY + 58;
+        int boxH = 34;
+
+        // Caixa 1: Total Syncs OK
+        canvas->fillRect(12, boxY, 92, boxH, UI_NAVY);
+        canvas->drawRect(12, boxY, 92, boxH, UI_CARD_BG);
+        canvas->setTextSize(1);
+        canvas->setTextColor(UI_LIGHTGREY);
+        canvas->setCursor(18, boxY + 4);
+        canvas->print("SYNCS OK");
+        canvas->setTextSize(2);
+        canvas->setTextColor(UI_GREEN);
+        canvas->setCursor(18, boxY + 16);
+        canvas->printf("%u", successCount);
+
+        // Caixa 2: Falhas
+        canvas->fillRect(110, boxY, 92, boxH, UI_NAVY);
+        canvas->drawRect(110, boxY, 92, boxH, UI_CARD_BG);
+        canvas->setTextSize(1);
+        canvas->setTextColor(UI_LIGHTGREY);
+        canvas->setCursor(116, boxY + 4);
+        canvas->print("FALHAS");
+        canvas->setTextSize(2);
+        canvas->setTextColor(failCount == 0 ? UI_LIGHTGREY : UI_RED);
+        canvas->setCursor(116, boxY + 16);
+        canvas->printf("%u", failCount);
+
+        // Caixa 3: Rovers Ativos
+        canvas->fillRect(208, boxY, 102, boxH, UI_NAVY);
+        canvas->drawRect(208, boxY, 102, boxH, UI_CARD_BG);
+        canvas->setTextSize(1);
+        canvas->setTextColor(UI_LIGHTGREY);
+        canvas->setCursor(214, boxY + 4);
+        canvas->print("ROVERS ATIVOS");
+        canvas->setTextSize(2);
+        canvas->setTextColor(UI_YELLOW);
+        canvas->setCursor(214, boxY + 16);
+        uint8_t onlineCnt = 0;
+        for (const auto &r : fleet.getRovers()) {
+            if (r.is_online) onlineCnt++;
+        }
+        canvas->printf("%u / %u", onlineCnt, MAX_FLEET_ROVERS);
+
+        // Linha 3: Rodapé interno do card
+        canvas->setTextSize(1);
+        canvas->setTextColor(UI_LIGHTGREY);
+        canvas->setCursor(12, cardY + 102);
+        uint32_t agoSec = (millis() >= lastSyncMs && lastSyncMs > 0) ? (millis() - lastSyncMs) / 1000 : 0;
+        canvas->printf("Ciclo: 3s  |  Ultimo sync: ha %us  |  Estacao: %s", agoSec, BASE_STATION_ID);
+
+        // Rodapé de Navegação
+        canvas->fillRect(0, 150, SCREEN_W, 22, UI_NAVY);
+        canvas->setTextColor(UI_LIGHTGREY);
+        canvas->setTextSize(1);
+        canvas->setCursor(8, 156);
+        canvas->print("BOOT: Prox Ecra | JOY CLIQUE: Menu");
+    }
+
 private:
     // =========================================================================
     // CABEÇALHO GLOBAL (TOPO 24px)
@@ -462,16 +592,19 @@ private:
         } else if (currentPage == BASE_PAGE_NETWORK) {
             canvas->setTextColor(UI_GREEN);
             canvas->print("[3.REDE/IP]");
+        } else if (currentPage == BASE_PAGE_CLOUD) {
+            canvas->setTextColor(UI_CYAN);
+            canvas->print("[4.PORTAL]");
         }
 
         // Ícones de Estado: SD, WiFi, Cloud
-        canvas->fillCircle(240, 12, 4, sdOk ? UI_CYAN : UI_DARKGREY);
-        canvas->fillCircle(256, 12, 4, isApMode ? UI_ORANGE : (wifiOk ? UI_GREEN : UI_RED));
-        canvas->fillCircle(272, 12, 4, cloudOk ? UI_GREEN : UI_DARKGREY);
+        canvas->fillCircle(236, 12, 4, sdOk ? UI_CYAN : UI_DARKGREY);
+        canvas->fillCircle(252, 12, 4, isApMode ? UI_ORANGE : (wifiOk ? UI_GREEN : UI_RED));
+        canvas->fillCircle(268, 12, 4, cloudOk ? UI_GREEN : UI_DARKGREY);
 
-        // Pontos indicadores de página
+        // Pontos indicadores de página (4 páginas)
         for (uint8_t i = 0; i < BASE_PAGE_COUNT; ++i) {
-            int dotX = 292 + i * 8;
+            int dotX = 284 + i * 8;
             if (i == currentPage) {
                 canvas->fillCircle(dotX, 12, 3, UI_YELLOW);
             } else {

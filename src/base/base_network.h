@@ -5,6 +5,7 @@
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
+#include <esp_mac.h>
 
 #include "network_config.h"
 #include "fleet_manager.h"
@@ -14,7 +15,8 @@
 class BaseNetwork {
 public:
     BaseNetwork(FleetManager &fleet, WiFiConfigManager &wifi) 
-        : fleetManager(fleet), wifiConfig(wifi), lastSyncTime(0), lastHttpStatus(0), syncSuccess(false) {}
+        : fleetManager(fleet), wifiConfig(wifi), lastSyncTime(0), lastHttpStatus(0), 
+          syncSuccess(false), successCount(0), failCount(0) {}
 
     void begin() {
         // Conexão e fallback AP geridos pelo WiFiConfigManager
@@ -26,6 +28,9 @@ public:
 
     int getLastHttpStatus() const { return lastHttpStatus; }
     bool isSyncSuccess() const { return syncSuccess; }
+    uint32_t getLastSyncTime() const { return lastSyncTime; }
+    uint32_t getSuccessCount() const { return successCount; }
+    uint32_t getFailCount() const { return failCount; }
 
     void update() {
         uint32_t now = millis();
@@ -48,19 +53,35 @@ private:
     void syncTelemetryToCloud() {
         WiFiClientSecure client;
         client.setInsecure(); // Skip certificate verification for flexible operation
+        client.setTimeout(4);
 
         HTTPClient https;
+        https.setTimeout(4000);
         if (!https.begin(client, WINDDRAGONS_API_URL)) {
             Serial.println("[HTTP] Failed to connect to WindDragons endpoint");
             syncSuccess = false;
+            failCount++;
             return;
         }
 
         https.addHeader("Content-Type", "application/json");
 
+        // Obter MAC Address único de hardware
+        String mac = WiFi.macAddress();
+        if (mac.isEmpty() || mac == "00:00:00:00:00:00") {
+            uint8_t baseMac[6];
+            esp_read_mac(baseMac, ESP_MAC_WIFI_STA);
+            char macStr[18];
+            snprintf(macStr, sizeof(macStr), "%02X:%02X:%02X:%02X:%02X:%02X",
+                     baseMac[0], baseMac[1], baseMac[2], baseMac[3], baseMac[4], baseMac[5]);
+            mac = String(macStr);
+        }
+
         // Construct JSON document
         JsonDocument doc;
-        doc["station_id"] = BASE_STATION_ID;
+        doc["station_id"] = mac;
+        doc["mac_address"] = mac;
+        doc["station_name"] = BASE_STATION_ID;
         JsonArray roversArray = doc["rovers"].to<JsonArray>();
 
         // Only send active/online rovers
@@ -89,12 +110,18 @@ private:
 
         if (httpResponseCode == HTTP_CODE_OK || httpResponseCode == 201) {
             syncSuccess = true;
+            successCount++;
             String responsePayload = https.getString();
             parseCloudResponse(responsePayload);
+            if (successCount % 5 == 1) {
+                Serial.printf("[CLOUD] Sync #%u OK (HTTP %d | Station: %s)\n", 
+                              successCount, httpResponseCode, mac.c_str());
+            }
         } else {
             syncSuccess = false;
-            Serial.printf("[HTTP] POST failed, error: %d - %s\n", 
-                          httpResponseCode, https.errorToString(httpResponseCode).c_str());
+            failCount++;
+            Serial.printf("[HTTP] POST failed, error: %d - %s (falhas: %u)\n", 
+                          httpResponseCode, https.errorToString(httpResponseCode).c_str(), failCount);
         }
 
         https.end();
@@ -179,6 +206,8 @@ private:
     }
 
     uint32_t lastSyncTime;
+    uint32_t successCount;
+    uint32_t failCount;
     int lastHttpStatus;
     bool syncSuccess;
 };

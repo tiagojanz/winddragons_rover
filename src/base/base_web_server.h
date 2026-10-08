@@ -7,14 +7,30 @@
 #include "fleet_manager.h"
 #include "sd_card_manager.h"
 #include "lora_protocol.h"
+#include "network_config.h"
+#include "base_network.h"
+#include <esp_mac.h>
 
 class BaseWebServer {
 public:
-    BaseWebServer(WiFiConfigManager &wifiMgr, FleetManager &fleet, SDCardManager *sdCard = nullptr)
-        : _server(80), _wifi(wifiMgr), _fleet(fleet), _sd(sdCard),
+    BaseWebServer(WiFiConfigManager &wifiMgr, FleetManager &fleet, SDCardManager *sdCard = nullptr, BaseNetwork *network = nullptr)
+        : _server(80), _wifi(wifiMgr), _fleet(fleet), _sd(sdCard), _network(network),
           _webControlActive(false), _webThrottle(0), _webRudder(0), 
           _webAnchorJog(0), _lastWebControlTime(0), _nextCmdId(2000),
           _isBusy(false), _uploadSuccess(false), _uploadCurrentPath("") {}
+
+    String getMacAddress() {
+        String mac = WiFi.macAddress();
+        if (mac.isEmpty() || mac == "00:00:00:00:00:00") {
+            uint8_t baseMac[6];
+            esp_read_mac(baseMac, ESP_MAC_WIFI_STA);
+            char macStr[18];
+            snprintf(macStr, sizeof(macStr), "%02X:%02X:%02X:%02X:%02X:%02X",
+                     baseMac[0], baseMac[1], baseMac[2], baseMac[3], baseMac[4], baseMac[5]);
+            mac = String(macStr);
+        }
+        return mac;
+    }
 
     void begin() {
         setupRoutes();
@@ -46,6 +62,7 @@ private:
     WiFiConfigManager &_wifi;
     FleetManager &_fleet;
     SDCardManager *_sd;
+    BaseNetwork *_network;
 
     bool _webControlActive;
     int8_t _webThrottle;
@@ -148,6 +165,16 @@ private:
             }
         });
 
+        _server.on("/portal", [this]() {
+            if (_wifi.isAPMode()) { _server.sendHeader("Location", "/wifi"); _server.send(302, "text/plain", ""); return; }
+            if (tryServeSdFile("/www/portal.html")) return;
+            handlePortalPage();
+        });
+        _server.on("/cloud", [this]() {
+            if (_wifi.isAPMode()) { _server.sendHeader("Location", "/wifi"); _server.send(302, "text/plain", ""); return; }
+            if (tryServeSdFile("/www/portal.html")) return;
+            handlePortalPage();
+        });
         _server.on("/wifi", [this]() {
             if (tryServeSdFile("/www/wifi.html")) return;
             handleWifiPage();
@@ -303,6 +330,7 @@ private:
         if (_wifi.isAPMode()) {
             html += "<a href='/wifi' class='nav-item active'>Configuração WiFi (Modo AP)</a>";
         } else {
+            html += "<a href='/portal' class='nav-item " + String(activeTab == "portal" ? "active" : "") + "'>☁️ Portal</a>";
             html += "<a href='/wifi' class='nav-item " + String(activeTab == "wifi" ? "active" : "") + "'>📡 WiFi</a>";
             html += "<a href='/gps' class='nav-item " + String(activeTab == "gps" ? "active" : "") + "'>📍 GPS Frota</a>";
             html += "<a href='/battery' class='nav-item " + String(activeTab == "battery" ? "active" : "") + "'>🔋 Bateria</a>";
@@ -330,10 +358,14 @@ private:
     void handleWifiPage() {
         String html = getHtmlHeader("Configuração WiFi", "wifi");
 
+        String mac = getMacAddress();
+
         // Card 1: Estado Atual da Conexão
         html += "<div class='card'>";
-        html += "<div class='card-title'>Estado da Ligação de Rede</div>";
+        html += "<div class='card-title'>Estado da Ligação de Rede & Identificação</div>";
         html += "<div class='grid-2'>";
+        html += "<div class='stat-box'><div class='stat-label'>ID Único / MAC Hardware (Portal)</div><div class='stat-value' style='color:var(--primary);font-family:monospace;'>" + mac + "</div></div>";
+        html += "<div class='stat-box'><div class='stat-label'>Nome da Estação Base</div><div class='stat-value' style='color:var(--yellow);'>" + String(BASE_STATION_ID) + "</div></div>";
         html += "<div class='stat-box'><div class='stat-label'>Modo de Operação</div><div class='stat-value' style='color:" + String(_wifi.isAPMode() ? "var(--yellow)" : "var(--green)") + "'>";
         html += _wifi.isAPMode() ? "Ponto de Acesso (AP)" : "Conectado à Rede (STA)";
         html += "</div></div>";
@@ -422,6 +454,49 @@ private:
         html += "list.forEach(item=>{h+='<tr><td><strong>'+item.ssid+'</strong></td><td>'+item.rssi+' dBm</td><td>'+(item.secure?'Protegida':'Aberta')+'</td><td><button onclick=\"document.getElementById(\\'ssid\\').value=\\''+item.ssid+'\\';document.getElementById(\\'pass\\').focus();\" class=\"btn btn-secondary\" style=\"padding:4px 8px;\">Selecionar</button></td></tr>';});";
         html += "h+='</tbody></table>';d.innerHTML=h;});}";
         html += "</script>";
+
+        html += getHtmlFooter();
+        _server.send(200, "text/html", html);
+    }
+
+    // -------------------------------------------------------------
+    // PÁGINA: ESTADO DO PORTAL CLOUD
+    // -------------------------------------------------------------
+    void handlePortalPage() {
+        String html = getHtmlHeader("Portal Cloud", "portal");
+        String mac = getMacAddress();
+
+        bool isConnected = _network && _network->isConnected();
+        bool syncOk = _network && _network->isSyncSuccess();
+        int httpCode = _network ? _network->getLastHttpStatus() : 0;
+        uint32_t okCount = _network ? _network->getSuccessCount() : 0;
+        uint32_t failCount = _network ? _network->getFailCount() : 0;
+
+        html += "<div class='card'>";
+        html += "<div class='card-title'><span>Estado da Ligação ao Portal Cloud</span>";
+        if (syncOk) {
+            html += "<span class='badge' style='background:#065f46;color:#6ee7b7;'>● SINCRONIZADO (ONLINE)</span>";
+        } else if (isConnected) {
+            html += "<span class='badge' style='background:#78350f;color:#fde68a;'>● A CONECTAR...</span>";
+        } else {
+            html += "<span class='badge' style='background:#7f1d1d;color:#fca5a5;'>● DESLIGADO</span>";
+        }
+        html += "</div>";
+
+        html += "<div class='grid-4'>";
+        html += "<div class='stat-box'><div class='stat-label'>Código HTTP</div><div class='stat-value' style='color:" + String(syncOk ? "var(--green)" : "var(--red)") + "'>" + (httpCode > 0 ? String(httpCode) : "--") + "</div></div>";
+        html += "<div class='stat-box'><div class='stat-label'>Syncs OK</div><div class='stat-value' style='color:var(--green);'>" + String(okCount) + "</div></div>";
+        html += "<div class='stat-box'><div class='stat-label'>Falhas</div><div class='stat-value' style='color:" + String(failCount == 0 ? "var(--muted)" : "var(--red)") + "'>" + String(failCount) + "</div></div>";
+        html += "<div class='stat-box'><div class='stat-label'>Ciclo Envio</div><div class='stat-value' style='color:var(--primary);'>3.0s</div></div>";
+        html += "</div>";
+
+        html += "<div style='margin-top:16px;' class='grid-2'>";
+        html += "<div class='stat-box'><div class='stat-label'>Endereço MAC de Hardware (Station ID)</div><div class='stat-value' style='color:var(--primary);font-family:monospace;'>" + mac + "</div></div>";
+        html += "<div class='stat-box'><div class='stat-label'>Nome da Estação Base</div><div class='stat-value' style='color:var(--yellow);'>" + String(BASE_STATION_ID) + "</div></div>";
+        html += "</div>";
+
+        html += "<div style='margin-top:16px;' class='stat-box'><div class='stat-label'>Endpoint Cloud API</div><div class='stat-value' style='font-size:0.95rem;font-family:monospace;color:var(--text);word-break:break-all;'>" + String(WINDDRAGONS_API_URL) + "</div></div>";
+        html += "</div>";
 
         html += getHtmlFooter();
         _server.send(200, "text/html", html);
@@ -645,10 +720,28 @@ private:
     // -------------------------------------------------------------
     void handleApiStatus() {
         JsonDocument doc;
+        String mac = getMacAddress();
+
+        doc["station_id"] = mac;
+        doc["mac_address"] = mac;
+        doc["station_name"] = BASE_STATION_ID;
+
+        doc["wifi"]["mac"] = mac;
         doc["wifi"]["ap"] = _wifi.isAPMode();
         doc["wifi"]["ssid"] = _wifi.getSSID();
         doc["wifi"]["ip"] = _wifi.getIPAddress();
         doc["wifi"]["rssi"] = _wifi.getRSSI();
+
+        if (_network) {
+            JsonObject cObj = doc["cloud"].to<JsonObject>();
+            cObj["connected"] = _network->isConnected();
+            cObj["sync_success"] = _network->isSyncSuccess();
+            cObj["last_http_status"] = _network->getLastHttpStatus();
+            cObj["success_count"] = _network->getSuccessCount();
+            cObj["fail_count"] = _network->getFailCount();
+            cObj["last_sync_ms"] = _network->getLastSyncTime();
+            cObj["endpoint"] = WINDDRAGONS_API_URL;
+        }
 
         FleetRover *sel = _fleet.getSelectedRover();
         if (sel) {
@@ -666,6 +759,24 @@ private:
             sObj["anchor_depth_m"] = sel->anchor_depth_m;
             sObj["rssi"] = sel->rssi;
             sObj["is_online"] = sel->is_online;
+        }
+
+        JsonArray roversArr = doc["rovers"].to<JsonArray>();
+        for (const auto &r : _fleet.getRovers()) {
+            JsonObject rObj = roversArr.add<JsonObject>();
+            rObj["id"] = r.id;
+            rObj["code"] = r.code;
+            rObj["lat"] = r.lat;
+            rObj["lng"] = r.lng;
+            rObj["speed_knots"] = r.speed_knots;
+            rObj["heading_deg"] = r.heading_deg;
+            rObj["battery_pct"] = r.battery_pct;
+            rObj["battery_voltage"] = r.battery_voltage;
+            rObj["motor_status"] = r.motor_status;
+            rObj["anchor_status"] = r.anchor_status;
+            rObj["anchor_depth_m"] = r.anchor_depth_m;
+            rObj["rssi"] = r.rssi;
+            rObj["is_online"] = r.is_online;
         }
 
         String res;

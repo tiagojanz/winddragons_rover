@@ -36,6 +36,18 @@ function pollGlobalStatus() {
           badge.innerHTML = '<i class="fa-solid fa-wifi"></i> ' + data.wifi.ip + ' (' + data.wifi.rssi + ' dBm)';
         }
       }
+      const stationSpan = document.getElementById('navStationId');
+      if (stationSpan && (data.station_id || data.mac_address)) {
+        stationSpan.innerText = data.station_id || data.mac_address;
+      }
+      const baseMacEl = document.getElementById('baseMacVal');
+      if (baseMacEl && (data.station_id || data.mac_address)) {
+        baseMacEl.innerText = data.station_id || data.mac_address;
+      }
+      const baseNameEl = document.getElementById('baseStationName');
+      if (baseNameEl && data.station_name) {
+        baseNameEl.innerText = data.station_name;
+      }
       const roverSpan = document.getElementById('navRoverId');
       if (roverSpan && data.rover_id) {
         roverSpan.innerText = 'Rover-' + data.rover_id;
