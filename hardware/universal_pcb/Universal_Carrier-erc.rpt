@@ -1,4 +1,4 @@
-ERC report (2026-10-06T22:44:22, Encoding UTF8)
+ERC report (2026-10-08T17:15:43, Encoding UTF8)
 Report includes: Errors, Warnings
 
 ***** Sheet /
@@ -47,18 +47,66 @@ Report includes: Errors, Warnings
 [lib_symbol_mismatch]: O símbolo 'MountingHole' não bate com a cópia existente na biblioteca 'Mechanical'
     ; warning
     @(241.30 mm, 193.04 mm): Símbolo H4 [MountingHole]
+[endpoint_off_grid]: Symbol pin or wire end off connection grid
+    ; warning
+    @(304.80 mm, 235.00 mm): Fio horizontal, comprimento 12.70 mm
+[endpoint_off_grid]: Symbol pin or wire end off connection grid
+    ; warning
+    @(304.80 mm, 235.00 mm): Symbol SW1 Pino 1 [1, Passivo, Linha]
+[endpoint_off_grid]: Symbol pin or wire end off connection grid
+    ; warning
+    @(304.80 mm, 260.00 mm): Symbol SW3 Pino 1 [1, Passivo, Linha]
+[endpoint_off_grid]: Symbol pin or wire end off connection grid
+    ; warning
+    @(304.80 mm, 260.00 mm): Fio horizontal, comprimento 12.70 mm
 [lib_symbol_mismatch]: O símbolo 'Conn_01x03' não bate com a cópia existente na biblioteca 'Connector_Generic'
     ; warning
     @(309.88 mm, 152.40 mm): Símbolo J7 [Conn_01x03]
 [lib_symbol_mismatch]: O símbolo 'Conn_01x03' não bate com a cópia existente na biblioteca 'Connector_Generic'
     ; warning
     @(309.88 mm, 180.34 mm): Símbolo J8 [Conn_01x03]
-[lib_symbol_issues]: O símbolo Joystick_PS4_Thumbstick não foi encontrado na biblioteca 'Device'
+[lib_symbol_mismatch]: O símbolo 'SW_Push' não bate com a cópia existente na biblioteca 'Switch'
     ; warning
-    @(314.96 mm, 66.04 mm): Símbolo JOY1 [Joystick_PS4_Thumbstick]
+    @(309.88 mm, 235.00 mm): Símbolo SW1 [SW_Push]
+[lib_symbol_mismatch]: O símbolo 'SW_Push' não bate com a cópia existente na biblioteca 'Switch'
+    ; warning
+    @(309.88 mm, 260.00 mm): Símbolo SW3 [SW_Push]
+[lib_symbol_issues]: O símbolo Joystick_PS5_Thumbstick não foi encontrado na biblioteca 'Device'
+    ; warning
+    @(314.96 mm, 66.04 mm): Símbolo JOY1 [Joystick_PS5_Thumbstick]
+[endpoint_off_grid]: Symbol pin or wire end off connection grid
+    ; warning
+    @(314.96 mm, 235.00 mm): Fio horizontal, comprimento 12.70 mm
+[endpoint_off_grid]: Symbol pin or wire end off connection grid
+    ; warning
+    @(314.96 mm, 260.00 mm): Fio horizontal, comprimento 12.70 mm
 [lib_symbol_mismatch]: O símbolo 'Conn_01x04' não bate com a cópia existente na biblioteca 'Connector_Generic'
     ; warning
     @(347.98 mm, 66.04 mm): Símbolo JP_RBL [Conn_01x04]
+[endpoint_off_grid]: Symbol pin or wire end off connection grid
+    ; warning
+    @(364.92 mm, 235.00 mm): Symbol SW2 Pino 1 [1, Passivo, Linha]
+[endpoint_off_grid]: Symbol pin or wire end off connection grid
+    ; warning
+    @(364.92 mm, 235.00 mm): Fio horizontal, comprimento 12.70 mm
+[endpoint_off_grid]: Symbol pin or wire end off connection grid
+    ; warning
+    @(364.92 mm, 260.00 mm): Fio horizontal, comprimento 12.70 mm
+[endpoint_off_grid]: Symbol pin or wire end off connection grid
+    ; warning
+    @(364.92 mm, 260.00 mm): Symbol SW4 Pino 1 [1, Passivo, Linha]
+[lib_symbol_mismatch]: O símbolo 'SW_Push' não bate com a cópia existente na biblioteca 'Switch'
+    ; warning
+    @(370.00 mm, 235.00 mm): Símbolo SW2 [SW_Push]
+[lib_symbol_mismatch]: O símbolo 'SW_Push' não bate com a cópia existente na biblioteca 'Switch'
+    ; warning
+    @(370.00 mm, 260.00 mm): Símbolo SW4 [SW_Push]
+[endpoint_off_grid]: Symbol pin or wire end off connection grid
+    ; warning
+    @(375.08 mm, 235.00 mm): Fio horizontal, comprimento 12.70 mm
+[endpoint_off_grid]: Symbol pin or wire end off connection grid
+    ; warning
+    @(375.08 mm, 260.00 mm): Fio horizontal, comprimento 12.70 mm
 [lib_symbol_mismatch]: O símbolo 'Conn_01x03' não bate com a cópia existente na biblioteca 'Connector_Generic'
     ; warning
     @(381.00 mm, 64.77 mm): Símbolo J4 [Conn_01x03]
@@ -69,7 +117,7 @@ Report includes: Errors, Warnings
     ; warning
     @(381.00 mm, 180.34 mm): Símbolo J10 [Conn_01x03]
 
- ** ERC messages: 22  Errors 0  Warnings 22
+ ** ERC messages: 38  Errors 0  Warnings 38
 
  ** Ignored checks:
     - Global label only appears once in the schematic

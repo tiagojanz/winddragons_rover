@@ -1,5 +1,6 @@
 (fp_lib_table
   (version 7)
+  (lib (name "PS5_joystick")(type "KiCad")(uri "${KIPRJMOD}")(options "")(descr "PS5 DualSense / Alps RKJXV Footprints"))
   (lib (name "PS4_joystick")(type "KiCad")(uri "${KIPRJMOD}")(options "")(descr "Project Local Footprints"))
   (lib (name "WindDragons")(type "KiCad")(uri "${KIPRJMOD}/WindDragons.pretty")(options "")(descr "WindDragons Project Logos"))
 )

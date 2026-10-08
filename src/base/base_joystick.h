@@ -104,10 +104,26 @@ public:
             }
             lastBtnState = btnState;
         }
+
+        // 3. Track button clicks on BOOT / Joystick push switch (GPIO 9)
+        bool currentBoot = (digitalRead(PIN_BTN_BOOT) == LOW);
+        if (currentBoot && !lastBootRawState) {
+            joyClickCount++;
+        }
+        lastBootRawState = currentBoot;
     }
 
     int8_t getThrottle() const { return throttle; }
     int8_t getRudder() const { return rudder; }
+    int getRawX() const { return rawX; }
+    int getRawY() const { return rawY; }
+    int getDeadband() const { return deadband; }
+
+    bool isBootPressed() const { return digitalRead(PIN_BTN_BOOT) == LOW; }
+    bool isModePressed() const { return digitalRead(PIN_BTN_MODE) == LOW; }
+    bool isAnchorUpPressed() const { return digitalRead(PIN_BTN_ANCHOR_UP) == LOW; }
+    bool isAnchorDownPressed() const { return digitalRead(PIN_BTN_ANCHOR_DOWN) == LOW; }
+    uint16_t getJoyClickCount() const { return joyClickCount; }
 
     int8_t getAnchorJog() const {
         if (digitalRead(PIN_BTN_ANCHOR_DOWN) == LOW) return -1; // Lower
@@ -129,4 +145,7 @@ private:
     bool longPressOccurred = false;
     uint32_t pressStartTime = 0;
     uint32_t lastMenuStepMs = 0;
+
+    bool lastBootRawState = false;
+    uint16_t joyClickCount = 0;
 };

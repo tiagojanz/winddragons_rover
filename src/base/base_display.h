@@ -26,11 +26,12 @@
 #define UI_PANEL_BG  0x10A2
 
 enum BaseScreenPage {
-    BASE_PAGE_CONTROL = 0, // Controlo e telemetria do Rover selecionado
-    BASE_PAGE_FLEET   = 1, // Lista da frota de Rovers (1 a 8)
-    BASE_PAGE_NETWORK = 2, // Página de WiFi / Rede
-    BASE_PAGE_CLOUD   = 3, // Página de Ligação ao Portal Cloud
-    BASE_PAGE_COUNT   = 4
+    BASE_PAGE_CONTROL  = 0, // Controlo e telemetria do Rover selecionado
+    BASE_PAGE_FLEET    = 1, // Lista da frota de Rovers (1 a 8)
+    BASE_PAGE_NETWORK  = 2, // Página de WiFi / Rede
+    BASE_PAGE_CLOUD    = 3, // Página de Ligação ao Portal Cloud
+    BASE_PAGE_JOYSTICK = 4, // Página de Teste do Joystick e Botões
+    BASE_PAGE_COUNT    = 5
 };
 
 struct BootLogItem {
@@ -239,9 +240,13 @@ public:
                 int8_t wifiRssi = 0, uint8_t apClients = 0, const char* apPassword = nullptr,
                 bool force = false,
                 int lastHttpStatus = 0, uint32_t cloudSuccessCount = 0, uint32_t cloudFailCount = 0,
-                uint32_t lastCloudSyncMs = 0, const char* macStr = nullptr) {
+                uint32_t lastCloudSyncMs = 0, const char* macStr = nullptr,
+                int rawX = 2048, int rawY = 2048, int deadband = 180,
+                bool btnJoy = false, bool btnMode = false,
+                bool btnUp = false, bool btnDown = false, uint16_t joyClicks = 0) {
         uint32_t now = millis();
-        if (!force && (now - lastRender < 200)) return; // 5Hz refresh
+        uint32_t minInterval = (currentPage == BASE_PAGE_JOYSTICK) ? 60 : 200;
+        if (!force && (now - lastRender < minInterval)) return;
         lastRender = now;
 
         if (!canvas) return;
@@ -262,6 +267,9 @@ public:
                 break;
             case BASE_PAGE_CLOUD:
                 renderCloudPage(wifiOk, cloudOk, lastHttpStatus, cloudSuccessCount, cloudFailCount, lastCloudSyncMs, fleet, macStr);
+                break;
+            case BASE_PAGE_JOYSTICK:
+                renderJoystickPage(rawX, rawY, throttle, rudder, deadband, btnJoy, btnMode, btnUp, btnDown, joyClicks);
                 break;
             default:
                 break;
@@ -568,6 +576,249 @@ public:
         canvas->print("BOOT: Prox Ecra | JOY CLIQUE: Menu");
     }
 
+    // =========================================================================
+    // PÁGINA 5: TESTE DE HARDWARE DO JOYSTICK E BOTÕES
+    // =========================================================================
+    void renderJoystickPage(int rawX, int rawY, int8_t throttle, int8_t rudder,
+                            int deadband, bool btnJoy, bool btnMode,
+                            bool btnUp, bool btnDown, uint16_t joyClicks) {
+        int cardY = 26;
+        int cardH = 122;
+
+        // -------------------------------------------------------------
+        // PAINEL ESQUERDO: Radar 2D / Mira Analógica do Joystick
+        // -------------------------------------------------------------
+        int leftW = 126;
+        canvas->fillRect(4, cardY, leftW, cardH, UI_PANEL_BG);
+        canvas->drawRect(4, cardY, leftW, cardH, UI_CARD_BG);
+
+        // Barra de Título do Painel Esquerdo
+        canvas->fillRect(5, cardY + 1, leftW - 2, 14, UI_NAVY);
+        canvas->setTextSize(1);
+        canvas->setTextColor(UI_YELLOW);
+        canvas->setCursor(14, cardY + 4);
+        canvas->print("MIRA 2D ANALOGICA");
+
+        // Área do Radar (80x80 centralizada em x=27, y=44)
+        int scopeX = 27;
+        int scopeY = 44;
+        int scopeSize = 80;
+        int centerX = scopeX + scopeSize / 2; // 67
+        int centerY = scopeY + scopeSize / 2; // 84
+
+        canvas->fillRect(scopeX, scopeY, scopeSize, scopeSize, UI_BLACK);
+        canvas->drawRect(scopeX, scopeY, scopeSize, scopeSize, UI_CARD_BG);
+
+        // Grelha e Eixos de Referência
+        canvas->drawFastHLine(scopeX + 1, centerY, scopeSize - 2, UI_DARKGREY);
+        canvas->drawFastVLine(centerX, scopeY + 1, scopeSize - 2, UI_DARKGREY);
+
+        // Círculo de alcance máximo e zona morta
+        canvas->drawCircle(centerX, centerY, 36, UI_DARKGREY);
+        canvas->drawRect(centerX - 6, centerY - 6, 13, 13, 0x2124); // Deadband box visual
+
+        // Letras cardeais (Frente / Trás / Esquerda / Direita)
+        canvas->setTextSize(1);
+        canvas->setTextColor(UI_CYAN);
+        canvas->setCursor(centerX - 2, scopeY + 2);
+        canvas->print("F");
+        canvas->setTextColor(UI_LIGHTGREY);
+        canvas->setCursor(centerX - 2, scopeY + scopeSize - 9);
+        canvas->print("T");
+        canvas->setCursor(scopeX + 3, centerY - 3);
+        canvas->print("E");
+        canvas->setCursor(scopeX + scopeSize - 9, centerY - 3);
+        canvas->print("D");
+
+        // Cálculo da posição da mira (Puck)
+        // throttle > 0: para a frente (cima no ecrã -> diminui Y)
+        // rudder > 0: para a direita (direita no ecrã -> aumenta X)
+        int puckX = centerX + (rudder * 34 / 100);
+        int puckY = centerY - (throttle * 34 / 100);
+        puckX = constrain(puckX, scopeX + 3, scopeX + scopeSize - 4);
+        puckY = constrain(puckY, scopeY + 3, scopeY + scopeSize - 4);
+
+        // Vetor de deflexão desde o centro
+        if (puckX != centerX || puckY != centerY) {
+            canvas->drawLine(centerX, centerY, puckX, puckY, UI_CARD_BG);
+        }
+
+        // Desenhar indicador da posição do stick
+        bool inDeadband = (throttle == 0 && rudder == 0);
+        if (inDeadband) {
+            canvas->fillCircle(puckX, puckY, 4, UI_LIGHTGREY);
+            canvas->drawCircle(puckX, puckY, 4, UI_WHITE);
+        } else {
+            uint16_t puckColor = (throttle != 0) ? ((throttle > 0) ? UI_GREEN : UI_RED) : UI_CYAN;
+            canvas->fillCircle(puckX, puckY, 5, puckColor);
+            canvas->fillCircle(puckX, puckY, 2, UI_WHITE);
+            canvas->drawCircle(puckX, puckY, 6, UI_YELLOW);
+        }
+
+        // Rodapé do painel esquerdo: Modo / Direção
+        canvas->setCursor(8, cardY + 107);
+        if (inDeadband) {
+            canvas->setTextColor(UI_GREEN);
+            canvas->print("[ CENTRO / NEUTRO ]");
+        } else {
+            canvas->setTextColor(UI_YELLOW);
+            canvas->printf("T:%+3d%%  R:%+3d%%", throttle, rudder);
+        }
+
+        // -------------------------------------------------------------
+        // PAINEL DIREITO: Métricas ADC Detalhadas e Estado dos Botões
+        // -------------------------------------------------------------
+        int rightX = 134;
+        int rightW = 182;
+        canvas->fillRect(rightX, cardY, rightW, cardH, UI_PANEL_BG);
+        canvas->drawRect(rightX, cardY, rightW, cardH, UI_CARD_BG);
+
+        // Barra de Título do Painel Direito
+        canvas->fillRect(rightX + 1, cardY + 1, rightW - 2, 14, UI_NAVY);
+        canvas->setTextColor(UI_YELLOW);
+        canvas->setCursor(rightX + 18, cardY + 4);
+        canvas->print("SINAIS ADC & BOTOES");
+
+        // 1. EIXO X (Throttle / Propulsão - IO0)
+        canvas->setTextColor(UI_LIGHTGREY);
+        canvas->setCursor(rightX + 6, cardY + 18);
+        canvas->print("X (PROP): ");
+        canvas->setTextColor(UI_WHITE);
+        canvas->printf("%4d", rawX);
+        uint16_t tColor = (throttle > 0) ? UI_GREEN : ((throttle < 0) ? UI_RED : UI_LIGHTGREY);
+        canvas->setTextColor(tColor);
+        canvas->setCursor(rightX + 115, cardY + 18);
+        canvas->printf("%+4d%%", throttle);
+
+        // Barra bipolar Eixo X (w=170, centro em x=225)
+        int barY1 = cardY + 28;
+        canvas->fillRect(rightX + 6, barY1, 170, 6, UI_BLACK);
+        canvas->drawRect(rightX + 6, barY1, 170, 6, UI_CARD_BG);
+        int barCenterX = rightX + 6 + 85; // 225
+        canvas->drawFastVLine(barCenterX, barY1 - 1, 8, UI_WHITE);
+        if (throttle > 0) {
+            int bw = map(throttle, 0, 100, 0, 83);
+            canvas->fillRect(barCenterX + 1, barY1 + 1, bw, 4, UI_GREEN);
+        } else if (throttle < 0) {
+            int bw = map(-throttle, 0, 100, 0, 83);
+            canvas->fillRect(barCenterX - bw, barY1 + 1, bw, 4, UI_RED);
+        }
+
+        // 2. EIXO Y (Rudder / Leme - IO1)
+        canvas->setTextColor(UI_LIGHTGREY);
+        canvas->setCursor(rightX + 6, cardY + 38);
+        canvas->print("Y (LEME): ");
+        canvas->setTextColor(UI_WHITE);
+        canvas->printf("%4d", rawY);
+        uint16_t rColor = (rudder != 0) ? UI_CYAN : UI_LIGHTGREY;
+        canvas->setTextColor(rColor);
+        canvas->setCursor(rightX + 115, cardY + 38);
+        canvas->printf("%+4d%%", rudder);
+
+        // Barra bipolar Eixo Y (w=170, centro em x=225)
+        int barY2 = cardY + 48;
+        canvas->fillRect(rightX + 6, barY2, 170, 6, UI_BLACK);
+        canvas->drawRect(rightX + 6, barY2, 170, 6, UI_CARD_BG);
+        canvas->drawFastVLine(barCenterX, barY2 - 1, 8, UI_WHITE);
+        if (rudder > 0) {
+            int bw = map(rudder, 0, 100, 0, 83);
+            canvas->fillRect(barCenterX + 1, barY2 + 1, bw, 4, UI_CYAN);
+        } else if (rudder < 0) {
+            int bw = map(-rudder, 0, 100, 0, 83);
+            canvas->fillRect(barCenterX - bw, barY2 + 1, bw, 4, UI_ORANGE);
+        }
+
+        // Linha divisória subtil
+        canvas->drawFastHLine(rightX + 6, cardY + 58, 170, UI_CARD_BG);
+
+        // 3. ESTADO DOS 4 BOTÕES FÍSICOS (Grid 2x2)
+        int btnW = 82;
+        int btnH = 14;
+        int btnCol1 = rightX + 6;
+        int btnCol2 = rightX + 94;
+        int btnRow1 = cardY + 62;
+        int btnRow2 = cardY + 79;
+
+        // Botão 1: JOY SW / BOOT (GPIO 9)
+        if (btnJoy) {
+            canvas->fillRect(btnCol1, btnRow1, btnW, btnH, UI_GREEN);
+            canvas->setTextColor(UI_BLACK);
+            canvas->setCursor(btnCol1 + 4, btnRow1 + 3);
+            canvas->print("JOY SW: ON");
+        } else {
+            canvas->fillRect(btnCol1, btnRow1, btnW, btnH, UI_NAVY);
+            canvas->drawRect(btnCol1, btnRow1, btnW, btnH, UI_CARD_BG);
+            canvas->setTextColor(UI_LIGHTGREY);
+            canvas->setCursor(btnCol1 + 4, btnRow1 + 3);
+            canvas->print("JOY SW: OFF");
+        }
+
+        // Botão 2: MODE (GPIO 19)
+        if (btnMode) {
+            canvas->fillRect(btnCol2, btnRow1, btnW, btnH, UI_YELLOW);
+            canvas->setTextColor(UI_BLACK);
+            canvas->setCursor(btnCol2 + 4, btnRow1 + 3);
+            canvas->print("MODE: ON");
+        } else {
+            canvas->fillRect(btnCol2, btnRow1, btnW, btnH, UI_NAVY);
+            canvas->drawRect(btnCol2, btnRow1, btnW, btnH, UI_CARD_BG);
+            canvas->setTextColor(UI_LIGHTGREY);
+            canvas->setCursor(btnCol2 + 4, btnRow1 + 3);
+            canvas->print("MODE: OFF");
+        }
+
+        // Botão 3: ANCHOR UP (GPIO 18)
+        if (btnUp) {
+            canvas->fillRect(btnCol1, btnRow2, btnW, btnH, UI_CYAN);
+            canvas->setTextColor(UI_BLACK);
+            canvas->setCursor(btnCol1 + 4, btnRow2 + 3);
+            canvas->print("ANC UP: ON");
+        } else {
+            canvas->fillRect(btnCol1, btnRow2, btnW, btnH, UI_NAVY);
+            canvas->drawRect(btnCol1, btnRow2, btnW, btnH, UI_CARD_BG);
+            canvas->setTextColor(UI_LIGHTGREY);
+            canvas->setCursor(btnCol1 + 4, btnRow2 + 3);
+            canvas->print("ANC UP: OFF");
+        }
+
+        // Botão 4: ANCHOR DOWN (GPIO 20)
+        if (btnDown) {
+            canvas->fillRect(btnCol2, btnRow2, btnW, btnH, UI_ORANGE);
+            canvas->setTextColor(UI_BLACK);
+            canvas->setCursor(btnCol2 + 4, btnRow2 + 3);
+            canvas->print("ANC DN: ON");
+        } else {
+            canvas->fillRect(btnCol2, btnRow2, btnW, btnH, UI_NAVY);
+            canvas->drawRect(btnCol2, btnRow2, btnW, btnH, UI_CARD_BG);
+            canvas->setTextColor(UI_LIGHTGREY);
+            canvas->setCursor(btnCol2 + 4, btnRow2 + 3);
+            canvas->print("ANC DN: OFF");
+        }
+
+        // 4. INFORMAÇÕES DE CALIBRAÇÃO & CONTADOR DE CLIQUES
+        canvas->setTextColor(UI_LIGHTGREY);
+        canvas->setCursor(rightX + 6, cardY + 97);
+        canvas->printf("Cliques SW: ");
+        canvas->setTextColor(UI_YELLOW);
+        canvas->printf("%u", joyClicks);
+
+        canvas->setTextColor(UI_LIGHTGREY);
+        canvas->setCursor(rightX + 90, cardY + 97);
+        canvas->printf("Deadband: +-%d", deadband);
+
+        canvas->setCursor(rightX + 6, cardY + 108);
+        canvas->print("Calibracao: 2048 +/- 180 (12-bit)");
+
+        // -------------------------------------------------------------
+        // RODAPÉ GLOBAL DE INSTRUÇÕES DE NAVEGAÇÃO (Altura: 22px)
+        // -------------------------------------------------------------
+        canvas->fillRect(0, 150, SCREEN_W, 22, UI_NAVY);
+        canvas->setTextSize(1);
+        canvas->setTextColor(UI_YELLOW);
+        canvas->setCursor(8, 156);
+        canvas->print("SEGURA JOY (1s) OU MODE: Sair | BOOT: Prox");
+    }
+
 private:
     // =========================================================================
     // CABEÇALHO GLOBAL (TOPO 24px)
@@ -582,7 +833,7 @@ private:
         canvas->print(" BASE");
 
         // Nome da página ativa no centro
-        canvas->setCursor(132, 8);
+        canvas->setCursor(120, 8);
         if (currentPage == BASE_PAGE_CONTROL) {
             canvas->setTextColor(UI_YELLOW);
             canvas->print("[1.COMANDO]");
@@ -595,16 +846,19 @@ private:
         } else if (currentPage == BASE_PAGE_CLOUD) {
             canvas->setTextColor(UI_CYAN);
             canvas->print("[4.PORTAL]");
+        } else if (currentPage == BASE_PAGE_JOYSTICK) {
+            canvas->setTextColor(UI_YELLOW);
+            canvas->print("[5.TESTE JOY]");
         }
 
         // Ícones de Estado: SD, WiFi, Cloud
         canvas->fillCircle(236, 12, 4, sdOk ? UI_CYAN : UI_DARKGREY);
-        canvas->fillCircle(252, 12, 4, isApMode ? UI_ORANGE : (wifiOk ? UI_GREEN : UI_RED));
-        canvas->fillCircle(268, 12, 4, cloudOk ? UI_GREEN : UI_DARKGREY);
+        canvas->fillCircle(250, 12, 4, isApMode ? UI_ORANGE : (wifiOk ? UI_GREEN : UI_RED));
+        canvas->fillCircle(264, 12, 4, cloudOk ? UI_GREEN : UI_DARKGREY);
 
-        // Pontos indicadores de página (4 páginas)
+        // Pontos indicadores de página (BASE_PAGE_COUNT páginas)
         for (uint8_t i = 0; i < BASE_PAGE_COUNT; ++i) {
-            int dotX = 284 + i * 8;
+            int dotX = 278 + i * 8;
             if (i == currentPage) {
                 canvas->fillCircle(dotX, 12, 3, UI_YELLOW);
             } else {

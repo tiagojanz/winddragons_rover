@@ -131,7 +131,7 @@ def generate_kicad_pcb(path):
     all_nets = [
         "", "/GND", "/+3V3", "/+5V", "/+5V_SERVO",
         "/IO5_NSS", "/IO4_MISO", "/IO3_MOSI", "/IO2_SCK",
-        "/IO1_ADC", "/IO0_ADC",
+        "/IO1_ADC", "/IO0_ADC", "/JOY_X", "/JOY_Y",
         "/IO9_BOOT", "/IO18_ACT1_UP", "/IO19_WINCH_MODE", "/IO20_RUDDER_DN", "/IO23_ACT4",
         "/IO12_LORA_DIO0", "/IO13_BUZ", "/IO16_GPS_RX", "/IO17_GPS_TX",
         "/IO15", "/GPS_TX2", "/GPS_RX2", "/NC"
@@ -321,43 +321,41 @@ def generate_kicad_pcb(path):
         lines.append(f'    (pad "{p_num}" thru_hole {p_shape} (at {px:.2f} {py:.2f}) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "F.SilkS") (net {get_net(n_name)} "{net_name(n_name)}"))')
     lines.append('  )')
 
-    # JOY1 PS4 3D Joystick (cx=20.0, cy=62.0) using official PS4_joystick:XDCR_COM-09032 on B.Cu
+    # JOY1 PS5 3D Joystick (cx=20.0, cy=62.0) Alps RKJXV1224005 on B.Cu
     cx, cy = 20.0, 62.0
-    lines.append(f'  (footprint "PS4_joystick:XDCR_COM-09032" (layer "B.Cu") (uuid "{new_uuid()}")')
+    lines.append(f'  (footprint "PS5_joystick:Alps_RKJXV1224005" (layer "B.Cu") (uuid "{new_uuid()}")')
     lines.append(f'    (at {cx} {cy})')
-    lines.append(f'    (fp_text reference "JOY1" (at 0 -13.5) (layer "B.SilkS") (effects (font (size 0.8 0.8) (thickness 0.15)) (justify mirror)))')
-    lines.append(f'    (fp_text value "PS4_JOYSTICK" (at 0 12.5) (layer "B.Fab") (effects (font (size 1.0 1.0) (thickness 0.15)) (justify mirror) (hide yes)))')
-    lines.append('    (fp_line (start 3.81 6.858) (end 3.81 10.16) (layer "B.SilkS") (width 0.2))')
-    lines.append('    (fp_line (start -7.878 -6.856) (end -4.322 -6.856) (layer "B.SilkS") (width 0.2))')
-    lines.append('    (fp_line (start -10.0838 -3.81) (end -7.874 -3.81) (layer "B.SilkS") (width 0.2))')
-    lines.append('    (fp_line (start 3.81 10.16) (end -3.81 10.16) (layer "B.SilkS") (width 0.2))')
-    lines.append('    (fp_line (start 7.874 6.858) (end 3.81 6.858) (layer "B.SilkS") (width 0.2))')
-    lines.append('    (fp_line (start 7.874 -6.858) (end 7.874 6.858) (layer "B.SilkS") (width 0.2))')
-    lines.append('    (fp_line (start -4.318 -11.938) (end -4.318 -6.858) (layer "B.SilkS") (width 0.2))')
-    lines.append('    (fp_line (start -7.874 3.81) (end -9.906 3.81) (layer "B.SilkS") (width 0.2))')
-    lines.append('    (fp_line (start -4.318 -11.938) (end 4.318 -11.938) (layer "B.SilkS") (width 0.2))')
-    lines.append('    (fp_line (start -3.81 6.858) (end -7.874 6.858) (layer "B.SilkS") (width 0.2))')
-    lines.append('    (fp_line (start 4.318 -6.858) (end 7.874 -6.858) (layer "B.SilkS") (width 0.2))')
-    lines.append('    (fp_line (start -3.81 10.16) (end -3.81 6.858) (layer "B.SilkS") (width 0.2))')
-    lines.append('    (fp_line (start -7.874 -3.81) (end -7.874 -6.858) (layer "B.SilkS") (width 0.2))')
-    lines.append('    (fp_line (start -10.033 3.81) (end -10.0838 -3.81) (layer "B.SilkS") (width 0.2))')
-    lines.append('    (fp_line (start 4.318 -11.938) (end 4.318 -6.858) (layer "B.SilkS") (width 0.2))')
-    lines.append('    (fp_line (start -7.874 6.858) (end -7.874 3.81) (layer "B.SilkS") (width 0.2))')
-    lines.append('    (fp_circle (center 0 0) (end 1.796 0) (layer "B.SilkS") (width 0.2) (fill none))')
-    lines.append(f'    (pad "B1A" thru_hole circle (at -3.175 -10.8148) (size 1.778 1.778) (drill 0.9) (layers *.Cu *.Mask "B.SilkS") (net {get_net("GND")} "{net_name("GND")}"))')
-    lines.append(f'    (pad "B1B" thru_hole circle (at 3.175 -10.795) (size 1.778 1.778) (drill 0.9) (layers *.Cu *.Mask "B.SilkS") (net {get_net("GND")} "{net_name("GND")}"))')
-    lines.append(f'    (pad "B2A" thru_hole circle (at -3.175 -5.8748) (size 1.778 1.778) (drill 0.9) (layers *.Cu *.Mask "B.SilkS") (net {get_net("IO9_BOOT")} "{net_name("IO9_BOOT")}"))')
-    lines.append(f'    (pad "B2B" thru_hole circle (at 3.185 -5.8548) (size 1.778 1.778) (drill 0.9) (layers *.Cu *.Mask "B.SilkS") (net {get_net("IO9_BOOT")} "{net_name("IO9_BOOT")}"))')
-    lines.append(f'    (pad "H1" thru_hole circle (at -2.525 8.8752) (size 1.778 1.778) (drill 0.889) (layers *.Cu *.Mask "B.SilkS") (net {get_net("GND")} "{net_name("GND")}"))')
-    lines.append(f'    (pad "H2" thru_hole circle (at 0.015 8.8952) (size 1.778 1.778) (drill 0.889) (layers *.Cu *.Mask "B.SilkS") (net {get_net("IO0_ADC")} "{net_name("IO0_ADC")}"))')
-    lines.append(f'    (pad "H3" thru_hole circle (at 2.555 8.8752) (size 1.778 1.778) (drill 0.889) (layers *.Cu *.Mask "B.SilkS") (net {get_net("+3V3")} "{net_name("+3V3")}"))')
-    lines.append(f'    (pad "S1" thru_hole circle (at -6.35 -5.0648) (size 2.286 2.286) (drill 1.397) (layers *.Cu *.Mask "B.SilkS") (net {get_net("GND")} "{net_name("GND")}"))')
-    lines.append(f'    (pad "S2" thru_hole circle (at -6.35 5.0652) (size 2.286 2.286) (drill 1.397) (layers *.Cu *.Mask "B.SilkS") (net {get_net("GND")} "{net_name("GND")}"))')
-    lines.append(f'    (pad "S3" thru_hole circle (at 6.35 5.08) (size 2.286 2.286) (drill 1.397) (layers *.Cu *.Mask "B.SilkS") (net {get_net("GND")} "{net_name("GND")}"))')
-    lines.append(f'    (pad "S4" thru_hole circle (at 6.35 -5.08) (size 2.286 2.286) (drill 1.397) (layers *.Cu *.Mask "B.SilkS") (net {get_net("GND")} "{net_name("GND")}"))')
-    lines.append(f'    (pad "V1" thru_hole circle (at -8.89 -2.54) (size 1.778 1.778) (drill 0.889) (layers *.Cu *.Mask "B.SilkS") (net {get_net("GND")} "{net_name("GND")}"))')
-    lines.append(f'    (pad "V2" thru_hole circle (at -8.905 -0.0148) (size 1.778 1.778) (drill 0.889) (layers *.Cu *.Mask "B.SilkS") (net {get_net("IO1_ADC")} "{net_name("IO1_ADC")}"))')
-    lines.append(f'    (pad "V3" thru_hole circle (at -8.905 2.5252) (size 1.778 1.778) (drill 0.889) (layers *.Cu *.Mask "B.SilkS") (net {get_net("+3V3")} "{net_name("+3V3")}"))')
+    lines.append(f'    (fp_text reference "JOY1" (at 0 -11.5) (layer "B.SilkS") (effects (font (size 0.8 0.8) (thickness 0.15)) (justify mirror)))')
+    lines.append(f'    (fp_text value "PS5_JOYSTICK" (at 0 13.0) (layer "B.Fab") (effects (font (size 1.0 1.0) (thickness 0.15)) (justify mirror) (hide yes)))')
+    lines.append('    (fp_line (start -8.0 -8.0) (end -5.0 -8.0) (layer "B.SilkS") (width 0.15))')
+    lines.append('    (fp_line (start -8.0 -8.0) (end -8.0 -5.0) (layer "B.SilkS") (width 0.15))')
+    lines.append('    (fp_line (start 8.0 -8.0) (end 5.0 -8.0) (layer "B.SilkS") (width 0.15))')
+    lines.append('    (fp_line (start 8.0 -8.0) (end 8.0 -5.0) (layer "B.SilkS") (width 0.15))')
+    lines.append('    (fp_line (start -8.0 8.0) (end -5.0 8.0) (layer "B.SilkS") (width 0.15))')
+    lines.append('    (fp_line (start -8.0 8.0) (end -8.0 5.0) (layer "B.SilkS") (width 0.15))')
+    lines.append('    (fp_line (start 8.0 8.0) (end 5.0 8.0) (layer "B.SilkS") (width 0.15))')
+    lines.append('    (fp_line (start 8.0 8.0) (end 8.0 5.0) (layer "B.SilkS") (width 0.15))')
+    lines.append('    (fp_circle (center 0 0) (end 2.0 0) (layer "B.SilkS") (width 0.15) (fill none))')
+    lines.append('    (fp_rect (start -8.0 -8.0) (end 8.0 8.0) (layer "B.Fab") (width 0.15) (fill none))')
+    lines.append('    (fp_rect (start -4.7 -6.5) (end 4.7 -9.5) (layer "B.Fab") (width 0.15) (fill none))')
+    lines.append('    (fp_rect (start -6.5 -4.7) (end -9.5 4.7) (layer "B.Fab") (width 0.15) (fill none))')
+    lines.append('    (fp_rect (start -4.5 6.5) (end 4.5 11.5) (layer "B.Fab") (width 0.15) (fill none))')
+    lines.append(f'    (pad "1" thru_hole circle (at -8.73 -2.5) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("GND")} "{net_name("GND")}"))')
+    lines.append(f'    (pad "2" thru_hole circle (at -8.73 0.0) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("JOY_Y")} "{net_name("JOY_Y")}"))')
+    lines.append(f'    (pad "3" thru_hole circle (at -8.73 2.5) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("+3V3")} "{net_name("+3V3")}"))')
+    lines.append(f'    (pad "4" thru_hole circle (at -2.5 -8.73) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("GND")} "{net_name("GND")}"))')
+    lines.append(f'    (pad "5" thru_hole circle (at 0.0 -8.73) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("JOY_X")} "{net_name("JOY_X")}"))')
+    lines.append(f'    (pad "6" thru_hole circle (at 2.5 -8.73) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("+3V3")} "{net_name("+3V3")}"))')
+    lines.append(f'    (pad "7" thru_hole circle (at -3.25 5.75) (size 1.8 1.8) (drill 1.2) (layers *.Cu *.Mask "B.SilkS") (net {get_net("GND")} "{net_name("GND")}"))')
+    lines.append(f'    (pad "8" thru_hole circle (at -3.25 10.25) (size 1.8 1.8) (drill 1.2) (layers *.Cu *.Mask "B.SilkS") (net {get_net("GND")} "{net_name("GND")}"))')
+    lines.append(f'    (pad "9" thru_hole circle (at 3.25 5.75) (size 1.8 1.8) (drill 1.2) (layers *.Cu *.Mask "B.SilkS") (net {get_net("IO9_BOOT")} "{net_name("IO9_BOOT")}"))')
+    lines.append(f'    (pad "10" thru_hole circle (at 3.25 10.25) (size 1.8 1.8) (drill 1.2) (layers *.Cu *.Mask "B.SilkS") (net {get_net("IO9_BOOT")} "{net_name("IO9_BOOT")}"))')
+    lines.append(f'    (pad "11" thru_hole circle (at -6.325 -5.0) (size 2.3 2.3) (drill 1.5) (layers *.Cu *.Mask "B.SilkS") (net {get_net("GND")} "{net_name("GND")}"))')
+    lines.append(f'    (pad "12" thru_hole circle (at 6.325 -5.0) (size 2.3 2.3) (drill 1.5) (layers *.Cu *.Mask "B.SilkS") (net {get_net("GND")} "{net_name("GND")}"))')
+    lines.append(f'    (pad "13" thru_hole circle (at -6.325 5.0) (size 2.3 2.3) (drill 1.5) (layers *.Cu *.Mask "B.SilkS") (net {get_net("GND")} "{net_name("GND")}"))')
+    lines.append(f'    (pad "14" thru_hole circle (at 6.325 5.0) (size 2.3 2.3) (drill 1.5) (layers *.Cu *.Mask "B.SilkS") (net {get_net("GND")} "{net_name("GND")}"))')
+    lines.append('    (pad "" np_thru_hole circle (at -4.3 0.0) (size 1.6 1.6) (drill 1.6) (layers *.Cu *.Mask))')
+    lines.append('    (pad "" np_thru_hole circle (at 4.3 0.0) (size 1.6 1.6) (drill 1.6) (layers *.Cu *.Mask))')
     lines.append('  )')
 
     # Battery / APM Power Module Header J4 (X=88.0, Y=41.0) - Horizontal in Servo Column
@@ -390,30 +388,23 @@ def generate_kicad_pcb(path):
     lines.append(f'    (pad "2" thru_hole circle (at 0 2.54) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "F.SilkS") (net {get_net("GND")} "{net_name("GND")}"))')
     lines.append('  )')
 
-    # Quectel LC29H GNSS (1x7 Header, X=82.0, Y=16.0 to 31.24) - FRONT of PCB
+    # Quectel LC29H GNSS (1x7 Header, Horizontal, X=76.38 to 91.62, Y=18.50) - FRONT of PCB
     gps_defs = [
-        (1, 16.00, "IO15", "rect"),
-        (2, 18.54, "GPS_TX2", "circle"),
-        (3, 21.08, "GPS_RX2", "circle"),
-        (4, 23.62, "IO17_GPS_TX", "circle"),
-        (5, 26.16, "IO16_GPS_RX", "circle"),
-        (6, 28.70, "GND", "circle"),
-        (7, 31.24, "+3V3", "circle"),
+        (1, 0.00, "IO15", "rect", "P"),
+        (2, 2.54, "GPS_TX2", "circle", "T2"),
+        (3, 5.08, "GPS_RX2", "circle", "R2"),
+        (4, 7.62, "IO17_GPS_TX", "circle", "R1"),
+        (5, 10.16, "IO16_GPS_RX", "circle", "T1"),
+        (6, 12.70, "GND", "circle", "G"),
+        (7, 15.24, "+3V3", "circle", "V"),
     ]
-    lines.append(f'  (footprint "Connector_PinHeader_2.54mm:PinHeader_1x07_P2.54mm_Vertical" (layer "F.Cu") (uuid "{new_uuid()}")')
-    lines.append(f'    (at 82.0 16.0)')
-    lines.append(f'    (fp_text reference "J6" (at -2.5 0 90) (layer "F.SilkS") (effects (font (size 0.8 0.8) (thickness 0.13))))')
-    lines.append(f'    (fp_text value "GPS_LC29H_7PIN" (at 2.5 17.5 90) (layer "F.Fab") (effects (font (size 0.9 0.9) (thickness 0.14))))')
-    lines.append(f'    (fp_text user "P" (at 2.8 0 0) (layer "F.SilkS") (effects (font (size 0.7 0.7) (thickness 0.12))))')
-    lines.append(f'    (fp_text user "T2" (at 3.0 2.54 0) (layer "F.SilkS") (effects (font (size 0.7 0.7) (thickness 0.12))))')
-    lines.append(f'    (fp_text user "R2" (at 3.0 5.08 0) (layer "F.SilkS") (effects (font (size 0.7 0.7) (thickness 0.12))))')
-    lines.append(f'    (fp_text user "R1" (at 3.0 7.62 0) (layer "F.SilkS") (effects (font (size 0.7 0.7) (thickness 0.12))))')
-    lines.append(f'    (fp_text user "T1" (at 3.0 10.16 0) (layer "F.SilkS") (effects (font (size 0.7 0.7) (thickness 0.12))))')
-    lines.append(f'    (fp_text user "G" (at 2.8 12.70 0) (layer "F.SilkS") (effects (font (size 0.7 0.7) (thickness 0.12))))')
-    lines.append(f'    (fp_text user "V" (at 2.8 15.24 0) (layer "F.SilkS") (effects (font (size 0.7 0.7) (thickness 0.12))))')
-    for p_num, y_abs, n_name, p_shape in gps_defs:
-        py = y_abs - 16.0
-        lines.append(f'    (pad "{p_num}" thru_hole {p_shape} (at 0 {py:.2f}) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "F.SilkS") (net {get_net(n_name)} "{net_name(n_name)}"))')
+    lines.append(f'  (footprint "Connector_PinHeader_2.54mm:PinHeader_1x07_P2.54mm_Horizontal" (layer "F.Cu") (uuid "{new_uuid()}")')
+    lines.append(f'    (at 76.38 18.50)')
+    lines.append(f'    (fp_text reference "J6" (at 0 3.0 0) (layer "F.SilkS") (effects (font (size 0.8 0.8) (thickness 0.13))))')
+    lines.append(f'    (fp_text value "GPS_LC29H_7PIN" (at 7.62 9.5 0) (layer "F.Fab") (effects (font (size 0.9 0.9) (thickness 0.14))))')
+    for p_num, px_rel, n_name, p_shape, p_lbl in gps_defs:
+        lines.append(f'    (fp_text user "{p_lbl}" (at {px_rel:.2f} -2.7 0) (layer "F.SilkS") (effects (font (size 0.7 0.7) (thickness 0.12))))')
+        lines.append(f'    (pad "{p_num}" thru_hole {p_shape} (at {px_rel:.2f} 0) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "F.SilkS") (net {get_net(n_name)} "{net_name(n_name)}"))')
     lines.append('  )')
 
     # Actuators (J7, J8, J9, J10 at Right Side X=88.0) - FRONT of PCB
@@ -450,6 +441,33 @@ def generate_kicad_pcb(path):
     lines.append(f'    (pad "1" thru_hole rect (at 0 0) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "F.SilkS") (net {get_net("GND")} "{net_name("GND")}"))')
     lines.append(f'    (pad "2" thru_hole circle (at 2.54 0) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "F.SilkS") (net {get_net("+5V_SERVO")} "{net_name("+5V_SERVO")}"))')
     lines.append('  )')
+
+    # 4x Tactile Navigation & Mode Pushbuttons (SW1-SW4) - BACK of PCB (UI side)
+    buttons = [
+        ("SW1", "UP", 72.2, 66.5, "IO18_ACT1_UP"),
+        ("SW2", "MODE", 81.9, 59.0, "IO19_WINCH_MODE"),
+        ("SW3", "DOWN", 72.2, 52.5, "IO20_RUDDER_DN"),
+        ("SW4", "BOOT", 63.9, 59.5, "IO9_BOOT"),
+    ]
+    for ref, val, bx, by, sig_net in buttons:
+        lines.append(f'  (footprint "PS4_joystick:SKRKAEE020" (layer "B.Cu") (uuid "{new_uuid()}")')
+        lines.append(f'    (at {bx} {by})')
+        lines.append(f'    (property "Reference" "{ref}" (at 0 -2.3 0) (layer "B.SilkS") (uuid "{new_uuid()}") (effects (font (size 0.8 0.8) (thickness 0.15)) (justify mirror)))')
+        lines.append(f'    (property "Value" "{val}" (at 0 2.3 0) (layer "B.SilkS") (uuid "{new_uuid()}") (effects (font (size 0.7 0.7) (thickness 0.15)) (justify mirror)))')
+        lines.append(f'    (property "Datasheet" "" (at 0 0 0) (layer "F.Fab") (hide yes) (uuid "{new_uuid()}"))')
+        lines.append(f'    (property "Description" "" (at 0 0 0) (layer "F.Fab") (hide yes) (uuid "{new_uuid()}"))')
+        lines.append(f'    (attr smd)')
+        lines.append(f'    (duplicate_pad_numbers_are_jumpers no)')
+        lines.append(f'    (fp_line (start -2.05 -1.55) (end 2.05 -1.55) (stroke (width 0.12) (type solid)) (layer "B.SilkS") (uuid "{new_uuid()}"))')
+        lines.append(f'    (fp_line (start 2.05 1.55) (end -2.05 1.55) (stroke (width 0.12) (type solid)) (layer "B.SilkS") (uuid "{new_uuid()}"))')
+        lines.append(f'    (fp_line (start -2.75 -1.75) (end 2.75 -1.75) (stroke (width 0.05) (type solid)) (layer "B.CrtYd") (uuid "{new_uuid()}"))')
+        lines.append(f'    (fp_line (start -2.75 1.75) (end -2.75 -1.75) (stroke (width 0.05) (type solid)) (layer "B.CrtYd") (uuid "{new_uuid()}"))')
+        lines.append(f'    (fp_line (start 2.75 -1.75) (end 2.75 1.75) (stroke (width 0.05) (type solid)) (layer "B.CrtYd") (uuid "{new_uuid()}"))')
+        lines.append(f'    (fp_line (start 2.75 1.75) (end -2.75 1.75) (stroke (width 0.05) (type solid)) (layer "B.CrtYd") (uuid "{new_uuid()}"))')
+        lines.append(f'    (pad "1" smd roundrect (at -2.1 0) (size 0.8 2) (layers "B.Cu" "B.Mask" "B.Paste") (roundrect_rratio 0.25) (net {get_net(sig_net)} "{net_name(sig_net)}") (uuid "{new_uuid()}"))')
+        lines.append(f'    (pad "2" smd roundrect (at 2.1 0) (size 0.8 2) (layers "B.Cu" "B.Mask" "B.Paste") (roundrect_rratio 0.25) (net {get_net("GND")} "{net_name("GND")}") (uuid "{new_uuid()}"))')
+        lines.append(f'    (embedded_fonts no)')
+        lines.append('  )')
 
     # WindDragons Logos (Front 20mm at 64,69 and Back 14mm at 50.5,56)
     dragon_json_path = os.path.join(os.path.dirname(__file__), 'dragon_polys.json')
@@ -527,10 +545,10 @@ def generate_kicad_pcb(path):
 
     b_silk_texts = [
         ("WINDDRAGONS REMOTE CONTROL & CARRIER V4.1", 50.0, 5.0, 1.1),
-        ("USER INTERFACE: DISPLAY & PS4 JOYSTICK", 50.0, 7.5, 0.8),
+        ("USER INTERFACE: DISPLAY & PS5 JOYSTICK", 50.0, 7.5, 0.8),
         ("ST7789 1.47 INCH LCD (320x172)", 50.0, 27.0, 0.85),
         ("USB-C", 25.0, 25.0, 0.7),
-        ("PS4 3D JOYSTICK", 20.0, 75.0, 0.85),
+        ("PS5 3D JOYSTICK (ALPS RKJXV)", 20.0, 76.5, 0.85),
         ("SOLID GND COPPER PLANES ON F.CU & B.CU (100x85mm)", 50.0, 81.5, 0.85),
     ]
     for txt, tx, ty, sz in b_silk_texts:
@@ -715,27 +733,47 @@ def generate_kicad_sch(path):
         '				(circle (center 0 0) (radius 1.27) (stroke (width 0.254) (type default)) (fill (type none)))',
         '			)',
         '		)',
-        '		(symbol "Device:Joystick_PS4_Thumbstick"',
+        '		(symbol "Device:Joystick_PS5_Thumbstick"',
         '			(pin_names (offset 1.016))',
         '			(property "Reference" "JOY" (at 0 15.24 0) (effects (font (size 1.27 1.27))))',
-        '			(property "Value" "PS4_JOYSTICK" (at 0 -15.24 0) (effects (font (size 1.27 1.27))))',
-        '			(property "Footprint" "PS4_joystick:XDCR_COM-09032" (at 0 0 0) (effects (font (size 1.27 1.27)) (hide yes)))',
-        '			(symbol "Joystick_PS4_Thumbstick_1_1"',
-        '				(rectangle (start -10.16 12.70) (end 10.16 -12.70) (stroke (width 0.254) (type default)) (fill (type background)))',
-        '				(pin passive line (at -13.97 10.16 0) (length 3.81) (name "H1_GND" (effects (font (size 0.9 0.9)))) (number "H1" (effects (font (size 0.9 0.9)))))',
-        '				(pin passive line (at -13.97 7.62 0) (length 3.81) (name "H2_ADC" (effects (font (size 0.9 0.9)))) (number "H2" (effects (font (size 0.9 0.9)))))',
-        '				(pin passive line (at -13.97 5.08 0) (length 3.81) (name "H3_3V3" (effects (font (size 0.9 0.9)))) (number "H3" (effects (font (size 0.9 0.9)))))',
-        '				(pin passive line (at -13.97 0.00 0) (length 3.81) (name "V1_GND" (effects (font (size 0.9 0.9)))) (number "V1" (effects (font (size 0.9 0.9)))))',
-        '				(pin passive line (at -13.97 -2.54 0) (length 3.81) (name "V2_ADC" (effects (font (size 0.9 0.9)))) (number "V2" (effects (font (size 0.9 0.9)))))',
-        '				(pin passive line (at -13.97 -5.08 0) (length 3.81) (name "V3_3V3" (effects (font (size 0.9 0.9)))) (number "V3" (effects (font (size 0.9 0.9)))))',
-        '				(pin passive line (at 13.97 10.16 180) (length 3.81) (name "B1A_GND" (effects (font (size 0.9 0.9)))) (number "B1A" (effects (font (size 0.9 0.9)))))',
-        '				(pin passive line (at 13.97 7.62 180) (length 3.81) (name "B1B_GND" (effects (font (size 0.9 0.9)))) (number "B1B" (effects (font (size 0.9 0.9)))))',
-        '				(pin passive line (at 13.97 5.08 180) (length 3.81) (name "B2A_SW" (effects (font (size 0.9 0.9)))) (number "B2A" (effects (font (size 0.9 0.9)))))',
-        '				(pin passive line (at 13.97 2.54 180) (length 3.81) (name "B2B_SW" (effects (font (size 0.9 0.9)))) (number "B2B" (effects (font (size 0.9 0.9)))))',
-        '				(pin passive line (at 13.97 -2.54 180) (length 3.81) (name "S1_GND" (effects (font (size 0.9 0.9)))) (number "S1" (effects (font (size 0.9 0.9)))))',
-        '				(pin passive line (at 13.97 -5.08 180) (length 3.81) (name "S2_GND" (effects (font (size 0.9 0.9)))) (number "S2" (effects (font (size 0.9 0.9)))))',
-        '				(pin passive line (at 13.97 -7.62 180) (length 3.81) (name "S3_GND" (effects (font (size 0.9 0.9)))) (number "S3" (effects (font (size 0.9 0.9)))))',
-        '				(pin passive line (at 13.97 -10.16 180) (length 3.81) (name "S4_GND" (effects (font (size 0.9 0.9)))) (number "S4" (effects (font (size 0.9 0.9)))))',
+        '			(property "Value" "PS5_JOYSTICK" (at 0 -15.24 0) (effects (font (size 1.27 1.27))))',
+        '			(property "Footprint" "PS5_joystick:Alps_RKJXV1224005" (at 0 0 0) (effects (font (size 1.27 1.27)) (hide yes)))',
+        '			(symbol "Joystick_PS5_Thumbstick_1_1"',
+        '				(rectangle (start -10.16 12.70) (end 10.16 -15.24) (stroke (width 0.254) (type default)) (fill (type background)))',
+        '				(pin passive line (at -13.97 10.16 0) (length 3.81) (name "Y_GND" (effects (font (size 0.9 0.9)))) (number "1" (effects (font (size 0.9 0.9)))))',
+        '				(pin passive line (at -13.97 7.62 0) (length 3.81) (name "JOY_Y" (effects (font (size 0.9 0.9)))) (number "2" (effects (font (size 0.9 0.9)))))',
+        '				(pin passive line (at -13.97 5.08 0) (length 3.81) (name "Y_3V3" (effects (font (size 0.9 0.9)))) (number "3" (effects (font (size 0.9 0.9)))))',
+        '				(pin passive line (at -13.97 0.00 0) (length 3.81) (name "X_GND" (effects (font (size 0.9 0.9)))) (number "4" (effects (font (size 0.9 0.9)))))',
+        '				(pin passive line (at -13.97 -2.54 0) (length 3.81) (name "JOY_X" (effects (font (size 0.9 0.9)))) (number "5" (effects (font (size 0.9 0.9)))))',
+        '				(pin passive line (at -13.97 -5.08 0) (length 3.81) (name "X_3V3" (effects (font (size 0.9 0.9)))) (number "6" (effects (font (size 0.9 0.9)))))',
+        '				(pin passive line (at 13.97 10.16 180) (length 3.81) (name "SW_GND1" (effects (font (size 0.9 0.9)))) (number "7" (effects (font (size 0.9 0.9)))))',
+        '				(pin passive line (at 13.97 7.62 180) (length 3.81) (name "SW_GND2" (effects (font (size 0.9 0.9)))) (number "8" (effects (font (size 0.9 0.9)))))',
+        '				(pin passive line (at 13.97 5.08 180) (length 3.81) (name "SW_SIG1" (effects (font (size 0.9 0.9)))) (number "9" (effects (font (size 0.9 0.9)))))',
+        '				(pin passive line (at 13.97 2.54 180) (length 3.81) (name "SW_SIG2" (effects (font (size 0.9 0.9)))) (number "10" (effects (font (size 0.9 0.9)))))',
+        '				(pin passive line (at 13.97 -2.54 180) (length 3.81) (name "SH1" (effects (font (size 0.9 0.9)))) (number "11" (effects (font (size 0.9 0.9)))))',
+        '				(pin passive line (at 13.97 -5.08 180) (length 3.81) (name "SH2" (effects (font (size 0.9 0.9)))) (number "12" (effects (font (size 0.9 0.9)))))',
+        '				(pin passive line (at 13.97 -7.62 180) (length 3.81) (name "SH3" (effects (font (size 0.9 0.9)))) (number "13" (effects (font (size 0.9 0.9)))))',
+        '				(pin passive line (at 13.97 -10.16 180) (length 3.81) (name "SH4" (effects (font (size 0.9 0.9)))) (number "14" (effects (font (size 0.9 0.9)))))',
+        '			)',
+        '		)',
+        '		(symbol "Switch:SW_Push"',
+        '			(pin_names (offset 1.016) (hide yes))',
+        '			(property "Reference" "SW" (at 0 3.81 0) (effects (font (size 1.27 1.27))))',
+        '			(property "Value" "SW_Push" (at 0 -3.81 0) (effects (font (size 1.27 1.27))))',
+        '			(property "Footprint" "" (at 0 0 0) (effects (font (size 1.27 1.27)) (hide yes)))',
+        '			(symbol "SW_Push_1_1"',
+        '				(circle (center -2.032 0) (radius 0.508) (stroke (width 0.254) (type default)) (fill (type none)))',
+        '				(circle (center 2.032 0) (radius 0.508) (stroke (width 0.254) (type default)) (fill (type none)))',
+        '				(polyline',
+        '					(pts (xy -1.524 1.27) (xy 1.524 1.27))',
+        '					(stroke (width 0.254) (type default))',
+        '				)',
+        '				(polyline',
+        '					(pts (xy 0 1.27) (xy 0 3.048))',
+        '					(stroke (width 0.254) (type default))',
+        '				)',
+        '				(pin passive line (at -5.08 0 0) (length 3.048) (name "1" (effects (font (size 1.27 1.27)))) (number "1" (effects (font (size 1.27 1.27)))))',
+        '				(pin passive line (at 5.08 0 180) (length 3.048) (name "2" (effects (font (size 1.27 1.27)))) (number "2" (effects (font (size 1.27 1.27)))))',
         '			)',
         '		)',
         '	)',
@@ -827,19 +865,19 @@ def generate_kicad_sch(path):
     # Helper: place Joystick
     def place_joystick(ref, val, fp, x, y):
         u = new_uuid()
-        sch_lines.append(f'	(symbol (lib_id "Device:Joystick_PS4_Thumbstick") (at {x:.2f} {y:.2f} 0) (unit 1)')
+        sch_lines.append(f'	(symbol (lib_id "Device:Joystick_PS5_Thumbstick") (at {x:.2f} {y:.2f} 0) (unit 1)')
         sch_lines.append(f'		(uuid "{u}")')
         sch_lines.append(f'		(property "Reference" "{ref}" (at {x:.2f} {y+16.51:.2f} 0) (effects (font (size 1.5 1.5))))')
         sch_lines.append(f'		(property "Value" "{val}" (at {x:.2f} {y-16.51:.2f} 0) (effects (font (size 1.27 1.27))))')
         sch_lines.append(f'		(property "Footprint" "{fp}" (at {x:.2f} {y:.2f} 0) (effects (font (size 1.27 1.27)) (hide yes)))')
         sch_lines.append('	)')
         left_pins = [
-            (10.16, "GND"),     # H1
-            (7.62, "JOY_X"),    # H2
-            (5.08, "+3V3"),     # H3
-            (0.00, "GND"),      # V1
-            (-2.54, "JOY_Y"),   # V2
-            (-5.08, "+3V3"),    # V3
+            (10.16, "GND"),     # Pin 1: Y_GND
+            (7.62, "JOY_Y"),    # Pin 2: JOY_Y
+            (5.08, "+3V3"),     # Pin 3: Y_3V3
+            (0.00, "GND"),      # Pin 4: X_GND
+            (-2.54, "JOY_X"),   # Pin 5: JOY_X
+            (-5.08, "+3V3"),    # Pin 6: X_3V3
         ]
         for py, lbl in left_pins:
             p_abs_y = y - py
@@ -852,14 +890,14 @@ def generate_kicad_sch(path):
             sch_lines.append('	)')
             sch_lines.append(f'	(label "{lbl}" (at {px_end:.2f} {p_abs_y:.2f} 0) (effects (font (size 1.27 1.27)) (justify right)))')
         right_pins = [
-            (10.16, "GND"),      # B1A
-            (7.62, "GND"),       # B1B
-            (5.08, "IO9_BOOT"),  # B2A
-            (2.54, "IO9_BOOT"),  # B2B
-            (-2.54, "GND"),      # S1
-            (-5.08, "GND"),      # S2
-            (-7.62, "GND"),      # S3
-            (-10.16, "GND"),     # S4
+            (10.16, "GND"),      # Pin 7: SW_GND1
+            (7.62, "GND"),       # Pin 8: SW_GND2
+            (5.08, "IO9_BOOT"),  # Pin 9: SW_SIG1
+            (2.54, "IO9_BOOT"),  # Pin 10: SW_SIG2
+            (-2.54, "GND"),      # Pin 11: SH1
+            (-5.08, "GND"),      # Pin 12: SH2
+            (-7.62, "GND"),      # Pin 13: SH3
+            (-10.16, "GND"),     # Pin 14: SH4
         ]
         for py, lbl in right_pins:
             p_abs_y = y - py
@@ -871,6 +909,32 @@ def generate_kicad_sch(path):
             sch_lines.append(f'		(uuid "{new_uuid()}")')
             sch_lines.append('	)')
             sch_lines.append(f'	(label "{lbl}" (at {px_end:.2f} {p_abs_y:.2f} 0) (effects (font (size 1.27 1.27)) (justify left)))')
+
+    # Helper: place Push Button Switch
+    def place_push_button(ref, val, fp, x, y, sig_label, gnd_label="GND"):
+        u = new_uuid()
+        sch_lines.append(f'	(symbol (lib_id "Switch:SW_Push") (at {x:.2f} {y:.2f} 0) (unit 1)')
+        sch_lines.append(f'		(uuid "{u}")')
+        sch_lines.append(f'		(property "Reference" "{ref}" (at {x:.2f} {y+4.0:.2f} 0) (effects (font (size 1.5 1.5))))')
+        sch_lines.append(f'		(property "Value" "{val}" (at {x:.2f} {y-4.0:.2f} 0) (effects (font (size 1.27 1.27))))')
+        sch_lines.append(f'		(property "Footprint" "{fp}" (at {x:.2f} {y:.2f} 0) (effects (font (size 1.27 1.27)) (hide yes)))')
+        sch_lines.append('	)')
+        p1_x = x - 5.08
+        p1_end = x - 17.78
+        sch_lines.append('	(wire')
+        sch_lines.append(f'		(pts (xy {p1_x:.2f} {y:.2f}) (xy {p1_end:.2f} {y:.2f}))')
+        sch_lines.append('		(stroke (width 0) (type solid))')
+        sch_lines.append(f'		(uuid "{new_uuid()}")')
+        sch_lines.append('	)')
+        sch_lines.append(f'	(label "{sig_label}" (at {p1_end:.2f} {y:.2f} 0) (effects (font (size 1.27 1.27)) (justify right)))')
+        p2_x = x + 5.08
+        p2_end = x + 17.78
+        sch_lines.append('	(wire')
+        sch_lines.append(f'		(pts (xy {p2_x:.2f} {y:.2f}) (xy {p2_end:.2f} {y:.2f}))')
+        sch_lines.append('		(stroke (width 0) (type solid))')
+        sch_lines.append(f'		(uuid "{new_uuid()}")')
+        sch_lines.append('	)')
+        sch_lines.append(f'	(label "{gnd_label}" (at {p2_end:.2f} {y:.2f} 0) (effects (font (size 1.27 1.27)) (justify left)))')
 
     # ==================== CIRCUIT BLOCKS ====================
     # BLOCK 1: ESP32-C6-LCD-1.47 Processor
@@ -900,11 +964,11 @@ def generate_kicad_sch(path):
     # BLOCK 3: GNSS / GPS LC29H
     add_block("3. GNSS / GPS NAVIGATION (LC29H)", "UART Port (GP16 RX, GP17 TX) + 3V3", 152.40, 91.44, 264.16, 172.72)
     gps_labels = ["IO15", "GPS_TX2", "GPS_RX2", "IO17_GPS_TX", "IO16_GPS_RX", "GND", "+3V3"]
-    place_conn_1row("Connector_Generic:Conn_01x07", "J6", "GPS_LC29H_7PIN", "Connector_PinHeader_2.54mm:PinHeader_1x07_P2.54mm_Vertical", 218.44, 137.16, gps_labels)
+    place_conn_1row("Connector_Generic:Conn_01x07", "J6", "GPS_LC29H_7PIN", "Connector_PinHeader_2.54mm:PinHeader_1x07_P2.54mm_Horizontal", 218.44, 137.16, gps_labels)
 
     # BLOCK 4: Dual Joystick Interface & Pre-Launch Test Jumpers
-    add_block("4. DUAL JOYSTICK INTERFACE", "Onboard PS4 Thumbstick (JOY1), RBL Jumpers (JP_RBL) & External Battery Port (J4)", 274.32, 20.32, 406.40, 114.30)
-    place_joystick("JOY1", "PS4_JOYSTICK", "PS4_joystick:XDCR_COM-09032", 314.96, 66.04)
+    add_block("4. DUAL JOYSTICK INTERFACE", "Onboard PS5 Thumbstick (JOY1), RBL Jumpers (JP_RBL) & External Battery Port (J4)", 274.32, 20.32, 406.40, 114.30)
+    place_joystick("JOY1", "PS5_JOYSTICK", "PS5_joystick:Alps_RKJXV1224005", 314.96, 66.04)
     rbl_labels = ["JOY_X", "IO0_ADC", "JOY_Y", "IO1_ADC"]
     place_conn_1row("Connector_Generic:Conn_01x04", "JP_RBL", "REMOVE_BEFORE_LAUNCH", "Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical", 347.98, 66.04, rbl_labels)
     apm_labels = ["IO0_ADC", "IO1_ADC", "GND"]
@@ -933,6 +997,13 @@ def generate_kicad_sch(path):
         sch_lines.append(f'		(property "Value" "MountingHole" (at {hx:.2f} {hy+3.81:.2f} 0) (effects (font (size 1.27 1.27))))')
         sch_lines.append(f'		(property "Footprint" "MountingHole:MountingHole_3.2mm_M3" (at {hx:.2f} {hy:.2f} 0) (effects (font (size 1.27 1.27)) (hide yes)))')
         sch_lines.append('	)')
+
+    # BLOCK 8: Push Buttons SW1-SW4
+    add_block("8. USER BUTTONS (SW1-SW4)", "Tactile Push Buttons on Back (UI Side) for Menu Navigation & Boot", 274.32, 215.90, 406.40, 280.00)
+    place_push_button("SW1", "UP", "PS4_joystick:SKRKAEE020", 309.88, 235.00, "IO18_ACT1_UP")
+    place_push_button("SW2", "MODE", "PS4_joystick:SKRKAEE020", 370.00, 235.00, "IO19_WINCH_MODE")
+    place_push_button("SW3", "DOWN", "PS4_joystick:SKRKAEE020", 309.88, 260.00, "IO20_RUDDER_DN")
+    place_push_button("SW4", "BOOT", "PS4_joystick:SKRKAEE020", 370.00, 260.00, "IO9_BOOT")
 
     sch_lines.append('	(sheet_instances')
     sch_lines.append('		(path "/" (page "1"))')

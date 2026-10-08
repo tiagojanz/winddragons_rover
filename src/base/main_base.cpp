@@ -53,7 +53,7 @@ const char* const MENU_ITEMS[] = {
     "5. PARAR MOTORES",
     "6. PROXIMO ROVER",
     "7. INFO REDE / IP",
-    "8. ESTADO PORTAL"
+    "8. TESTE JOYSTICK"
 };
 const uint8_t MENU_COUNT = sizeof(MENU_ITEMS) / sizeof(MENU_ITEMS[0]);
 uint8_t menuSelectedIndex = 0;
@@ -342,6 +342,23 @@ void handleInputsAndMenu(uint32_t now) {
                 menuFeedback = nullptr;
             }
         }
+        else if (page == BASE_PAGE_CLOUD) {
+            if (btnModePressed) {
+                display.setPage(BASE_PAGE_CONTROL);
+            }
+            else if (joystick.wasLongClicked()) {
+                currentScreen = SCREEN_MENU;
+                menuSelectedIndex = 0;
+                lastMenuActivityMs = now;
+                menuFeedback = nullptr;
+            }
+        }
+        else if (page == BASE_PAGE_JOYSTICK) {
+            // No ecrã de teste do joystick, premir o botão físico MODE avança de página
+            if (btnModePressed) {
+                display.nextPage();
+            }
+        }
     } 
     else if (currentScreen == SCREEN_MENU) {
         // Step UP / DOWN with joystick
@@ -385,8 +402,8 @@ void handleInputsAndMenu(uint32_t now) {
                     display.setPage(BASE_PAGE_NETWORK);
                     currentScreen = SCREEN_PAGES;
                     break;
-                case 7: // ESTADO PORTAL
-                    display.setPage(BASE_PAGE_CLOUD);
+                case 7: // TESTE JOYSTICK
+                    display.setPage(BASE_PAGE_JOYSTICK);
                     currentScreen = SCREEN_PAGES;
                     break;
                 default:
@@ -418,15 +435,41 @@ void loop() {
 
     // 1. Screen Navigation Button (Instant Hardware Interrupt on BOOT / GPIO 9)
     bool forceDisplay = false;
-    if (flagPageChange) {
-        flagPageChange = false;
-        if (currentScreen == SCREEN_MENU) {
-            currentScreen = SCREEN_PAGES;
+    static uint32_t joyHoldStartMs = 0;
+
+    if (display.getCurrentPage() == BASE_PAGE_JOYSTICK && currentScreen == SCREEN_PAGES) {
+        // No ecrã de teste do joystick, manter premido o botão BOOT / JOYSTICK SW (GPIO 9) por > 1s sai da página
+        bool btnBootDown = (digitalRead(PIN_BTN_BOOT) == LOW);
+        if (btnBootDown) {
+            if (joyHoldStartMs == 0) {
+                joyHoldStartMs = now;
+            } else if (now - joyHoldStartMs >= 1000) {
+                display.nextPage();
+                forceDisplay = true;
+                joyHoldStartMs = 0;
+                flagPageChange = false;
+                Serial.println("[BASE] Saiu do ecrã de teste do joystick por pressão longa (>1s)");
+            }
         } else {
-            display.nextPage();
+            joyHoldStartMs = 0;
         }
-        forceDisplay = true;
-        Serial.printf("[BASE] Ecrã alterado para página %d (0:CONTROL, 1:FLEET, 2:NETWORK, 3:CLOUD)\n", display.getCurrentPage());
+
+        // Se houve clique simples em GPIO 9 na página de teste, consome a flag e refresca o ecrã
+        if (flagPageChange) {
+            flagPageChange = false;
+            forceDisplay = true;
+        }
+    } else {
+        if (flagPageChange) {
+            flagPageChange = false;
+            if (currentScreen == SCREEN_MENU) {
+                currentScreen = SCREEN_PAGES;
+            } else {
+                display.nextPage();
+            }
+            forceDisplay = true;
+            Serial.printf("[BASE] Ecrã alterado para página %d (0:CONTROL, 1:FLEET, 2:NETWORK, 3:CLOUD, 4:JOYSTICK)\n", display.getCurrentPage());
+        }
     }
 
     // 2. Process local inputs & menu state machine
@@ -450,7 +493,7 @@ void loop() {
     // 7. Update Rover online/offline status
     fleet.checkOnlineStatus();
 
-    // 8. Update LCD screen (Menu or Active Page: Control, Fleet, Network, Cloud)
+    // 8. Update LCD screen (Menu or Active Page: Control, Fleet, Network, Cloud, Joystick)
     if (currentScreen == SCREEN_MENU) {
         display.renderMenu(MENU_ITEMS, MENU_COUNT, menuSelectedIndex, menuFeedback);
     } else {
@@ -462,6 +505,10 @@ void loop() {
                        forceDisplay,
                        network.getLastHttpStatus(), network.getSuccessCount(),
                        network.getFailCount(), network.getLastSyncTime(),
-                       webServer.getMacAddress().c_str());
+                       webServer.getMacAddress().c_str(),
+                       joystick.getRawX(), joystick.getRawY(), joystick.getDeadband(),
+                       joystick.isBootPressed(), joystick.isModePressed(),
+                       joystick.isAnchorUpPressed(), joystick.isAnchorDownPressed(),
+                       joystick.getJoyClickCount());
     }
 }
