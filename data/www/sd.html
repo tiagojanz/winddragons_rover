@@ -55,7 +55,14 @@
   </div>
 </div>
 
-<div class="card">
+<div class="card" id="explorerCard" style="position:relative;">
+  <!-- Drag & Drop Full Overlay -->
+  <div id="dropOverlay" class="drop-overlay">
+    <div class="drop-overlay-icon"><i class="fa-solid fa-cloud-arrow-up"></i></div>
+    <div class="drop-overlay-title">Soltar ficheiros para carregar</div>
+    <div class="drop-overlay-subtitle">Destino: <span id="dropDestPath" class="drop-overlay-target">Raiz (/)</span></div>
+  </div>
+
   <!-- Toolbar -->
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
     <div class="breadcrumb-bar" id="breadcrumbBar" style="flex:1;min-width:240px;">
@@ -83,6 +90,20 @@
   <!-- Search Filter -->
   <div style="margin-bottom:14px;">
     <input type="text" id="filterInput" placeholder="Filtrar ficheiros e pastas por nome..." oninput="onFilterChange(this.value)" style="margin-top:0;">
+  </div>
+
+  <!-- Upload Queue Progress Box -->
+  <div id="uploadStatusBox" style="display:none;margin-bottom:14px;background:#0d182e;border:1px solid var(--primary);border-radius:8px;padding:12px 16px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+      <span id="uploadStatusText" style="font-size:0.875rem;font-weight:600;color:var(--text);">
+        <i class="fa-solid fa-cloud-arrow-up" style="color:var(--primary);margin-right:6px;"></i> A carregar ficheiros...
+      </span>
+      <span id="uploadStatusPercent" style="font-size:0.85rem;font-weight:700;color:var(--primary);">0%</span>
+    </div>
+    <div class="progress-bg" style="height:8px;">
+      <div id="uploadStatusBar" class="progress-bar" style="width:0%;background:var(--primary);transition:width 0.15s ease;"></div>
+    </div>
+    <div id="uploadStatusDetails" style="font-size:0.75rem;color:var(--muted);margin-top:4px;"></div>
   </div>
 
   <!-- Views -->
@@ -138,14 +159,13 @@
         <label class="stat-label">Diretório de Destino:</label>
         <input type="text" id="uploadDestDir" readonly style="background:#0b1120;color:var(--muted);">
       </div>
-      <div class="form-group">
-        <label class="stat-label">Selecionar Ficheiro do Computador / Telemóvel:</label>
-        <input type="file" id="uploadFileInput" required style="padding:8px;background:#0f172a;">
+      <div id="modalDropzone" class="modal-dropzone" onclick="document.getElementById('uploadFileInput').click()">
+        <i class="fa-solid fa-cloud-arrow-up" style="font-size:2rem;color:var(--primary);margin-bottom:8px;display:block;"></i>
+        <div style="font-weight:600;font-size:0.9rem;">Clique para selecionar ou arraste ficheiros para aqui</div>
+        <div style="font-size:0.75rem;color:var(--muted);margin-top:4px;">Suporta múltiplos ficheiros</div>
       </div>
-      <div id="uploadProgressContainer" style="display:none;margin-top:12px;">
-        <div class="stat-label" id="uploadProgressText">A enviar...</div>
-        <div class="progress-bg"><div id="uploadProgressBar" class="progress-bar" style="width:0%;background:var(--primary);"></div></div>
-      </div>
+      <input type="file" id="uploadFileInput" multiple style="display:none;" onchange="handleModalFileSelect(this.files)">
+      <div id="modalFileList" style="font-size:0.8rem;color:var(--text);margin-bottom:12px;max-height:80px;overflow-y:auto;display:none;"></div>
       <div class="btn-group" style="justify-content:flex-end;margin-top:16px;">
         <button type="button" onclick="closeModal('uploadModal')" class="btn btn-secondary">Cancelar</button>
         <button type="submit" id="uploadSubmitBtn" class="btn btn-primary"><i class="fa-solid fa-cloud-arrow-up"></i> Iniciar Upload</button>
@@ -417,60 +437,193 @@ function submitMkdir(e) {
   });
 }
 
+let uploadQueue = [];
+let isUploading = false;
+let uploadSuccessCount = 0;
+let uploadTotalCount = 0;
+let uploadTargetDir = '/';
+
 function openUploadModal() {
   document.getElementById('uploadDestDir').value = currentDir;
   document.getElementById('uploadFileInput').value = '';
-  document.getElementById('uploadProgressContainer').style.display = 'none';
+  const fl = document.getElementById('modalFileList');
+  if (fl) { fl.innerHTML = ''; fl.style.display = 'none'; }
   document.getElementById('uploadSubmitBtn').disabled = false;
   document.getElementById('uploadModal').style.display = 'flex';
+}
+
+function handleModalFileSelect(files) {
+  if (!files || files.length === 0) return;
+  const fl = document.getElementById('modalFileList');
+  if (fl) {
+    let html = '<strong>' + files.length + ' ficheiro(s) selecionado(s):</strong><ul style="margin:4px 0 0 16px;padding:0;">';
+    for (let i = 0; i < files.length; i++) {
+      html += '<li>' + files[i].name + ' (' + formatBytes(files[i].size) + ')</li>';
+    }
+    html += '</ul>';
+    fl.innerHTML = html;
+    fl.style.display = 'block';
+  }
 }
 
 function submitUpload(e) {
   e.preventDefault();
   const fileInput = document.getElementById('uploadFileInput');
-  if (!fileInput.files || fileInput.files.length === 0) return;
-  const file = fileInput.files[0];
+  if (!fileInput.files || fileInput.files.length === 0) {
+    showToast('Nenhum ficheiro selecionado', true);
+    return;
+  }
+  handleFilesSelected(fileInput.files);
+}
 
-  const pContainer = document.getElementById('uploadProgressContainer');
-  const pBar = document.getElementById('uploadProgressBar');
-  const pText = document.getElementById('uploadProgressText');
-  const btn = document.getElementById('uploadSubmitBtn');
+function handleFilesSelected(files) {
+  if (!files || files.length === 0) return;
+  uploadTargetDir = currentDir;
+  for (let i = 0; i < files.length; i++) {
+    uploadQueue.push(files[i]);
+  }
+  uploadTotalCount = uploadQueue.length;
+  uploadSuccessCount = 0;
+  closeModal('uploadModal');
 
-  pContainer.style.display = 'block';
-  btn.disabled = true;
+  const box = document.getElementById('uploadStatusBox');
+  if (box) box.style.display = 'block';
 
-  const formData = new FormData();
-  formData.append('file', file);
+  if (!isUploading) {
+    processUploadQueue();
+  }
+}
+
+function processUploadQueue() {
+  const sText = document.getElementById('uploadStatusText');
+  const sBar = document.getElementById('uploadStatusBar');
+  const sPct = document.getElementById('uploadStatusPercent');
+  const sDet = document.getElementById('uploadStatusDetails');
+
+  if (uploadQueue.length === 0) {
+    isUploading = false;
+    if (sBar) sBar.style.width = '100%';
+    if (sPct) sPct.innerText = '100%';
+    if (sText) {
+      sText.innerHTML = '<span style="color:var(--green);font-weight:700;"><i class="fa-solid fa-circle-check"></i> ' + 
+        uploadSuccessCount + ' de ' + uploadTotalCount + ' ficheiro(s) enviado(s) com sucesso para ' + uploadTargetDir + '!</span>';
+    }
+    if (sDet) sDet.innerText = 'Concluído com sucesso!';
+    showToast(uploadSuccessCount + ' ficheiro(s) carregado(s) com sucesso!');
+    refreshDir();
+    setTimeout(() => {
+      if (!isUploading) {
+        const b = document.getElementById('uploadStatusBox');
+        if (b) b.style.display = 'none';
+      }
+    }, 4500);
+    return;
+  }
+
+  isUploading = true;
+  const file = uploadQueue.shift();
+  const currentIdx = uploadTotalCount - uploadQueue.length;
+
+  if (sText) {
+    sText.innerHTML = '<i class="fa-solid fa-cloud-arrow-up" style="color:var(--primary);margin-right:6px;"></i> A enviar (' + 
+      currentIdx + '/' + uploadTotalCount + '): <strong>' + file.name + '</strong>';
+  }
+  if (sBar) sBar.style.width = '0%';
+  if (sPct) sPct.innerText = '0%';
+  if (sDet) sDet.innerText = '0 de ' + formatBytes(file.size);
+
+  const fd = new FormData();
+  fd.append('file', file, file.name);
 
   const xhr = new XMLHttpRequest();
-  const uploadUrl = '/api/sd/upload?dir=' + encodeURIComponent(currentDir);
-  xhr.open('POST', uploadUrl, true);
+  xhr.open('POST', '/api/sd/upload?ajax=1&dir=' + encodeURIComponent(uploadTargetDir), true);
 
-  xhr.upload.onprogress = function(event) {
-    if (event.lengthComputable) {
-      const pct = Math.round((event.loaded / event.total) * 100);
-      pBar.style.width = pct + '%';
-      pText.innerText = 'A enviar: ' + pct + '% (' + formatBytes(event.loaded) + ' de ' + formatBytes(event.total) + ')';
+  xhr.upload.onprogress = function(e) {
+    if (e.lengthComputable) {
+      const pct = Math.round((e.loaded / e.total) * 100);
+      if (sBar) sBar.style.width = pct + '%';
+      if (sPct) sPct.innerText = pct + '%';
+      if (sDet) sDet.innerText = formatBytes(e.loaded) + ' de ' + formatBytes(e.total);
     }
   };
 
   xhr.onload = function() {
-    btn.disabled = false;
-    if (xhr.status === 200) {
-      showToast('Upload concluído com sucesso!');
-      closeModal('uploadModal');
-      refreshDir();
+    if (xhr.status >= 200 && xhr.status < 400) {
+      uploadSuccessCount++;
     } else {
-      showToast('Erro no upload: ' + xhr.responseText, true);
+      showToast('Erro ao carregar ' + file.name + ' (' + xhr.status + ')', true);
     }
+    processUploadQueue();
   };
 
   xhr.onerror = function() {
-    btn.disabled = false;
-    showToast('Falha na ligação durante o upload', true);
+    showToast('Falha na ligação durante o upload de ' + file.name, true);
+    processUploadQueue();
   };
 
-  xhr.send(formData);
+  xhr.send(fd);
+}
+
+function setupDragAndDrop() {
+  let dragCounter = 0;
+  const ov = document.getElementById('dropOverlay');
+
+  window.addEventListener('dragenter', (e) => {
+    e.preventDefault();
+    if (e.dataTransfer && e.dataTransfer.types && Array.from(e.dataTransfer.types).includes('Files')) {
+      dragCounter++;
+      const dp = document.getElementById('dropDestPath');
+      if (dp) dp.innerText = currentDir;
+      if (ov) ov.classList.add('active');
+    }
+  });
+
+  window.addEventListener('dragover', (e) => {
+    e.preventDefault();
+  });
+
+  window.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    dragCounter--;
+    if (dragCounter <= 0) {
+      dragCounter = 0;
+      if (ov) ov.classList.remove('active');
+    }
+  });
+
+  window.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dragCounter = 0;
+    if (ov) ov.classList.remove('active');
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleFilesSelected(e.dataTransfer.files);
+    }
+  });
+
+  const mdz = document.getElementById('modalDropzone');
+  if (mdz) {
+    ['dragenter', 'dragover'].forEach(evt => {
+      mdz.addEventListener(evt, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        mdz.classList.add('drag-active');
+      });
+    });
+    ['dragleave', 'drop'].forEach(evt => {
+      mdz.addEventListener(evt, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        mdz.classList.remove('drag-active');
+      });
+    });
+    mdz.addEventListener('drop', (e) => {
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        handleModalFileSelect(e.dataTransfer.files);
+        const inp = document.getElementById('uploadFileInput');
+        if (inp) inp.files = e.dataTransfer.files;
+      }
+    });
+  }
 }
 
 function closeModal(id) {
@@ -480,6 +633,7 @@ function closeModal(id) {
 document.addEventListener('DOMContentLoaded', () => {
   toggleView('grid');
   refreshDir();
+  setupDragAndDrop();
 });
 </script>
 

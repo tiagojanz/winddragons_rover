@@ -86,10 +86,38 @@
 <div class="card">
   <div class="card-title"><i class="fa-solid fa-anchor"></i> Guincho da Âncora & Cremalheira de Travão</div>
   <div class="btn-group">
-    <button type="button" onclick="sendAction(3)" class="btn btn-primary"><i class="fa-solid fa-anchor"></i> Lançar Âncora (Soltar)</button>
-    <button type="button" onclick="sendAction(4)" class="btn btn-primary"><i class="fa-solid fa-arrow-up"></i> Recolher Âncora (Guincho)</button>
-    <button type="button" onclick="sendAction(5)" class="btn btn-secondary"><i class="fa-solid fa-stop"></i> Parar Guincho</button>
+    <button type="button" onclick="sendAction(4)" class="btn btn-primary"><i class="fa-solid fa-arrow-up"></i> Puxar Guincho (Enrolar)</button>
+    <button type="button" onclick="sendAction(14)" class="btn btn-secondary"><i class="fa-solid fa-arrow-down"></i> Descer Guincho (Desenrolar)</button>
+    <button type="button" onclick="sendAction(5)" class="btn btn-danger"><i class="fa-solid fa-stop"></i> Parar Guincho</button>
     <button type="button" onclick="sendAction(6)" class="btn btn-secondary"><i class="fa-solid fa-lock"></i> Alternar Travão Cremalheira</button>
+    <button type="button" onclick="sendAction(13)" class="btn btn-secondary" style="background:#475569;color:#fff;"><i class="fa-solid fa-feather"></i> Relaxar Trinco</button>
+  </div>
+</div>
+
+<div class="card" style="border:1px solid #0284c7;">
+  <div class="card-title"><i class="fa-solid fa-sliders"></i> Calibração Ponto Neutro do Guincho (GPIO 19 - 360° Contínuo)</div>
+  <p style="color:var(--muted);font-size:0.85rem;margin-bottom:12px;">Ajuste o pulso PWM (1000 a 2000 µs) até o servo parar completamente de rodar. Em seguida clique em <b>Guardar como Neutro</b>.</p>
+  
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+    <span class="stat-label">Pulso PWM Direto:</span>
+    <span id="winchVal" style="font-size:1.6rem;font-weight:700;color:var(--primary);">1500 µs</span>
+  </div>
+
+  <input type="range" id="winchSlider" min="1000" max="2000" step="1" value="1500" class="slider" oninput="onWinchInput(this.value)" onchange="sendWinchPulse(this.value)">
+
+  <div class="btn-group" style="margin-top:12px;">
+    <button type="button" onclick="stepWinch(-50)" class="btn btn-secondary">-50 µs</button>
+    <button type="button" onclick="stepWinch(-5)" class="btn btn-secondary">-5 µs</button>
+    <button type="button" onclick="stepWinch(-1)" class="btn btn-secondary">-1 µs</button>
+    <button type="button" onclick="setWinchDirect(1500)" class="btn btn-secondary" style="background:#334155;color:#fff;">1500 µs</button>
+    <button type="button" onclick="stepWinch(1)" class="btn btn-secondary">+1 µs</button>
+    <button type="button" onclick="stepWinch(5)" class="btn btn-secondary">+5 µs</button>
+    <button type="button" onclick="stepWinch(50)" class="btn btn-secondary">+50 µs</button>
+  </div>
+
+  <div class="btn-group" style="margin-top:14px;">
+    <button type="button" onclick="stopWinchCalib()" class="btn btn-danger"><i class="fa-solid fa-stop"></i> Parar (Ir p/ Neutro Atual)</button>
+    <button type="button" onclick="saveCurrentAsNeutral()" class="btn btn-primary" style="background:#059669;"><i class="fa-solid fa-check"></i> Guardar como Ponto Neutro Padrão</button>
   </div>
 </div>
 
@@ -135,12 +163,70 @@ function sendAction(a) {
     body: JSON.stringify({ action: a })
   })
   .then(r => r.json())
-  .then(res => showToast(res.msg));
+  .then(res => {
+    if (typeof showToast === 'function') {
+      showToast(res.msg);
+    } else {
+      alert(res.msg);
+    }
+  });
 }
 function sendEmergencyStop() {
   setThrottle(0);
   setRudder(0);
   sendAction(2);
+}
+let winchTimer = null;
+function onWinchInput(v) {
+  document.getElementById('winchVal').innerText = v + ' µs';
+  if (winchTimer) clearTimeout(winchTimer);
+  winchTimer = setTimeout(() => { sendWinchPulse(v); }, 40);
+}
+function sendWinchPulse(v, saveNeutral = false) {
+  fetch('/api/control/winch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pulseUs: parseInt(v), set_neutral: saveNeutral })
+  })
+  .then(r => r.json())
+  .then(res => {
+    if (saveNeutral) {
+      alert('Ponto Neutro guardado com sucesso: ' + res.neutralUs + ' µs');
+    }
+  });
+}
+function stepWinch(delta) {
+  const s = document.getElementById('winchSlider');
+  let val = parseInt(s.value) + delta;
+  if (val < 1000) val = 1000;
+  if (val > 2000) val = 2000;
+  s.value = val;
+  document.getElementById('winchVal').innerText = val + ' µs';
+  sendWinchPulse(val);
+}
+function setWinchDirect(val) {
+  const s = document.getElementById('winchSlider');
+  s.value = val;
+  document.getElementById('winchVal').innerText = val + ' µs';
+  sendWinchPulse(val);
+}
+function stopWinchCalib() {
+  fetch('/api/control/action', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 5 })
+  }).then(() => {
+    fetch('/api/status').then(r => r.json()).then(d => {
+      if (d.actuators && d.actuators.winch_neutral_us) {
+        document.getElementById('winchSlider').value = d.actuators.winch_neutral_us;
+        document.getElementById('winchVal').innerText = d.actuators.winch_neutral_us + ' µs';
+      }
+    });
+  });
+}
+function saveCurrentAsNeutral() {
+  const val = parseInt(document.getElementById('winchSlider').value);
+  sendWinchPulse(val, true);
 }
 setInterval(() => {
   fetch('/api/status')

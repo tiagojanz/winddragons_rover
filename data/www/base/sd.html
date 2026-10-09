@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="pt">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,6 +8,7 @@
   <link rel="stylesheet" href="/style.css">
   <script src="/app.js"></script>
 </head>
+
 <body>
   <header class="navbar">
     <a href="/" class="brand">
@@ -14,15 +16,16 @@
     </a>
     <nav class="nav-links">
       <a href="/portal" class="nav-item "><i class="fa-solid fa-cloud"></i> Portal Cloud</a>
-<a href="/wifi" class="nav-item "><i class="fa-solid fa-wifi"></i> WiFi Base</a>
-<a href="/gps" class="nav-item "><i class="fa-solid fa-location-dot"></i> GPS Frota</a>
-<a href="/battery" class="nav-item "><i class="fa-solid fa-battery-three-quarters"></i> Bateria Frota</a>
-<a href="/control" class="nav-item "><i class="fa-solid fa-gamepad"></i> Comandos</a>
-<a href="/sd" class="nav-item active"><i class="fa-solid fa-folder"></i> Cartão SD</a>
+      <a href="/wifi" class="nav-item "><i class="fa-solid fa-wifi"></i> WiFi Base</a>
+      <a href="/gps" class="nav-item "><i class="fa-solid fa-location-dot"></i> GPS Frota</a>
+      <a href="/battery" class="nav-item "><i class="fa-solid fa-battery-three-quarters"></i> Bateria Frota</a>
+      <a href="/control" class="nav-item "><i class="fa-solid fa-gamepad"></i> Comandos</a>
+      <a href="/sd" class="nav-item active"><i class="fa-solid fa-folder"></i> Cartão SD</a>
 
     </nav>
     <div style="display:flex;align-items:center;gap:10px;">
-      <span id="navStationBadge" class="badge" style="background:rgba(2,132,199,0.2);color:#38bdf8;border:1px solid rgba(56,189,248,0.3);font-family:monospace;">
+      <span id="navStationBadge" class="badge"
+        style="background:rgba(2,132,199,0.2);color:#38bdf8;border:1px solid rgba(56,189,248,0.3);font-family:monospace;">
         <i class="fa-solid fa-fingerprint"></i> <span id="navStationId">ID Base</span>
       </span>
       <span id="navWifiBadge" class="badge badge-sta">
@@ -32,459 +35,471 @@
   </header>
 
   <main class="container">
-    
-<div class="card" style="margin-bottom:16px;">
-  <div class="card-title" style="margin-bottom:8px;">
-    <span><i class="fa-solid fa-sd-card"></i> Cartão MicroSD TF (SPI Bus)</span>
-    <span id="sdBadge" class="badge badge-sta"><i class="fa-solid fa-circle-check"></i> Montado</span>
-  </div>
-  <div class="grid-4">
-    <div class="stat-box">
-      <div class="stat-label">Tipo de Cartão</div>
-      <div class="stat-value" id="cardType" style="color:var(--primary);font-size:1.1rem;">SDHC / SDXC</div>
-    </div>
-    <div class="stat-box">
-      <div class="stat-label">Espaço Total</div>
-      <div class="stat-value" id="totalMb">-- MB</div>
-    </div>
-    <div class="stat-box">
-      <div class="stat-label">Espaço Usado</div>
-      <div class="stat-value" id="usedMb" style="color:var(--yellow);">-- MB</div>
-    </div>
-    <div class="stat-box">
-      <div class="stat-label">Espaço Livre</div>
-      <div class="stat-value" id="freeMb" style="color:var(--green);">-- MB</div>
-    </div>
-  </div>
-</div>
 
-<div class="card">
-  <!-- Toolbar -->
-  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
-    <div class="breadcrumb-bar" id="breadcrumbBar" style="flex:1;min-width:240px;">
-      <span class="breadcrumb-item" onclick="changeDir('/')"><i class="fa-solid fa-house"></i> Raiz</span>
-    </div>
-    <div class="btn-group">
-      <button onclick="toggleView('grid')" id="btnViewGrid" class="btn btn-secondary" style="padding:6px 12px;" title="Vista em Grelha">
-        <i class="fa-solid fa-table-cells"></i>
-      </button>
-      <button onclick="toggleView('list')" id="btnViewList" class="btn btn-secondary" style="padding:6px 12px;" title="Vista em Lista">
-        <i class="fa-solid fa-list"></i>
-      </button>
-      <button onclick="openMkdirModal()" class="btn btn-secondary" style="padding:6px 12px;">
-        <i class="fa-solid fa-folder-plus"></i> Nova Pasta
-      </button>
-      <button onclick="openUploadModal()" class="btn btn-primary" style="padding:6px 12px;">
-        <i class="fa-solid fa-cloud-arrow-up"></i> Carregar Ficheiro
-      </button>
-      <button onclick="refreshDir()" class="btn btn-secondary" style="padding:6px 12px;" title="Atualizar">
-        <i class="fa-solid fa-rotate"></i>
-      </button>
-    </div>
-  </div>
-
-  <!-- Search Filter -->
-  <div style="margin-bottom:14px;">
-    <input type="text" id="filterInput" placeholder="Filtrar ficheiros e pastas por nome..." oninput="onFilterChange(this.value)" style="margin-top:0;">
-  </div>
-
-  <!-- Views -->
-  <div id="viewGrid" class="explorer-grid"></div>
-  <div id="viewList" style="display:none;overflow-x:auto;">
-    <table>
-      <thead>
-        <tr>
-          <th>Nome</th>
-          <th>Tamanho</th>
-          <th>Tipo</th>
-          <th style="text-align:right;">Ações</th>
-        </tr>
-      </thead>
-      <tbody id="listTbody"></tbody>
-    </table>
-  </div>
-</div>
-
-<!-- Modal Nova Pasta -->
-<div id="mkdirModal" class="modal-overlay">
-  <div class="modal-card">
-    <div class="card-title">
-      <span><i class="fa-solid fa-folder-plus"></i> Criar Nova Pasta</span>
-      <button onclick="closeModal('mkdirModal')" class="btn btn-secondary" style="padding:4px 8px;"><i class="fa-solid fa-xmark"></i></button>
-    </div>
-    <form onsubmit="submitMkdir(event)">
-      <div class="form-group">
-        <label class="stat-label">Caminho Atual:</label>
-        <input type="text" id="mkdirCurrentPath" readonly style="background:#0b1120;color:var(--muted);">
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-title" style="margin-bottom:8px;">
+        <span><i class="fa-solid fa-sd-card"></i> Cartão MicroSD TF (SPI Bus)</span>
+        <span id="sdBadge" class="badge badge-sta"><i class="fa-solid fa-circle-check"></i> Montado</span>
       </div>
-      <div class="form-group">
-        <label class="stat-label">Nome da Nova Pasta:</label>
-        <input type="text" id="mkdirName" required placeholder="ex: logs">
-      </div>
-      <div class="btn-group" style="justify-content:flex-end;margin-top:16px;">
-        <button type="button" onclick="closeModal('mkdirModal')" class="btn btn-secondary">Cancelar</button>
-        <button type="submit" class="btn btn-primary"><i class="fa-solid fa-folder-plus"></i> Criar Pasta</button>
-      </div>
-    </form>
-  </div>
-</div>
-
-<!-- Modal Upload de Ficheiro -->
-<div id="uploadModal" class="modal-overlay">
-  <div class="modal-card">
-    <div class="card-title">
-      <span><i class="fa-solid fa-cloud-arrow-up"></i> Carregar Ficheiro para o Cartão SD</span>
-      <button onclick="closeModal('uploadModal')" class="btn btn-secondary" style="padding:4px 8px;"><i class="fa-solid fa-xmark"></i></button>
-    </div>
-    <form onsubmit="submitUpload(event)">
-      <div class="form-group">
-        <label class="stat-label">Diretório de Destino:</label>
-        <input type="text" id="uploadDestDir" readonly style="background:#0b1120;color:var(--muted);">
-      </div>
-      <div class="form-group">
-        <label class="stat-label">Selecionar Ficheiro do Computador / Telemóvel:</label>
-        <input type="file" id="uploadFileInput" required style="padding:8px;background:#0f172a;">
-      </div>
-      <div id="uploadProgressContainer" style="display:none;margin-top:12px;">
-        <div class="stat-label" id="uploadProgressText">A enviar...</div>
-        <div class="progress-bg"><div id="uploadProgressBar" class="progress-bar" style="width:0%;background:var(--primary);"></div></div>
-      </div>
-      <div class="btn-group" style="justify-content:flex-end;margin-top:16px;">
-        <button type="button" onclick="closeModal('uploadModal')" class="btn btn-secondary">Cancelar</button>
-        <button type="submit" id="uploadSubmitBtn" class="btn btn-primary"><i class="fa-solid fa-cloud-arrow-up"></i> Iniciar Upload</button>
-      </div>
-    </form>
-  </div>
-</div>
-
-<!-- Modal Visualizador / Editor -->
-<div id="viewerModal" class="modal-overlay">
-  <div class="modal-card" style="max-width:800px;">
-    <div class="card-title">
-      <span id="viewerTitle"><i class="fa-solid fa-file-lines"></i> Ficheiro</span>
-      <button onclick="closeModal('viewerModal')" class="btn btn-secondary" style="padding:4px 8px;"><i class="fa-solid fa-xmark"></i></button>
-    </div>
-    <textarea id="viewerContent" rows="18" style="font-family:monospace;font-size:0.85rem;line-height:1.4;white-space:pre;"></textarea>
-    <div class="btn-group" style="justify-content:space-between;margin-top:14px;">
-      <span id="viewerPath" style="color:var(--muted);font-size:0.8rem;align-self:center;"></span>
-      <div class="btn-group">
-        <button type="button" onclick="closeModal('viewerModal')" class="btn btn-secondary">Fechar</button>
-        <button type="button" onclick="saveEditedFile()" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> Guardar Alterações</button>
+      <div class="grid-4">
+        <div class="stat-box">
+          <div class="stat-label">Tipo de Cartão</div>
+          <div class="stat-value" id="cardType" style="color:var(--primary);font-size:1.1rem;">SDHC / SDXC</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Espaço Total</div>
+          <div class="stat-value" id="totalMb">-- MB</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Espaço Usado</div>
+          <div class="stat-value" id="usedMb" style="color:var(--yellow);">-- MB</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Espaço Livre</div>
+          <div class="stat-value" id="freeMb" style="color:var(--green);">-- MB</div>
+        </div>
       </div>
     </div>
-  </div>
-</div>
 
-<script>
-let currentDir = '/www/base';
-let allEntries = [];
-let currentFilter = '';
-let currentView = 'grid'; // 'grid' | 'list'
+    <div class="card">
+      <!-- Toolbar -->
+      <div
+        style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+        <div class="breadcrumb-bar" id="breadcrumbBar" style="flex:1;min-width:240px;">
+          <span class="breadcrumb-item" onclick="changeDir('/')"><i class="fa-solid fa-house"></i> Raiz</span>
+        </div>
+        <div class="btn-group">
+          <button onclick="toggleView('grid')" id="btnViewGrid" class="btn btn-secondary" style="padding:6px 12px;"
+            title="Vista em Grelha">
+            <i class="fa-solid fa-table-cells"></i>
+          </button>
+          <button onclick="toggleView('list')" id="btnViewList" class="btn btn-secondary" style="padding:6px 12px;"
+            title="Vista em Lista">
+            <i class="fa-solid fa-list"></i>
+          </button>
+          <button onclick="openMkdirModal()" class="btn btn-secondary" style="padding:6px 12px;">
+            <i class="fa-solid fa-folder-plus"></i> Nova Pasta
+          </button>
+          <button onclick="openUploadModal()" class="btn btn-primary" style="padding:6px 12px;">
+            <i class="fa-solid fa-cloud-arrow-up"></i> Carregar Ficheiro
+          </button>
+          <button onclick="refreshDir()" class="btn btn-secondary" style="padding:6px 12px;" title="Atualizar">
+            <i class="fa-solid fa-rotate"></i>
+          </button>
+        </div>
+      </div>
 
-function toggleView(v) {
-  currentView = v;
-  document.getElementById('viewGrid').style.display = v === 'grid' ? 'grid' : 'none';
-  document.getElementById('viewList').style.display = v === 'list' ? 'block' : 'none';
-  document.getElementById('btnViewGrid').className = 'btn ' + (v === 'grid' ? 'btn-primary' : 'btn-secondary');
-  document.getElementById('btnViewList').className = 'btn ' + (v === 'list' ? 'btn-primary' : 'btn-secondary');
-}
+      <!-- Search Filter -->
+      <div style="margin-bottom:14px;">
+        <input type="text" id="filterInput" placeholder="Filtrar ficheiros e pastas por nome..."
+          oninput="onFilterChange(this.value)" style="margin-top:0;">
+      </div>
 
-function getFileIcon(name, isDir) {
-  if (isDir) return '<i class="fa-solid fa-folder" style="color:var(--yellow);"></i>';
-  const lower = name.toLowerCase();
-  if (lower.endsWith('.html') || lower.endsWith('.htm')) return '<i class="fa-solid fa-file-code" style="color:var(--primary);"></i>';
-  if (lower.endsWith('.css')) return '<i class="fa-solid fa-file-code" style="color:#38bdf8;"></i>';
-  if (lower.endsWith('.js')) return '<i class="fa-solid fa-file-code" style="color:#facc15;"></i>';
-  if (lower.endsWith('.json')) return '<i class="fa-solid fa-file-lines" style="color:#4ade80;"></i>';
-  if (lower.endsWith('.csv') || lower.endsWith('.txt') || lower.endsWith('.log')) return '<i class="fa-solid fa-file-lines" style="color:var(--muted);"></i>';
-  if (lower.endsWith('.woff2') || lower.endsWith('.woff') || lower.endsWith('.otf') || lower.endsWith('.ttf')) return '<i class="fa-solid fa-font" style="color:#c084fc;"></i>';
-  if (lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.svg') || lower.endsWith('.ico')) return '<i class="fa-solid fa-file-image" style="color:#f472b6;"></i>';
-  if (lower.endsWith('.zip') || lower.endsWith('.tar') || lower.endsWith('.gz')) return '<i class="fa-solid fa-file-zipper" style="color:#fb923c;"></i>';
-  return '<i class="fa-solid fa-file" style="color:var(--muted);"></i>';
-}
+      <!-- Views -->
+      <div id="viewGrid" class="explorer-grid"></div>
+      <div id="viewList" style="display:none;overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Nome</th>
+              <th>Tamanho</th>
+              <th>Tipo</th>
+              <th style="text-align:right;">Ações</th>
+            </tr>
+          </thead>
+          <tbody id="listTbody"></tbody>
+        </table>
+      </div>
+    </div>
 
-function updateBreadcrumbs(dir) {
-  const bar = document.getElementById('breadcrumbBar');
-  if (dir === '/' || dir === '') {
-    bar.innerHTML = '<span class="breadcrumb-item" onclick="changeDir(\'/\')"><i class="fa-solid fa-house"></i> Raiz (/)</span>';
-    return;
-  }
-  const parts = dir.split('/').filter(p => p.length > 0);
-  let html = '<span class="breadcrumb-item" onclick="changeDir(\'/\')"><i class="fa-solid fa-house"></i></span>';
-  let accum = '';
-  for (let i = 0; i < parts.length; i++) {
-    accum += '/' + parts[i];
-    html += '<span class="breadcrumb-sep">/</span>';
-    const isLast = (i === parts.length - 1);
-    if (isLast) {
-      html += '<strong style="color:var(--text);font-size:0.85rem;">' + parts[i] + '</strong>';
-    } else {
-      const p = accum;
-      html += '<span class="breadcrumb-item" onclick="changeDir(\'' + p + '\')">' + parts[i] + '</span>';
-    }
-  }
-  bar.innerHTML = html;
-}
+    <!-- Modal Nova Pasta -->
+    <div id="mkdirModal" class="modal-overlay">
+      <div class="modal-card">
+        <div class="card-title">
+          <span><i class="fa-solid fa-folder-plus"></i> Criar Nova Pasta</span>
+          <button onclick="closeModal('mkdirModal')" class="btn btn-secondary" style="padding:4px 8px;"><i
+              class="fa-solid fa-xmark"></i></button>
+        </div>
+        <form onsubmit="submitMkdir(event)">
+          <div class="form-group">
+            <label class="stat-label">Caminho Atual:</label>
+            <input type="text" id="mkdirCurrentPath" readonly style="background:#0b1120;color:var(--muted);">
+          </div>
+          <div class="form-group">
+            <label class="stat-label">Nome da Nova Pasta:</label>
+            <input type="text" id="mkdirName" required placeholder="ex: logs">
+          </div>
+          <div class="btn-group" style="justify-content:flex-end;margin-top:16px;">
+            <button type="button" onclick="closeModal('mkdirModal')" class="btn btn-secondary">Cancelar</button>
+            <button type="submit" class="btn btn-primary"><i class="fa-solid fa-folder-plus"></i> Criar Pasta</button>
+          </div>
+        </form>
+      </div>
+    </div>
 
-function refreshDir() {
-  fetch('/api/sd/list?dir=' + encodeURIComponent(currentDir))
-    .then(r => r.json())
-    .then(data => {
-      document.getElementById('cardType').innerText = data.card_type || 'SD';
-      document.getElementById('totalMb').innerText = (data.total_mb || 0) + ' MB';
-      document.getElementById('usedMb').innerText = (data.used_mb || 0) + ' MB';
-      document.getElementById('freeMb').innerText = (data.free_mb || 0) + ' MB';
-      currentDir = data.current_dir || currentDir;
-      updateBreadcrumbs(currentDir);
-      allEntries = data.files || [];
-      renderExplorer();
-    })
-    .catch(() => {
-      showToast('Erro ao listar diretório', true);
-    });
-}
+    <!-- Modal Upload de Ficheiro -->
+    <div id="uploadModal" class="modal-overlay">
+      <div class="modal-card">
+        <div class="card-title">
+          <span><i class="fa-solid fa-cloud-arrow-up"></i> Carregar Ficheiro para o Cartão SD</span>
+          <button onclick="closeModal('uploadModal')" class="btn btn-secondary" style="padding:4px 8px;"><i
+              class="fa-solid fa-xmark"></i></button>
+        </div>
+        <form onsubmit="submitUpload(event)">
+          <div class="form-group">
+            <label class="stat-label">Diretório de Destino:</label>
+            <input type="text" id="uploadDestDir" readonly style="background:#0b1120;color:var(--muted);">
+          </div>
+          <div class="form-group">
+            <label class="stat-label">Selecionar Ficheiro do Computador / Telemóvel:</label>
+            <input type="file" id="uploadFileInput" required style="padding:8px;background:#0f172a;">
+          </div>
+          <div id="uploadProgressContainer" style="display:none;margin-top:12px;">
+            <div class="stat-label" id="uploadProgressText">A enviar...</div>
+            <div class="progress-bg">
+              <div id="uploadProgressBar" class="progress-bar" style="width:0%;background:var(--primary);"></div>
+            </div>
+          </div>
+          <div class="btn-group" style="justify-content:flex-end;margin-top:16px;">
+            <button type="button" onclick="closeModal('uploadModal')" class="btn btn-secondary">Cancelar</button>
+            <button type="submit" id="uploadSubmitBtn" class="btn btn-primary"><i
+                class="fa-solid fa-cloud-arrow-up"></i> Iniciar Upload</button>
+          </div>
+        </form>
+      </div>
+    </div>
 
-function changeDir(dir) {
-  currentDir = dir;
-  refreshDir();
-}
+    <!-- Modal Visualizador / Editor -->
+    <div id="viewerModal" class="modal-overlay">
+      <div class="modal-card" style="max-width:800px;">
+        <div class="card-title">
+          <span id="viewerTitle"><i class="fa-solid fa-file-lines"></i> Ficheiro</span>
+          <button onclick="closeModal('viewerModal')" class="btn btn-secondary" style="padding:4px 8px;"><i
+              class="fa-solid fa-xmark"></i></button>
+        </div>
+        <textarea id="viewerContent" rows="18"
+          style="font-family:monospace;font-size:0.85rem;line-height:1.4;white-space:pre;"></textarea>
+        <div class="btn-group" style="justify-content:space-between;margin-top:14px;">
+          <span id="viewerPath" style="color:var(--muted);font-size:0.8rem;align-self:center;"></span>
+          <div class="btn-group">
+            <button type="button" onclick="closeModal('viewerModal')" class="btn btn-secondary">Fechar</button>
+            <button type="button" onclick="saveEditedFile()" class="btn btn-primary"><i
+                class="fa-solid fa-floppy-disk"></i> Guardar Alterações</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
-function onFilterChange(q) {
-  currentFilter = q.trim().toLowerCase();
-  renderExplorer();
-}
+    <script>
+      let currentDir = '/www/base';
+      let allEntries = [];
+      let currentFilter = '';
+      let currentView = 'grid'; // 'grid' | 'list'
 
-function renderExplorer() {
-  const filtered = allEntries.filter(e => {
-    if (!currentFilter) return true;
-    return e.name.toLowerCase().includes(currentFilter);
-  });
+      function toggleView(v) {
+        currentView = v;
+        document.getElementById('viewGrid').style.display = v === 'grid' ? 'grid' : 'none';
+        document.getElementById('viewList').style.display = v === 'list' ? 'block' : 'none';
+        document.getElementById('btnViewGrid').className = 'btn ' + (v === 'grid' ? 'btn-primary' : 'btn-secondary');
+        document.getElementById('btnViewList').className = 'btn ' + (v === 'list' ? 'btn-primary' : 'btn-secondary');
+      }
 
-  // Ordenar: pastas primeiro, depois ficheiros alfabeticamente
-  filtered.sort((a, b) => {
-    if (a.is_dir === b.is_dir) return a.name.localeCompare(b.name);
-    return a.is_dir ? -1 : 1;
-  });
+      function getFileIcon(name, isDir) {
+        if (isDir) return '<i class="fa-solid fa-folder" style="color:var(--yellow);"></i>';
+        const lower = name.toLowerCase();
+        if (lower.endsWith('.html') || lower.endsWith('.htm')) return '<i class="fa-solid fa-file-code" style="color:var(--primary);"></i>';
+        if (lower.endsWith('.css')) return '<i class="fa-solid fa-file-code" style="color:#38bdf8;"></i>';
+        if (lower.endsWith('.js')) return '<i class="fa-solid fa-file-code" style="color:#facc15;"></i>';
+        if (lower.endsWith('.json')) return '<i class="fa-solid fa-file-lines" style="color:#4ade80;"></i>';
+        if (lower.endsWith('.csv') || lower.endsWith('.txt') || lower.endsWith('.log')) return '<i class="fa-solid fa-file-lines" style="color:var(--muted);"></i>';
+        if (lower.endsWith('.woff2') || lower.endsWith('.woff') || lower.endsWith('.otf') || lower.endsWith('.ttf')) return '<i class="fa-solid fa-font" style="color:#c084fc;"></i>';
+        if (lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.svg') || lower.endsWith('.ico')) return '<i class="fa-solid fa-file-image" style="color:#f472b6;"></i>';
+        if (lower.endsWith('.zip') || lower.endsWith('.tar') || lower.endsWith('.gz')) return '<i class="fa-solid fa-file-zipper" style="color:#fb923c;"></i>';
+        return '<i class="fa-solid fa-file" style="color:var(--muted);"></i>';
+      }
 
-  // Render Grelha
-  const gridEl = document.getElementById('viewGrid');
-  let gridHtml = '';
+      function updateBreadcrumbs(dir) {
+        const bar = document.getElementById('breadcrumbBar');
+        if (dir === '/' || dir === '') {
+          bar.innerHTML = '<span class="breadcrumb-item" onclick="changeDir(\'/\')"><i class="fa-solid fa-house"></i> Raiz (/)</span>';
+          return;
+        }
+        const parts = dir.split('/').filter(p => p.length > 0);
+        let html = '<span class="breadcrumb-item" onclick="changeDir(\'/\')"><i class="fa-solid fa-house"></i></span>';
+        let accum = '';
+        for (let i = 0; i < parts.length; i++) {
+          accum += '/' + parts[i];
+          html += '<span class="breadcrumb-sep">/</span>';
+          const isLast = (i === parts.length - 1);
+          if (isLast) {
+            html += '<strong style="color:var(--text);font-size:0.85rem;">' + parts[i] + '</strong>';
+          } else {
+            const p = accum;
+            html += '<span class="breadcrumb-item" onclick="changeDir(\'' + p + '\')">' + parts[i] + '</span>';
+          }
+        }
+        bar.innerHTML = html;
+      }
 
-  // Se não estiver na raiz, adiciona item para subir
-  if (currentDir !== '/' && !currentFilter) {
-    const parentDir = currentDir.substring(0, currentDir.lastIndexOf('/')) || '/';
-    gridHtml += '<div class="explorer-card" onclick="changeDir(\'' + parentDir + '\')">';
-    gridHtml += '<div class="explorer-card-icon" style="color:var(--primary);"><i class="fa-solid fa-arrow-turn-up"></i></div>';
-    gridHtml += '<div class="explorer-card-name">.. (Subir)</div>';
-    gridHtml += '<div class="explorer-card-size">Diretório</div>';
-    gridHtml += '</div>';
-  }
+      function refreshDir() {
+        fetch('/api/sd/list?dir=' + encodeURIComponent(currentDir))
+          .then(r => r.json())
+          .then(data => {
+            document.getElementById('cardType').innerText = data.card_type || 'SD';
+            document.getElementById('totalMb').innerText = (data.total_mb || 0) + ' MB';
+            document.getElementById('usedMb').innerText = (data.used_mb || 0) + ' MB';
+            document.getElementById('freeMb').innerText = (data.free_mb || 0) + ' MB';
+            currentDir = data.current_dir || currentDir;
+            updateBreadcrumbs(currentDir);
+            allEntries = data.files || [];
+            renderExplorer();
+          })
+          .catch(() => {
+            showToast('Erro ao listar diretório', true);
+          });
+      }
 
-  filtered.forEach(e => {
-    gridHtml += '<div class="explorer-card" onclick="onItemClick(\'' + e.path + '\',' + e.is_dir + ')">';
-    gridHtml += '<div class="explorer-card-icon">' + getFileIcon(e.name, e.is_dir) + '</div>';
-    gridHtml += '<div class="explorer-card-name" title="' + e.name + '">' + e.name + '</div>';
-    gridHtml += '<div class="explorer-card-size">' + (e.is_dir ? 'Pasta' : formatBytes(e.size)) + '</div>';
-    gridHtml += '<div class="explorer-card-actions" onclick="event.stopPropagation()">';
-    if (!e.is_dir) {
-      gridHtml += '<button onclick="previewFile(\'' + e.path + '\')" title="Ver / Editar"><i class="fa-solid fa-file-pen"></i></button>';
-      gridHtml += '<button onclick="downloadFile(\'' + e.path + '\')" title="Descarregar"><i class="fa-solid fa-download"></i></button>';
-    }
-    gridHtml += '<button onclick="deleteItem(\'' + e.path + '\',' + e.is_dir + ')" title="Eliminar" style="background:#450a0a;color:#fecaca;"><i class="fa-solid fa-trash-can"></i></button>';
-    gridHtml += '</div>';
-    gridHtml += '</div>';
-  });
+      function changeDir(dir) {
+        currentDir = dir;
+        refreshDir();
+      }
 
-  if (filtered.length === 0) {
-    gridHtml = '<div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--muted);"><i class="fa-solid fa-folder-open" style="font-size:2rem;margin-bottom:8px;display:block;"></i>Esta pasta está vazia</div>';
-  }
-  gridEl.innerHTML = gridHtml;
+      function onFilterChange(q) {
+        currentFilter = q.trim().toLowerCase();
+        renderExplorer();
+      }
 
-  // Render Lista
-  const listEl = document.getElementById('listTbody');
-  let listHtml = '';
-  filtered.forEach(e => {
-    listHtml += '<tr style="cursor:pointer;" onclick="onItemClick(\'' + e.path + '\',' + e.is_dir + ')">';
-    listHtml += '<td><span style="margin-right:8px;">' + getFileIcon(e.name, e.is_dir) + '</span><strong>' + e.name + '</strong></td>';
-    listHtml += '<td>' + (e.is_dir ? '--' : formatBytes(e.size)) + '</td>';
-    listHtml += '<td>' + (e.is_dir ? 'Diretório' : 'Ficheiro') + '</td>';
-    listHtml += '<td style="text-align:right;" onclick="event.stopPropagation()">';
-    if (!e.is_dir) {
-      listHtml += '<button onclick="previewFile(\'' + e.path + '\')" class="btn btn-secondary" style="padding:4px 8px;font-size:0.75rem;margin-right:4px;"><i class="fa-solid fa-file-pen"></i></button>';
-      listHtml += '<button onclick="downloadFile(\'' + e.path + '\')" class="btn btn-secondary" style="padding:4px 8px;font-size:0.75rem;margin-right:4px;"><i class="fa-solid fa-download"></i></button>';
-    }
-    listHtml += '<button onclick="deleteItem(\'' + e.path + '\',' + e.is_dir + ')" class="btn btn-danger" style="padding:4px 8px;font-size:0.75rem;"><i class="fa-solid fa-trash-can"></i></button>';
-    listHtml += '</td></tr>';
-  });
-  if (filtered.length === 0) {
-    listHtml = '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--muted);">Esta pasta está vazia</td></tr>';
-  }
-  listEl.innerHTML = listHtml;
-}
+      function renderExplorer() {
+        const filtered = allEntries.filter(e => {
+          if (!currentFilter) return true;
+          return e.name.toLowerCase().includes(currentFilter);
+        });
 
-function onItemClick(path, isDir) {
-  if (isDir) {
-    changeDir(path);
-  } else {
-    previewFile(path);
-  }
-}
+        // Ordenar: pastas primeiro, depois ficheiros alfabeticamente
+        filtered.sort((a, b) => {
+          if (a.is_dir === b.is_dir) return a.name.localeCompare(b.name);
+          return a.is_dir ? -1 : 1;
+        });
 
-function previewFile(path) {
-  fetch('/api/sd/read?path=' + encodeURIComponent(path))
-    .then(r => r.text())
-    .then(content => {
-      document.getElementById('viewerPath').innerText = path;
-      document.getElementById('viewerTitle').innerHTML = '<i class="fa-solid fa-file-lines"></i> ' + path.split('/').pop();
-      document.getElementById('viewerContent').value = content;
-      document.getElementById('viewerModal').style.display = 'flex';
-    })
-    .catch(() => showToast('Erro ao ler ficheiro', true));
-}
+        // Render Grelha
+        const gridEl = document.getElementById('viewGrid');
+        let gridHtml = '';
 
-function saveEditedFile() {
-  const path = document.getElementById('viewerPath').innerText;
-  const content = document.getElementById('viewerContent').value;
-  showToast('A gravar ficheiro...');
+        // Se não estiver na raiz, adiciona item para subir
+        if (currentDir !== '/' && !currentFilter) {
+          const parentDir = currentDir.substring(0, currentDir.lastIndexOf('/')) || '/';
+          gridHtml += '<div class="explorer-card" onclick="changeDir(\'' + parentDir + '\')">';
+          gridHtml += '<div class="explorer-card-icon" style="color:var(--primary);"><i class="fa-solid fa-arrow-turn-up"></i></div>';
+          gridHtml += '<div class="explorer-card-name">.. (Subir)</div>';
+          gridHtml += '<div class="explorer-card-size">Diretório</div>';
+          gridHtml += '</div>';
+        }
 
-  fetch('/api/sd/save', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path: path, content: content })
-  })
-  .then(r => r.json())
-  .then(res => {
-    if (res.success) {
-      showToast('Ficheiro guardado com sucesso!');
-      closeModal('viewerModal');
-      refreshDir();
-    } else {
-      showToast(res.msg || 'Erro ao gravar', true);
-    }
-  });
-}
+        filtered.forEach(e => {
+          gridHtml += '<div class="explorer-card" onclick="onItemClick(\'' + e.path + '\',' + e.is_dir + ')">';
+          gridHtml += '<div class="explorer-card-icon">' + getFileIcon(e.name, e.is_dir) + '</div>';
+          gridHtml += '<div class="explorer-card-name" title="' + e.name + '">' + e.name + '</div>';
+          gridHtml += '<div class="explorer-card-size">' + (e.is_dir ? 'Pasta' : formatBytes(e.size)) + '</div>';
+          gridHtml += '<div class="explorer-card-actions" onclick="event.stopPropagation()">';
+          if (!e.is_dir) {
+            gridHtml += '<button onclick="previewFile(\'' + e.path + '\')" title="Ver / Editar"><i class="fa-solid fa-file-pen"></i></button>';
+            gridHtml += '<button onclick="downloadFile(\'' + e.path + '\')" title="Descarregar"><i class="fa-solid fa-download"></i></button>';
+          }
+          gridHtml += '<button onclick="deleteItem(\'' + e.path + '\',' + e.is_dir + ')" title="Eliminar" style="background:#450a0a;color:#fecaca;"><i class="fa-solid fa-trash-can"></i></button>';
+          gridHtml += '</div>';
+          gridHtml += '</div>';
+        });
 
-function downloadFile(path) {
-  window.open('/api/sd/download?path=' + encodeURIComponent(path), '_blank');
-}
+        if (filtered.length === 0) {
+          gridHtml = '<div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--muted);"><i class="fa-solid fa-folder-open" style="font-size:2rem;margin-bottom:8px;display:block;"></i>Esta pasta está vazia</div>';
+        }
+        gridEl.innerHTML = gridHtml;
 
-function deleteItem(path, isDir) {
-  const typeStr = isDir ? 'diretório e todo o seu conteúdo' : 'ficheiro';
-  if (!confirm('Tem a certeza que deseja eliminar o ' + typeStr + ':\n' + path + ' ?')) {
-    return;
-  }
-  showToast('A eliminar...');
+        // Render Lista
+        const listEl = document.getElementById('listTbody');
+        let listHtml = '';
+        filtered.forEach(e => {
+          listHtml += '<tr style="cursor:pointer;" onclick="onItemClick(\'' + e.path + '\',' + e.is_dir + ')">';
+          listHtml += '<td><span style="margin-right:8px;">' + getFileIcon(e.name, e.is_dir) + '</span><strong>' + e.name + '</strong></td>';
+          listHtml += '<td>' + (e.is_dir ? '--' : formatBytes(e.size)) + '</td>';
+          listHtml += '<td>' + (e.is_dir ? 'Diretório' : 'Ficheiro') + '</td>';
+          listHtml += '<td style="text-align:right;" onclick="event.stopPropagation()">';
+          if (!e.is_dir) {
+            listHtml += '<button onclick="previewFile(\'' + e.path + '\')" class="btn btn-secondary" style="padding:4px 8px;font-size:0.75rem;margin-right:4px;"><i class="fa-solid fa-file-pen"></i></button>';
+            listHtml += '<button onclick="downloadFile(\'' + e.path + '\')" class="btn btn-secondary" style="padding:4px 8px;font-size:0.75rem;margin-right:4px;"><i class="fa-solid fa-download"></i></button>';
+          }
+          listHtml += '<button onclick="deleteItem(\'' + e.path + '\',' + e.is_dir + ')" class="btn btn-danger" style="padding:4px 8px;font-size:0.75rem;"><i class="fa-solid fa-trash-can"></i></button>';
+          listHtml += '</td></tr>';
+        });
+        if (filtered.length === 0) {
+          listHtml = '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--muted);">Esta pasta está vazia</td></tr>';
+        }
+        listEl.innerHTML = listHtml;
+      }
 
-  fetch('/api/sd/delete', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path: path, is_dir: isDir })
-  })
-  .then(r => r.json())
-  .then(res => {
-    if (res.success) {
-      showToast('Eliminado com sucesso!');
-      refreshDir();
-    } else {
-      showToast(res.msg || 'Erro ao eliminar', true);
-    }
-  });
-}
+      function onItemClick(path, isDir) {
+        if (isDir) {
+          changeDir(path);
+        } else {
+          previewFile(path);
+        }
+      }
 
-function openMkdirModal() {
-  document.getElementById('mkdirCurrentPath').value = currentDir;
-  document.getElementById('mkdirName').value = '';
-  document.getElementById('mkdirModal').style.display = 'flex';
-}
+      function previewFile(path) {
+        fetch('/api/sd/read?path=' + encodeURIComponent(path))
+          .then(r => r.text())
+          .then(content => {
+            document.getElementById('viewerPath').innerText = path;
+            document.getElementById('viewerTitle').innerHTML = '<i class="fa-solid fa-file-lines"></i> ' + path.split('/').pop();
+            document.getElementById('viewerContent').value = content;
+            document.getElementById('viewerModal').style.display = 'flex';
+          })
+          .catch(() => showToast('Erro ao ler ficheiro', true));
+      }
 
-function submitMkdir(e) {
-  e.preventDefault();
-  const name = document.getElementById('mkdirName').value.trim();
-  if (!name) return;
-  const fullPath = (currentDir === '/' ? '' : currentDir) + '/' + name;
+      function saveEditedFile() {
+        const path = document.getElementById('viewerPath').innerText;
+        const content = document.getElementById('viewerContent').value;
+        showToast('A gravar ficheiro...');
 
-  fetch('/api/sd/mkdir', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path: fullPath })
-  })
-  .then(r => r.json())
-  .then(res => {
-    if (res.success) {
-      showToast('Pasta criada com sucesso!');
-      closeModal('mkdirModal');
-      refreshDir();
-    } else {
-      showToast(res.msg || 'Erro ao criar pasta', true);
-    }
-  });
-}
+        fetch('/api/sd/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: path, content: content })
+        })
+          .then(r => r.json())
+          .then(res => {
+            if (res.success) {
+              showToast('Ficheiro guardado com sucesso!');
+              closeModal('viewerModal');
+              refreshDir();
+            } else {
+              showToast(res.msg || 'Erro ao gravar', true);
+            }
+          });
+      }
 
-function openUploadModal() {
-  document.getElementById('uploadDestDir').value = currentDir;
-  document.getElementById('uploadFileInput').value = '';
-  document.getElementById('uploadProgressContainer').style.display = 'none';
-  document.getElementById('uploadSubmitBtn').disabled = false;
-  document.getElementById('uploadModal').style.display = 'flex';
-}
+      function downloadFile(path) {
+        window.open('/api/sd/download?path=' + encodeURIComponent(path), '_blank');
+      }
 
-function submitUpload(e) {
-  e.preventDefault();
-  const fileInput = document.getElementById('uploadFileInput');
-  if (!fileInput.files || fileInput.files.length === 0) return;
-  const file = fileInput.files[0];
+      function deleteItem(path, isDir) {
+        const typeStr = isDir ? 'diretório e todo o seu conteúdo' : 'ficheiro';
+        if (!confirm('Tem a certeza que deseja eliminar o ' + typeStr + ':\n' + path + ' ?')) {
+          return;
+        }
+        showToast('A eliminar...');
 
-  const pContainer = document.getElementById('uploadProgressContainer');
-  const pBar = document.getElementById('uploadProgressBar');
-  const pText = document.getElementById('uploadProgressText');
-  const btn = document.getElementById('uploadSubmitBtn');
+        fetch('/api/sd/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: path, is_dir: isDir })
+        })
+          .then(r => r.json())
+          .then(res => {
+            if (res.success) {
+              showToast('Eliminado com sucesso!');
+              refreshDir();
+            } else {
+              showToast(res.msg || 'Erro ao eliminar', true);
+            }
+          });
+      }
 
-  pContainer.style.display = 'block';
-  btn.disabled = true;
+      function openMkdirModal() {
+        document.getElementById('mkdirCurrentPath').value = currentDir;
+        document.getElementById('mkdirName').value = '';
+        document.getElementById('mkdirModal').style.display = 'flex';
+      }
 
-  const formData = new FormData();
-  formData.append('file', file);
+      function submitMkdir(e) {
+        e.preventDefault();
+        const name = document.getElementById('mkdirName').value.trim();
+        if (!name) return;
+        const fullPath = (currentDir === '/' ? '' : currentDir) + '/' + name;
 
-  const xhr = new XMLHttpRequest();
-  const uploadUrl = '/api/sd/upload?dir=' + encodeURIComponent(currentDir);
-  xhr.open('POST', uploadUrl, true);
+        fetch('/api/sd/mkdir', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: fullPath })
+        })
+          .then(r => r.json())
+          .then(res => {
+            if (res.success) {
+              showToast('Pasta criada com sucesso!');
+              closeModal('mkdirModal');
+              refreshDir();
+            } else {
+              showToast(res.msg || 'Erro ao criar pasta', true);
+            }
+          });
+      }
 
-  xhr.upload.onprogress = function(event) {
-    if (event.lengthComputable) {
-      const pct = Math.round((event.loaded / event.total) * 100);
-      pBar.style.width = pct + '%';
-      pText.innerText = 'A enviar: ' + pct + '% (' + formatBytes(event.loaded) + ' de ' + formatBytes(event.total) + ')';
-    }
-  };
+      function openUploadModal() {
+        document.getElementById('uploadDestDir').value = currentDir;
+        document.getElementById('uploadFileInput').value = '';
+        document.getElementById('uploadProgressContainer').style.display = 'none';
+        document.getElementById('uploadSubmitBtn').disabled = false;
+        document.getElementById('uploadModal').style.display = 'flex';
+      }
 
-  xhr.onload = function() {
-    btn.disabled = false;
-    if (xhr.status === 200) {
-      showToast('Upload concluído com sucesso!');
-      closeModal('uploadModal');
-      refreshDir();
-    } else {
-      showToast('Erro no upload: ' + xhr.responseText, true);
-    }
-  };
+      function submitUpload(e) {
+        e.preventDefault();
+        const fileInput = document.getElementById('uploadFileInput');
+        if (!fileInput.files || fileInput.files.length === 0) return;
+        const file = fileInput.files[0];
 
-  xhr.onerror = function() {
-    btn.disabled = false;
-    showToast('Falha na ligação durante o upload', true);
-  };
+        const pContainer = document.getElementById('uploadProgressContainer');
+        const pBar = document.getElementById('uploadProgressBar');
+        const pText = document.getElementById('uploadProgressText');
+        const btn = document.getElementById('uploadSubmitBtn');
 
-  xhr.send(formData);
-}
+        pContainer.style.display = 'block';
+        btn.disabled = true;
 
-function closeModal(id) {
-  document.getElementById(id).style.display = 'none';
-}
+        const formData = new FormData();
+        formData.append('file', file);
 
-document.addEventListener('DOMContentLoaded', () => {
-  toggleView('grid');
-  refreshDir();
-});
-</script>
+        const xhr = new XMLHttpRequest();
+        const uploadUrl = '/api/sd/upload?dir=' + encodeURIComponent(currentDir);
+        xhr.open('POST', uploadUrl, true);
+
+        xhr.upload.onprogress = function (event) {
+          if (event.lengthComputable) {
+            const pct = Math.round((event.loaded / event.total) * 100);
+            pBar.style.width = pct + '%';
+            pText.innerText = 'A enviar: ' + pct + '% (' + formatBytes(event.loaded) + ' de ' + formatBytes(event.total) + ')';
+          }
+        };
+
+        xhr.onload = function () {
+          btn.disabled = false;
+          if (xhr.status === 200) {
+            showToast('Upload concluído com sucesso!');
+            closeModal('uploadModal');
+            refreshDir();
+          } else {
+            showToast('Erro no upload: ' + xhr.responseText, true);
+          }
+        };
+
+        xhr.onerror = function () {
+          btn.disabled = false;
+          showToast('Falha na ligação durante o upload', true);
+        };
+
+        xhr.send(formData);
+      }
+
+      function closeModal(id) {
+        document.getElementById(id).style.display = 'none';
+      }
+
+      document.addEventListener('DOMContentLoaded', () => {
+        toggleView('grid');
+        refreshDir();
+      });
+    </script>
 
   </main>
 
@@ -492,4 +507,5 @@ document.addEventListener('DOMContentLoaded', () => {
     WindDragons Telemetry Base Station &copy; 2026 &bull; MicroSD /www/base/ Frontend
   </footer>
 </body>
+
 </html>

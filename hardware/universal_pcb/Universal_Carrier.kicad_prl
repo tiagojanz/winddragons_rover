@@ -1,6 +1,6 @@
 {
   "board": {
-    "active_layer": 2,
+    "active_layer": 31,
     "active_layer_preset": "",
     "appearance": {
       "color_theme": "default",
@@ -58,7 +58,7 @@
       "board_outline_area",
       "ly_points"
     ],
-    "visible_layers": "ffffffff_ffffffff_ffffffff_ffffffff",
+    "visible_layers": "ffffffff_ffffffff_ffffffff_77ffffff",
     "zone_display_mode": 1
   },
   "git": {

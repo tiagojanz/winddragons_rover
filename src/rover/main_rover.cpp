@@ -256,6 +256,13 @@ void processIncomingPacket(uint8_t *buffer, size_t length) {
 
 // Navigation & Course correction controller
 void updateAutonomousNavigation() {
+    // Only run if an autonomous navigation mode is active
+    if (currentMotorStatus != MOTOR_HOLDING_STATION && 
+        currentMotorStatus != MOTOR_MOVING_TO_TARGET && 
+        currentMotorStatus != MOTOR_RTL) {
+        return;
+    }
+
     if (!gps.hasFix()) {
         actuators.stopMotor();
         actuators.centerRudder();
@@ -321,6 +328,91 @@ void updateAutonomousNavigation() {
             // Forward speed: slow down for sharp turns
             int8_t throttle = (abs(headingError) > 60.0) ? 25 : 50;
             actuators.setThrottle(throttle);
+        }
+    }
+}
+
+// Process Serial CLI Commands for direct debugging and actuator testing
+void handleSerialCommands() {
+    if (Serial.available()) {
+        String cmd = Serial.readStringUntil('\n');
+        cmd.trim();
+        if (cmd.length() == 0) return;
+
+        Serial.printf("[CLI] Comando recebido: '%s'\n", cmd.c_str());
+
+        if (cmd.equalsIgnoreCase("largar") || cmd.equalsIgnoreCase("soltar") || cmd == "90") {
+            actuators.liftRack();
+        } else if (cmd.equalsIgnoreCase("travar") || cmd == "0") {
+            actuators.engageRack();
+        } else if (cmd.equalsIgnoreCase("relax") || cmd.equalsIgnoreCase("desligar") || cmd.equalsIgnoreCase("solto")) {
+            actuators.relaxRack();
+        } else if (cmd.startsWith("leme ") || cmd.startsWith("l ")) {
+            int pos = cmd.indexOf(' ');
+            int val = cmd.substring(pos + 1).toInt();
+            actuators.setRudder(val);
+        } else if (cmd.startsWith("motor ") || cmd.startsWith("m ")) {
+            int pos = cmd.indexOf(' ');
+            int val = cmd.substring(pos + 1).toInt();
+            actuators.setThrottle(val);
+        } else if (cmd.startsWith("guincho ") || cmd.startsWith("g ")) {
+            int pos = cmd.indexOf(' ');
+            String arg = cmd.substring(pos + 1);
+            arg.trim();
+            if (arg.equalsIgnoreCase("sobe") || arg.equalsIgnoreCase("enrolar") || arg.equalsIgnoreCase("puxar") || arg.equalsIgnoreCase("on") || arg == "1") {
+                actuators.jogWinch(1);
+            } else if (arg.equalsIgnoreCase("desce") || arg.equalsIgnoreCase("desenrolar") || arg.equalsIgnoreCase("largar") || arg == "-1") {
+                actuators.jogWinch(-1);
+            } else if (arg.equalsIgnoreCase("stop") || arg.equalsIgnoreCase("parar") || arg.equalsIgnoreCase("off") || arg.equalsIgnoreCase("corte") || arg == "0") {
+                actuators.stopWinch();
+            } else {
+                int val = arg.toInt();
+                if (val >= 800 && val <= 2200) {
+                    actuators.setWinchMicroseconds(val);
+                } else if (val > 0) {
+                    actuators.jogWinch(1);
+                } else if (val < 0) {
+                    actuators.jogWinch(-1);
+                } else {
+                    actuators.stopWinch();
+                }
+            }
+        } else if (cmd.equalsIgnoreCase("off") || cmd.equalsIgnoreCase("corte") || cmd.equalsIgnoreCase("desligar guincho")) {
+            actuators.stopWinch();
+        } else if (cmd.startsWith("neutro ") || cmd.startsWith("n ")) {
+            int pos = cmd.indexOf(' ');
+            int val = cmd.substring(pos + 1).toInt();
+            actuators.setWinchNeutral(val);
+        } else if (cmd.startsWith("ancora ") || cmd.startsWith("a ")) {
+            int pos = cmd.indexOf(' ');
+            int val = cmd.substring(pos + 1).toInt();
+            actuators.setRackAngle(val);
+        } else if (cmd.equalsIgnoreCase("status")) {
+            Serial.printf("[CLI] Trinco: %s | Leme: %d%% | Motor: %d%% | Guincho: %d us (Neutro: %d us) | Âncora: %s (%d cm)\n", 
+                          actuators.isRackReleased() ? "SOLTO" : "TRAVADO",
+                          actuators.getRudder(), actuators.getThrottle(),
+                          actuators.getWinchPulseUs(), actuators.getWinchNeutral(),
+                          get_anchor_status_str(actuators.getAnchorStatus()),
+                          actuators.getAnchorDepthCm());
+        } else if (cmd.equalsIgnoreCase("help") || cmd == "?") {
+            Serial.println("[CLI] Comandos Disponíveis:");
+            Serial.println("  - leme < -100 a 100 >   : Move o leme (ex: leme -50, leme 0, leme 75)");
+            Serial.println("  - motor < -100 a 100 >  : Aciona o motor ESC");
+            Serial.println("  - guincho <1000 a 2000> : Pulso direto em us (ex: guincho 1515)");
+            Serial.println("  - neutro <1000 a 2000>  : Memoriza novo ponto neutro calibrado (ex: neutro 1515)");
+            Serial.println("  - guincho sobe / desce / parar : Controlo contínuo do guincho (GPIO 19)");
+            Serial.println("  - ancora < 0 a 180 >    : Define ângulo do trinco da âncora (GPIO 23)");
+            Serial.println("  - largar / soltar / 90  : Levanta o trinco da âncora (90°)");
+            Serial.println("  - travar / 0            : Trava o trinco da âncora (0°)");
+            Serial.println("  - relax / desligar      : Desativa o pulso PWM (evita aquecimento)");
+            Serial.println("  - status                : Mostra o estado de todos os atuadores");
+        } else {
+            int val = cmd.toInt();
+            if (val > 0 && val <= 180) {
+                actuators.setRackAngle(val);
+            } else {
+                Serial.println("[CLI] Comando não reconhecido. Escreva 'help' para ver lista.");
+            }
         }
     }
 }
@@ -460,6 +552,9 @@ void loop() {
     // 0. Handle HTTP Web Server requests
     webServer.handleClient();
 
+    // 0.1 Process Serial CLI debugging commands
+    handleSerialCommands();
+
     // 1. Screen Navigation Button (Instant Hardware Interrupt)
     bool forceDisplay = false;
     if (flagPageChange) {
@@ -508,6 +603,7 @@ void loop() {
     }
 #endif
 
+#if ENABLE_LORA
     // 6. Failsafe Watchdog: In manual mode, stop if signal lost
     if (currentMotorStatus == MOTOR_MANUAL && (now - lastControlReceivedTime > FAILSAFE_TIMEOUT_MS)) {
         actuators.stopMotor();
@@ -517,6 +613,7 @@ void loop() {
         setRgbColor(40, 10, 0); // Orange/Red warning
         Serial.println("[ROVER] FAILSAFE TRIGGERED! Signal lost -> Motor stopped.");
     }
+#endif
 
     // 7. Handle Visual LED Status / Strobe Alarm
     if (actuators.isAlarmActive()) {

@@ -40,7 +40,7 @@ body {
   position: sticky;
   top: 0;
   z-index: 100;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .brand {
@@ -235,7 +235,8 @@ table {
   margin-top: 10px;
 }
 
-th, td {
+th,
+td {
   padding: 10px 12px;
   text-align: left;
   border-bottom: 1px solid var(--card-border);
@@ -252,7 +253,9 @@ tr:hover td {
 }
 
 /* Inputs & Form Controls */
-input, select, textarea {
+input,
+select,
+textarea {
   width: 100%;
   padding: 10px 12px;
   background: #0f172a;
@@ -264,7 +267,9 @@ input, select, textarea {
   outline: none;
 }
 
-input:focus, select:focus, textarea:focus {
+input:focus,
+select:focus,
+textarea:focus {
   border-color: var(--primary);
 }
 
@@ -425,7 +430,7 @@ input:focus, select:focus, textarea:focus {
   max-width: 600px;
   width: 100%;
   padding: 24px;
-  box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
 }
 
 /* Toast */
@@ -439,20 +444,22 @@ input:focus, select:focus, textarea:focus {
   font-size: 0.875rem;
   display: none;
   z-index: 300;
-  box-shadow: 0 10px 15px -3px rgba(0,0,0,0.4);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
 }
 
 /* Font Awesome 6 Pro Solid (carregada do Cartão SD) */
 @font-face {
   font-family: 'Font Awesome 6 Pro';
   src: url('/system/fonts/Font%20Awesome%206%20Pro-Solid-900.woff2') format('woff2'),
-       url('/system/fonts/Font%20Awesome%206%20Pro-Solid-900.otf') format('opentype');
+    url('/system/fonts/Font%20Awesome%206%20Pro-Solid-900.otf') format('opentype');
   font-weight: 900;
   font-style: normal;
   font-display: block;
 }
 
-.fa, .fas, .fa-solid {
+.fa,
+.fas,
+.fa-solid {
   font-family: 'Font Awesome 6 Pro' !important;
   font-weight: 900;
   font-style: normal;
@@ -465,71 +472,283 @@ input:focus, select:focus, textarea:focus {
   -moz-osx-font-smoothing: grayscale;
 }
 
-.btn i, .nav-item i, .brand i { pointer-events: none; }
+.btn i,
+.nav-item i,
+.brand i {
+  pointer-events: none;
+}
 
-.fa-robot:before { content: '\f544'; }
-.fa-wifi:before { content: '\f1eb'; }
-.fa-gear:before, .fa-cog:before { content: '\f013'; }
-.fa-folder:before { content: '\f07b'; }
-.fa-folder-open:before { content: '\f07c'; }
-.fa-folder-plus:before { content: '\f65e'; }
-.fa-location-dot:before, .fa-map-marker-alt:before { content: '\f3c5'; }
-.fa-battery-full:before { content: '\f240'; }
-.fa-battery-three-quarters:before { content: '\f241'; }
-.fa-battery-half:before { content: '\f242'; }
-.fa-battery-quarter:before { content: '\f243'; }
-.fa-battery-empty:before { content: '\f244'; }
-.fa-gamepad:before { content: '\f11b'; }
-.fa-floppy-disk:before, .fa-save:before { content: '\f0c7'; }
-.fa-sun:before { content: '\f185'; }
-.fa-moon:before { content: '\f186'; }
-.fa-cloud-sun:before { content: '\f6c4'; }
-.fa-bolt:before { content: '\f0e7'; }
-.fa-tower-broadcast:before, .fa-broadcast-tower:before { content: '\f519'; }
-.fa-eye:before { content: '\f06e'; }
-.fa-eye-slash:before { content: '\f070'; }
-.fa-rotate:before, .fa-sync:before { content: '\f021'; }
-.fa-arrow-right:before { content: '\f061'; }
-.fa-arrow-left:before { content: '\f060'; }
-.fa-arrow-up:before { content: '\f062'; }
-.fa-arrow-turn-up:before, .fa-level-up-alt:before { content: '\f3bf'; }
-.fa-circle-check:before { content: '\f058'; }
-.fa-circle-xmark:before { content: '\f057'; }
-.fa-circle:before { content: '\f111'; }
-.fa-star:before { content: '\f005'; }
-.fa-plug:before { content: '\f1e6'; }
-.fa-network-wired:before { content: '\f6ff'; }
-.fa-map:before { content: '\f279'; }
-.fa-compass:before { content: '\f14e'; }
-.fa-gauge-high:before, .fa-tachometer-alt:before { content: '\f625'; }
-.fa-anchor:before { content: '\f13d'; }
-.fa-stop:before { content: '\f04d'; }
-.fa-hand:before { content: '\f256'; }
-.fa-lock:before { content: '\f023'; }
-.fa-lock-open:before { content: '\f3c1'; }
-.fa-house:before, .fa-home:before { content: '\f015'; }
-.fa-bell:before { content: '\f0f3'; }
-.fa-triangle-exclamation:before { content: '\f071'; }
-.fa-trash-can:before, .fa-trash:before { content: '\f2ed'; }
-.fa-file:before { content: '\f15b'; }
-.fa-file-lines:before { content: '\f15c'; }
-.fa-file-pen:before { content: '\f31c'; }
-.fa-download:before { content: '\f019'; }
-.fa-upload:before { content: '\f093'; }
-.fa-cloud-arrow-up:before { content: '\f0ee'; }
-.fa-magnifying-glass:before, .fa-search:before { content: '\f002'; }
-.fa-microchip:before { content: '\f2db'; }
-.fa-sd-card:before { content: '\f7c2'; }
-.fa-signal:before { content: '\f012'; }
-.fa-satellite:before { content: '\f7bf'; }
-.fa-sliders:before { content: '\f1de'; }
-.fa-xmark:before { content: '\f00d'; }
-.fa-plus:before { content: '\2b'; }
-.fa-font:before { content: '\f031'; }
-.fa-file-code:before { content: '\f1c9'; }
-.fa-file-image:before { content: '\f1c5'; }
-.fa-file-zipper:before { content: '\f1c6'; }
-.fa-table-cells:before, .fa-th:before { content: '\f00a'; }
-.fa-list:before { content: '\f03a'; }
-.fa-copy:before { content: '\f0c5'; }
-.fa-filter:before { content: '\f0b0'; }
+.fa-robot:before {
+  content: '\f544';
+}
+
+.fa-wifi:before {
+  content: '\f1eb';
+}
+
+.fa-gear:before,
+.fa-cog:before {
+  content: '\f013';
+}
+
+.fa-folder:before {
+  content: '\f07b';
+}
+
+.fa-folder-open:before {
+  content: '\f07c';
+}
+
+.fa-folder-plus:before {
+  content: '\f65e';
+}
+
+.fa-location-dot:before,
+.fa-map-marker-alt:before {
+  content: '\f3c5';
+}
+
+.fa-battery-full:before {
+  content: '\f240';
+}
+
+.fa-battery-three-quarters:before {
+  content: '\f241';
+}
+
+.fa-battery-half:before {
+  content: '\f242';
+}
+
+.fa-battery-quarter:before {
+  content: '\f243';
+}
+
+.fa-battery-empty:before {
+  content: '\f244';
+}
+
+.fa-gamepad:before {
+  content: '\f11b';
+}
+
+.fa-floppy-disk:before,
+.fa-save:before {
+  content: '\f0c7';
+}
+
+.fa-sun:before {
+  content: '\f185';
+}
+
+.fa-moon:before {
+  content: '\f186';
+}
+
+.fa-cloud-sun:before {
+  content: '\f6c4';
+}
+
+.fa-bolt:before {
+  content: '\f0e7';
+}
+
+.fa-tower-broadcast:before,
+.fa-broadcast-tower:before {
+  content: '\f519';
+}
+
+.fa-eye:before {
+  content: '\f06e';
+}
+
+.fa-eye-slash:before {
+  content: '\f070';
+}
+
+.fa-rotate:before,
+.fa-sync:before {
+  content: '\f021';
+}
+
+.fa-arrow-right:before {
+  content: '\f061';
+}
+
+.fa-arrow-left:before {
+  content: '\f060';
+}
+
+.fa-arrow-up:before {
+  content: '\f062';
+}
+
+.fa-arrow-turn-up:before,
+.fa-level-up-alt:before {
+  content: '\f3bf';
+}
+
+.fa-circle-check:before {
+  content: '\f058';
+}
+
+.fa-circle-xmark:before {
+  content: '\f057';
+}
+
+.fa-circle:before {
+  content: '\f111';
+}
+
+.fa-star:before {
+  content: '\f005';
+}
+
+.fa-plug:before {
+  content: '\f1e6';
+}
+
+.fa-network-wired:before {
+  content: '\f6ff';
+}
+
+.fa-map:before {
+  content: '\f279';
+}
+
+.fa-compass:before {
+  content: '\f14e';
+}
+
+.fa-gauge-high:before,
+.fa-tachometer-alt:before {
+  content: '\f625';
+}
+
+.fa-anchor:before {
+  content: '\f13d';
+}
+
+.fa-stop:before {
+  content: '\f04d';
+}
+
+.fa-hand:before {
+  content: '\f256';
+}
+
+.fa-lock:before {
+  content: '\f023';
+}
+
+.fa-lock-open:before {
+  content: '\f3c1';
+}
+
+.fa-house:before,
+.fa-home:before {
+  content: '\f015';
+}
+
+.fa-bell:before {
+  content: '\f0f3';
+}
+
+.fa-triangle-exclamation:before {
+  content: '\f071';
+}
+
+.fa-trash-can:before,
+.fa-trash:before {
+  content: '\f2ed';
+}
+
+.fa-file:before {
+  content: '\f15b';
+}
+
+.fa-file-lines:before {
+  content: '\f15c';
+}
+
+.fa-file-pen:before {
+  content: '\f31c';
+}
+
+.fa-download:before {
+  content: '\f019';
+}
+
+.fa-upload:before {
+  content: '\f093';
+}
+
+.fa-cloud-arrow-up:before {
+  content: '\f0ee';
+}
+
+.fa-magnifying-glass:before,
+.fa-search:before {
+  content: '\f002';
+}
+
+.fa-microchip:before {
+  content: '\f2db';
+}
+
+.fa-sd-card:before {
+  content: '\f7c2';
+}
+
+.fa-signal:before {
+  content: '\f012';
+}
+
+.fa-satellite:before {
+  content: '\f7bf';
+}
+
+.fa-sliders:before {
+  content: '\f1de';
+}
+
+.fa-xmark:before {
+  content: '\f00d';
+}
+
+.fa-plus:before {
+  content: '\2b';
+}
+
+.fa-font:before {
+  content: '\f031';
+}
+
+.fa-file-code:before {
+  content: '\f1c9';
+}
+
+.fa-file-image:before {
+  content: '\f1c5';
+}
+
+.fa-file-zipper:before {
+  content: '\f1c6';
+}
+
+.fa-table-cells:before,
+.fa-th:before {
+  content: '\f00a';
+}
+
+.fa-list:before {
+  content: '\f03a';
+}
+
+.fa-copy:before {
+  content: '\f0c5';
+}
+
+.fa-filter:before {
+  content: '\f0b0';
+}

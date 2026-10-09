@@ -167,9 +167,10 @@ private:
         });
         _server.on("/control", [this]() { 
             if (_wifi.isAPMode()) { _server.sendHeader("Location", "/wifi"); _server.send(302, "text/plain", ""); return; }
-            if (tryServeSdFile("/www/control.html")) return;
             handleControlPage(); 
         });
+        _server.on("/www/control.html", [this]() { handleControlPage(); });
+        _server.on("/www/rover/control.html", [this]() { handleControlPage(); });
         _server.on("/sd", [this]() {
             if (tryServeSdFile("/www/sd.html")) return;
             handleSdPage();
@@ -193,6 +194,7 @@ private:
         // Controle de atuadores
         _server.on("/api/control/actuator", [this]() { handleApiActuator(); });
         _server.on("/api/control/action", [this]() { handleApiAction(); });
+        _server.on("/api/control/winch", [this]() { handleApiControlWinch(); });
 
         // Gestão do Cartão SD
         _server.on("/api/sd/list", [this]() { handleApiSdList(); });
@@ -827,14 +829,42 @@ private:
 
         html += "</div></div>";
 
-        // Card: Guincho de Âncora & Cremalheira
+        // Card: Guincho de Âncora & Cremalheira (Modo ON / OFF e Direto)
         html += "<div class='card'>";
-        html += "<div class='card-title'><i class='fa-solid fa-anchor'></i> Guincho da Âncora & Cremalheira de Travão</div>";
+        html += "<div class='card-title'><i class='fa-solid fa-anchor'></i> Guincho da Âncora (GPIO 19) & Trinco (GPIO 23)</div>";
         html += "<div class='btn-group'>";
-        html += "<button onclick='sendAction(3)' class='btn btn-primary'><i class='fa-solid fa-anchor'></i> Lançar Âncora (Soltar)</button>";
-        html += "<button onclick='sendAction(4)' class='btn btn-primary'><i class='fa-solid fa-arrow-up'></i> Recolher Âncora (Guincho)</button>";
-        html += "<button onclick='sendAction(5)' class='btn btn-secondary'><i class='fa-solid fa-stop'></i> Parar Guincho</button>";
-        html += "<button onclick='sendAction(6)' class='btn btn-secondary'><i class='fa-solid fa-lock'></i> Alternar Travão Cremalheira</button>";
+        html += "<button onclick='sendAction(4)' class='btn btn-primary'><i class='fa-solid fa-play'></i> LIGAR Puxar (1800 µs)</button>";
+        html += "<button onclick='sendAction(14)' class='btn btn-secondary'><i class='fa-solid fa-rotate-left'></i> LIGAR Descer (1200 µs)</button>";
+        html += "<button onclick='cutWinchSignal()' class='btn btn-danger' style='background:#dc2626;font-weight:700;'><i class='fa-solid fa-power-off'></i> CORTAR SINAL (OFF / 0V)</button>";
+        html += "<button onclick='sendAction(6)' class='btn btn-secondary'><i class='fa-solid fa-lock'></i> Alternar Trinco</button>";
+        html += "<button onclick='sendAction(13)' class='btn btn-secondary' style='background:#475569;color:#fff;'><i class='fa-solid fa-feather'></i> Relaxar Trinco</button>";
+        html += "</div></div>";
+
+        // Card: Calibração de Frequência / Neutro do Guincho (GPIO 19)
+        html += "<div class='card' style='border:1px solid #0284c7;'>";
+        html += "<div class='card-title'><i class='fa-solid fa-sliders'></i> Calibração de Frequência / Controlo ON-OFF (GPIO 19)</div>";
+        html += "<p style='color:var(--muted);font-size:0.85rem;margin-bottom:12px;'>Arraste o slider para testar pulsos PWM, ou clique no botão vermelho para <b>cortar por completo o sinal (0V)</b>.</p>";
+        
+        html += "<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;'>";
+        html += "<span class='stat-label'>Sinal PWM no GPIO 19:</span>";
+        html += "<span id='winchVal' style='font-size:1.6rem;font-weight:700;color:var(--primary);'>" + String(_actuators.getWinchPulseUs() > 0 ? (String(_actuators.getWinchPulseUs()) + " µs (ON)") : "OFF (0V - Cortado)") + "</span>";
+        html += "</div>";
+
+        html += "<input type='range' id='winchSlider' min='1000' max='2000' step='1' value='" + String(_actuators.getWinchPulseUs() > 0 ? _actuators.getWinchPulseUs() : 1500) + "' class='slider' oninput='onWinchInput(this.value)' onchange='sendWinchPulse(this.value)'>";
+
+        html += "<div class='btn-group' style='margin-top:12px;'>";
+        html += "<button onclick='stepWinch(-50)' class='btn btn-secondary'>-50 µs</button>";
+        html += "<button onclick='stepWinch(-5)' class='btn btn-secondary'>-5 µs</button>";
+        html += "<button onclick='stepWinch(-1)' class='btn btn-secondary'>-1 µs</button>";
+        html += "<button onclick='setWinchDirect(1500)' class='btn btn-secondary' style='background:#334155;color:#fff;'>1500 µs</button>";
+        html += "<button onclick='stepWinch(1)' class='btn btn-secondary'>+1 µs</button>";
+        html += "<button onclick='stepWinch(5)' class='btn btn-secondary'>+5 µs</button>";
+        html += "<button onclick='stepWinch(50)' class='btn btn-secondary'>+50 µs</button>";
+        html += "</div>";
+
+        html += "<div class='btn-group' style='margin-top:14px;'>";
+        html += "<button onclick='cutWinchSignal()' class='btn btn-danger' style='background:#ef4444;font-size:1rem;padding:12px 20px;'><i class='fa-solid fa-power-off'></i> CORTAR SINAL COMPLETO (OFF / 0V)</button>";
+        html += "<button onclick='saveCurrentAsNeutral()' class='btn btn-primary' style='background:#059669;'><i class='fa-solid fa-check'></i> Guardar como Neutro Padrão</button>";
         html += "</div></div>";
 
         // Card: Modos Operacionais & Emergência
@@ -849,14 +879,37 @@ private:
         html += "</div></div>";
 
         html += "<script>";
+        html += "function showFeedback(msg){";
+        html += "  let el=document.getElementById('cmdFeedback');";
+        html += "  if(!el){el=document.createElement('div');el.id='cmdFeedback';";
+        html += "    el.style.position='fixed';el.style.bottom='24px';el.style.right='24px';";
+        html += "    el.style.background='#0891b2';el.style.color='#fff';el.style.padding='10px 20px';";
+        html += "    el.style.borderRadius='8px';el.style.boxShadow='0 4px 14px rgba(0,0,0,0.6)';";
+        html += "    el.style.fontSize='0.95rem';el.style.fontWeight='600';el.style.zIndex='9999';";
+        html += "    el.style.transition='opacity 0.3s';document.body.appendChild(el);";
+        html += "  }";
+        html += "  el.innerText=msg;el.style.opacity='1';el.style.display='block';";
+        html += "  if(window._fbTimer)clearTimeout(window._fbTimer);";
+        html += "  window._fbTimer=setTimeout(()=>{el.style.opacity='0';setTimeout(()=>el.style.display='none',300);},2200);";
+        html += "}";
         html += "function updateSliders(){document.getElementById('thrVal').innerText=document.getElementById('throttleSlider').value+'%';document.getElementById('rudVal').innerText=document.getElementById('rudderSlider').value+'%';}";
         html += "function setThrottle(v){document.getElementById('throttleSlider').value=v;updateSliders();sendActuators();}";
         html += "function setRudder(v){document.getElementById('rudderSlider').value=v;updateSliders();sendActuators();}";
         html += "function sendActuators(){const t=parseInt(document.getElementById('throttleSlider').value);const r=parseInt(document.getElementById('rudderSlider').value);";
         html += "fetch('/api/control/actuator',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({throttle:t,rudder:r})});}";
         html += "function sendAction(a){fetch('/api/control/action',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:a})})";
-        html += ".then(r=>r.json()).then(res=>alert(res.msg));}";
+        html += ".then(r=>r.json()).then(res=>{if(res&&res.msg)showFeedback(res.msg);});}";
         html += "function sendEmergencyStop(){setThrottle(0);setRudder(0);sendAction(2);}";
+        html += "let winchTimer=null;";
+        html += "function onWinchInput(v){document.getElementById('winchVal').innerText=v+' µs (ON)';if(winchTimer)clearTimeout(winchTimer);winchTimer=setTimeout(()=>{sendWinchPulse(v);},40);}";
+        html += "function sendWinchPulse(v,saveNeutral=false){fetch('/api/control/winch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pulseUs:parseInt(v),set_neutral:saveNeutral})})";
+        html += ".then(r=>r.json()).then(res=>{if(saveNeutral){showFeedback('Neutro guardado: '+res.neutralUs+' µs');}else if(parseInt(v)===0){showFeedback('Sinal cortado (OFF)');}else{document.getElementById('winchVal').innerText=v+' µs (ON)';}});};";
+        html += "function stepWinch(delta){const s=document.getElementById('winchSlider');let val=parseInt(s.value)+delta;if(val<1000)val=1000;if(val>2000)val=2000;s.value=val;document.getElementById('winchVal').innerText=val+' µs (ON)';sendWinchPulse(val);}";
+        html += "function setWinchDirect(val){const s=document.getElementById('winchSlider');s.value=val;document.getElementById('winchVal').innerText=val+' µs (ON)';sendWinchPulse(val);}";
+        html += "function cutWinchSignal(){sendAction(5);fetch('/api/control/winch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pulseUs:0})})";
+        html += ".then(r=>r.json()).then(res=>{document.getElementById('winchVal').innerText='OFF (0V - Cortado)';showFeedback('Sinal PWM cortado (0V / OFF)');});}";
+        html += "function stopWinchCalib(){cutWinchSignal();}";
+        html += "function saveCurrentAsNeutral(){const val=parseInt(document.getElementById('winchSlider').value);sendWinchPulse(val,true);}";
         html += "setInterval(()=>{fetch('/api/status').then(r=>r.json()).then(data=>{";
         html += "document.getElementById('curMotor').innerText=data.actuators.motor_status_str;";
         html += "document.getElementById('curAnchor').innerText=data.actuators.anchor_status_str;";
@@ -1332,6 +1385,8 @@ private:
         a["anchor_depth_m"] = _actuators.getAnchorDepthCm() / 100.0f;
         a["rack_released"] = _actuators.isRackReleased();
         a["alarm_active"] = _actuators.isAlarmActive();
+        a["winch_pulse_us"] = _actuators.getWinchPulseUs();
+        a["winch_neutral_us"] = _actuators.getWinchNeutral();
 
         JsonObject w = doc["wifi"].to<JsonObject>();
         w["is_ap"] = _wifi.isAPMode();
@@ -1593,11 +1648,72 @@ private:
             _actuators.setRudder(rud);
         }
 
+        if (doc["winchUs"].is<int>()) {
+            int wUs = doc["winchUs"].as<int>();
+            if (wUs <= 0) {
+                _actuators.stopWinch();
+            } else if (doc["set_neutral"].as<bool>() || doc["save_neutral"].as<bool>()) {
+                _actuators.setWinchNeutral(wUs);
+            } else {
+                _actuators.setWinchMicroseconds(wUs);
+            }
+        }
+
         _motorStatus = MOTOR_MANUAL;
         _lastControlTime = millis();
 
         JsonDocument resDoc;
         resDoc["success"] = true;
+        String res;
+        serializeJson(resDoc, res);
+        _server.send(200, "application/json", res);
+    }
+
+    void handleApiControlWinch() {
+        int pulse = -1;
+        bool setNeutral = false;
+
+        if (_server.hasArg("pulse")) {
+            pulse = _server.arg("pulse").toInt();
+        }
+        if (_server.hasArg("pulseUs")) {
+            pulse = _server.arg("pulseUs").toInt();
+        }
+        if (_server.hasArg("set_neutral") || _server.hasArg("save_neutral")) {
+            setNeutral = true;
+        }
+
+        if (_server.hasArg("plain")) {
+            JsonDocument doc;
+            DeserializationError err = deserializeJson(doc, _server.arg("plain"));
+            if (!err) {
+                if (doc["pulse"].is<int>()) {
+                    pulse = doc["pulse"].as<int>();
+                } else if (doc["pulseUs"].is<int>()) {
+                    pulse = doc["pulseUs"].as<int>();
+                }
+                if (doc["set_neutral"].is<bool>()) {
+                    setNeutral = doc["set_neutral"].as<bool>();
+                } else if (doc["save_neutral"].is<bool>()) {
+                    setNeutral = doc["save_neutral"].as<bool>();
+                }
+            }
+        }
+
+        if (pulse == 0) {
+            _actuators.stopWinch();
+        } else if (pulse >= 800 && pulse <= 2200) {
+            if (setNeutral) {
+                _actuators.setWinchNeutral(pulse);
+            } else {
+                _actuators.setWinchMicroseconds(pulse);
+            }
+        }
+
+        JsonDocument resDoc;
+        resDoc["success"] = true;
+        resDoc["pulseUs"] = _actuators.getWinchPulseUs();
+        resDoc["neutralUs"] = _actuators.getWinchNeutral();
         String res;
         serializeJson(resDoc, res);
         _server.send(200, "application/json", res);
@@ -1631,21 +1747,25 @@ private:
                 _actuators.commandDropAnchor(200); // 2 metros
                 msg = "Comando Lançar Âncora enviado (2.0m)";
                 break;
-            case 4: // Raise Anchor
-                _actuators.commandRetractAnchor(); // Recolher
-                msg = "Comando Recolher Âncora enviado";
+            case 4: // Raise / Winch Hoist
+                _actuators.jogWinch(1);
+                msg = "Guincho a ENROLAR (1800µs contínuo até Parar)";
                 break;
             case 5: // Stop Winch
                 _actuators.stopWinch();
-                msg = "Guincho parado";
+                msg = "Guincho parado (1500µs)";
+                break;
+            case 14: // Winch Lower / Reverse
+                _actuators.jogWinch(-1);
+                msg = "Guincho a DESENROLAR (1200µs contínuo até Parar)";
                 break;
             case 6: // Toggle Rack
                 if (_actuators.isRackReleased()) {
                     _actuators.engageRack();
-                    msg = "Cremalheira travada";
+                    msg = "Trinco da âncora travado (0°)";
                 } else {
                     _actuators.releaseRack();
-                    msg = "Cremalheira solta";
+                    msg = "Trinco da âncora solto (90°)";
                 }
                 break;
             case 7: // RTL
@@ -1665,10 +1785,16 @@ private:
                 _motorStatus = MOTOR_MANUAL;
                 msg = "Modo Manual ativado";
                 break;
+            case 13: // Relax rack servo (stop heating)
+                _actuators.relaxRack();
+                msg = "Servo do trinco relaxado (sem forçar)!";
+                break;
             default:
                 msg = "Comando desconhecido";
                 break;
         }
+
+        Serial.printf("[WEB-SERVER] Acao Recebida ID=%u -> %s\n", action, msg.c_str());
 
         JsonDocument resDoc;
         resDoc["success"] = true;
