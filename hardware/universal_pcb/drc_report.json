@@ -1,0 +1,765 @@
+{
+    "$schema": "https://schemas.kicad.org/drc.v1.json",
+    "coordinate_units": "mm",
+    "date": "2026-10-12T13:32:28",
+    "ignored_checks": [
+        {
+            "description": "Footprint has no courtyard defined",
+            "key": "missing_courtyard"
+        },
+        {
+            "description": "Track endpoint not centered on via",
+            "key": "track_not_centered_on_via"
+        },
+        {
+            "description": "Tuning profile track geometries",
+            "key": "tuning_profile_track_geometries"
+        },
+        {
+            "description": "Footprint doesn't match symbol's footprint filters",
+            "key": "footprint_filters_mismatch"
+        },
+        {
+            "description": "Footprint component type doesn't match footprint pads",
+            "key": "footprint_type_mismatch"
+        }
+    ],
+    "included_severities": [
+        "error",
+        "warning"
+    ],
+    "kicad_version": "10.0.6",
+    "schematic_parity": [],
+    "source": "Universal_Carrier.kicad_pcb",
+    "unconnected_items": [
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Ilha PTH 3 [/NC] de J3",
+                    "pos": {
+                        "x": 27.1,
+                        "y": 16.0
+                    },
+                    "uuid": "59e23d42-5c02-4f5e-8a9d-a0fd810c6ade"
+                },
+                {
+                    "description": "Pista [/NC] no F.Cu, comprimento 2.1213 mm",
+                    "pos": {
+                        "x": 14.54,
+                        "y": 18.5
+                    },
+                    "uuid": "c65d7bd9-222f-4cc0-86b3-0b48dcfafac6"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pista [/IO5_NSS] no F.Cu, comprimento 1.0000 mm",
+                    "pos": {
+                        "x": 35.0,
+                        "y": 17.0
+                    },
+                    "uuid": "2b860105-2402-4171-9833-6d9b437ea572"
+                },
+                {
+                    "description": "Ilha PTH 4 [/IO5_NSS] de J3",
+                    "pos": {
+                        "x": 27.1,
+                        "y": 13.46
+                    },
+                    "uuid": "bf25d2b1-cfc3-434c-a942-dd10db92b2d4"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Ilha PTH 5 [/IO2_SCK] de J3",
+                    "pos": {
+                        "x": 29.64,
+                        "y": 16.0
+                    },
+                    "uuid": "98db6408-d72b-4174-8051-03c5fe7ecc2d"
+                },
+                {
+                    "description": "Pista [/IO2_SCK] no B.Cu, comprimento 1.7678 mm",
+                    "pos": {
+                        "x": 41.37,
+                        "y": 14.75
+                    },
+                    "uuid": "d36cbff3-1669-48fa-a9ee-c875a6312b3e"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pista [/IO3_MOSI] no F.Cu, comprimento 18.8400 mm",
+                    "pos": {
+                        "x": 14.06,
+                        "y": 23.1
+                    },
+                    "uuid": "2da65f91-f32f-42de-ac24-7aeac62e3571"
+                },
+                {
+                    "description": "Ilha PTH 6 [/IO3_MOSI] de J3",
+                    "pos": {
+                        "x": 29.64,
+                        "y": 13.46
+                    },
+                    "uuid": "e157ff00-a956-4761-839c-33a0b00d1d31"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pista [/IO4_MISO] no B.Cu, comprimento 9.1924 mm",
+                    "pos": {
+                        "x": 37.54,
+                        "y": 16.0
+                    },
+                    "uuid": "b0577e25-65c8-4855-a9c6-f0791fa9efe2"
+                },
+                {
+                    "description": "Ilha PTH 7 [/IO4_MISO] de J3",
+                    "pos": {
+                        "x": 32.18,
+                        "y": 16.0
+                    },
+                    "uuid": "b01acd41-9330-4228-9f2f-7dd27dc8fbbd"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pista [/IO12_LORA_DIO0] no F.Cu, comprimento 25.5000 mm",
+                    "pos": {
+                        "x": 37.62,
+                        "y": 23.7
+                    },
+                    "uuid": "2a508597-3a51-4ec8-b9c8-3bb1ef986f67"
+                },
+                {
+                    "description": "Ilha PTH 8 [/IO12_LORA_DIO0] de J3",
+                    "pos": {
+                        "x": 32.18,
+                        "y": 13.46
+                    },
+                    "uuid": "47fc558b-d3c8-41db-9c2a-7c4a05b7b55a"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        }
+    ],
+    "violations": [
+        {
+            "description": "Itens em curto-circuito de duas redes (redes /+3V3 e /IO5_NSS)",
+            "items": [
+                {
+                    "description": "Pista [/+3V3] no F.Cu, comprimento 24.1200 mm",
+                    "pos": {
+                        "x": 48.24,
+                        "y": 14.0
+                    },
+                    "uuid": "3e081fc2-c024-430f-a2a7-d3e09dac2f02"
+                },
+                {
+                    "description": "Ilha PTH 4 [/IO5_NSS] de J3",
+                    "pos": {
+                        "x": 27.1,
+                        "y": 13.46
+                    },
+                    "uuid": "bf25d2b1-cfc3-434c-a942-dd10db92b2d4"
+                }
+            ],
+            "severity": "error",
+            "type": "shorting_items"
+        },
+        {
+            "description": "A abertura da máscara de solda da frente conecta itens com redes diferentes",
+            "items": [
+                {
+                    "description": "Pista [/+3V3] no F.Cu, comprimento 24.1200 mm",
+                    "pos": {
+                        "x": 48.24,
+                        "y": 14.0
+                    },
+                    "uuid": "3e081fc2-c024-430f-a2a7-d3e09dac2f02"
+                },
+                {
+                    "description": "Ilha PTH 4 [/IO5_NSS] de J3",
+                    "pos": {
+                        "x": 27.1,
+                        "y": 13.46
+                    },
+                    "uuid": "bf25d2b1-cfc3-434c-a942-dd10db92b2d4"
+                }
+            ],
+            "severity": "error",
+            "type": "solder_mask_bridge"
+        },
+        {
+            "description": "A abertura da máscara de solda da frente conecta itens com redes diferentes",
+            "items": [
+                {
+                    "description": "Pista [/+3V3] no F.Cu, comprimento 24.1200 mm",
+                    "pos": {
+                        "x": 48.24,
+                        "y": 14.0
+                    },
+                    "uuid": "3e081fc2-c024-430f-a2a7-d3e09dac2f02"
+                },
+                {
+                    "description": "Ilha PTH 6 [/IO3_MOSI] de J3",
+                    "pos": {
+                        "x": 29.64,
+                        "y": 13.46
+                    },
+                    "uuid": "e157ff00-a956-4761-839c-33a0b00d1d31"
+                }
+            ],
+            "severity": "error",
+            "type": "solder_mask_bridge"
+        },
+        {
+            "description": "A abertura da máscara de solda da frente conecta itens com redes diferentes",
+            "items": [
+                {
+                    "description": "Pista [/+3V3] no F.Cu, comprimento 24.1200 mm",
+                    "pos": {
+                        "x": 48.24,
+                        "y": 14.0
+                    },
+                    "uuid": "3e081fc2-c024-430f-a2a7-d3e09dac2f02"
+                },
+                {
+                    "description": "Ilha PTH 8 [/IO12_LORA_DIO0] de J3",
+                    "pos": {
+                        "x": 32.18,
+                        "y": 13.46
+                    },
+                    "uuid": "47fc558b-d3c8-41db-9c2a-7c4a05b7b55a"
+                }
+            ],
+            "severity": "error",
+            "type": "solder_mask_bridge"
+        },
+        {
+            "description": "Track has unconnected end",
+            "items": [
+                {
+                    "description": "Pista [/+3V3] no F.Cu, comprimento 9.9561 mm",
+                    "pos": {
+                        "x": 24.12,
+                        "y": 14.0
+                    },
+                    "uuid": "92419711-c57b-42c4-aaf1-c0dc26b1a8cc"
+                }
+            ],
+            "severity": "warning",
+            "type": "track_dangling"
+        },
+        {
+            "description": "Track has unconnected end",
+            "items": [
+                {
+                    "description": "Pista [/NC] no F.Cu, comprimento 2.1213 mm",
+                    "pos": {
+                        "x": 14.54,
+                        "y": 18.5
+                    },
+                    "uuid": "c65d7bd9-222f-4cc0-86b3-0b48dcfafac6"
+                }
+            ],
+            "severity": "warning",
+            "type": "track_dangling"
+        },
+        {
+            "description": "Track has unconnected end",
+            "items": [
+                {
+                    "description": "Pista [/IO5_NSS] no F.Cu, comprimento 2.0648 mm",
+                    "pos": {
+                        "x": 14.54,
+                        "y": 21.04
+                    },
+                    "uuid": "f8a7c57c-892a-4d32-b1a8-0f44d51991da"
+                }
+            ],
+            "severity": "warning",
+            "type": "track_dangling"
+        },
+        {
+            "description": "Track has unconnected end",
+            "items": [
+                {
+                    "description": "Pista [/IO2_SCK] no B.Cu, comprimento 5.3033 mm",
+                    "pos": {
+                        "x": 12.0,
+                        "y": 18.5
+                    },
+                    "uuid": "3ed91771-9b2c-4e14-9fdc-328161a0abe0"
+                }
+            ],
+            "severity": "warning",
+            "type": "track_dangling"
+        },
+        {
+            "description": "Track has unconnected end",
+            "items": [
+                {
+                    "description": "Pista [/IO3_MOSI] no F.Cu, comprimento 2.9133 mm",
+                    "pos": {
+                        "x": 12.0,
+                        "y": 21.04
+                    },
+                    "uuid": "445990b3-eb9b-4155-8180-04dedc2602a5"
+                }
+            ],
+            "severity": "warning",
+            "type": "track_dangling"
+        },
+        {
+            "description": "Track has unconnected end",
+            "items": [
+                {
+                    "description": "Pista [/IO4_MISO] no B.Cu, comprimento 2.0648 mm",
+                    "pos": {
+                        "x": 8.0,
+                        "y": 19.96
+                    },
+                    "uuid": "8665668a-fb47-438a-8dba-b14548724086"
+                }
+            ],
+            "severity": "warning",
+            "type": "track_dangling"
+        },
+        {
+            "description": "Track has unconnected end",
+            "items": [
+                {
+                    "description": "Pista [/IO12_LORA_DIO0] no F.Cu, comprimento 3.7618 mm",
+                    "pos": {
+                        "x": 12.12,
+                        "y": 23.7
+                    },
+                    "uuid": "a938dfbf-447c-412b-8398-4ef773703c93"
+                }
+            ],
+            "severity": "warning",
+            "type": "track_dangling"
+        },
+        {
+            "description": "O footprint 'MountingHole_3.2mm_M3' não corresponde à cópia na biblioteca 'MountingHole'",
+            "items": [
+                {
+                    "description": "Footprint H1",
+                    "pos": {
+                        "x": 4.5,
+                        "y": 4.5
+                    },
+                    "uuid": "04c4ecd1-acc6-4520-ab68-30f4660260ac"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "O footprint 'PinHeader_1x02_P2.54mm_Horizontal' não corresponde à cópia na biblioteca 'Connector_PinHeader_2.54mm'",
+            "items": [
+                {
+                    "description": "Footprint J12",
+                    "pos": {
+                        "x": 24.96,
+                        "y": 79.0
+                    },
+                    "uuid": "0c192c7f-52e3-432b-9f06-f7484bdcda30"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "O footprint 'MountingHole_3.2mm_M3' não corresponde à cópia na biblioteca 'MountingHole'",
+            "items": [
+                {
+                    "description": "Footprint H3",
+                    "pos": {
+                        "x": 4.5,
+                        "y": 80.5
+                    },
+                    "uuid": "2515f905-c80d-4551-aaad-fb9ac4311684"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "O footprint 'PinHeader_1x02_P2.54mm_Horizontal' não corresponde à cópia na biblioteca 'Connector_PinHeader_2.54mm'",
+            "items": [
+                {
+                    "description": "Footprint J11",
+                    "pos": {
+                        "x": 11.46,
+                        "y": 11.5
+                    },
+                    "uuid": "28981f66-17ea-4696-a48c-d1ae0da6c6f7"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "O footprint 'PinHeader_2x04_P2.54mm_Vertical' não corresponde à cópia na biblioteca 'Connector_PinHeader_2.54mm'",
+            "items": [
+                {
+                    "description": "Footprint J3",
+                    "pos": {
+                        "x": 24.56,
+                        "y": 16.0
+                    },
+                    "uuid": "296fa55b-5bab-42b6-bf9b-04e946a29e9e"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "O footprint 'MountingHole_3.2mm_M3' não corresponde à cópia na biblioteca 'MountingHole'",
+            "items": [
+                {
+                    "description": "Footprint H2",
+                    "pos": {
+                        "x": 95.5,
+                        "y": 4.5
+                    },
+                    "uuid": "6cdbda39-bfbb-4968-9a38-51cda8cfce08"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "O footprint 'PinHeader_1x07_P2.54mm_Horizontal' não corresponde à cópia na biblioteca 'Connector_PinHeader_2.54mm'",
+            "items": [
+                {
+                    "description": "Footprint J6",
+                    "pos": {
+                        "x": 76.38,
+                        "y": 18.5
+                    },
+                    "uuid": "9529a8d9-367a-46c5-9d4c-2974a5407aa3"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "O footprint 'MountingHole_3.2mm_M3' não corresponde à cópia na biblioteca 'MountingHole'",
+            "items": [
+                {
+                    "description": "Footprint H4",
+                    "pos": {
+                        "x": 95.5,
+                        "y": 80.5
+                    },
+                    "uuid": "a3045e0a-d754-4648-ac5f-db62cc0816e0"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "O footprint 'PinHeader_1x02_P2.54mm_Vertical' não corresponde à cópia na biblioteca 'Connector_PinHeader_2.54mm'",
+            "items": [
+                {
+                    "description": "Footprint J5",
+                    "pos": {
+                        "x": 65.0,
+                        "y": 42.5
+                    },
+                    "uuid": "a4a36c05-7de6-485c-812b-227a649fffd7"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "O footprint 'PinHeader_1x06_P2.54mm_Vertical' não corresponde à cópia na biblioteca 'Connector_PinHeader_2.54mm'",
+            "items": [
+                {
+                    "description": "Footprint J_PCA_IN",
+                    "pos": {
+                        "x": 33.5,
+                        "y": 65.7
+                    },
+                    "uuid": "ae7f9506-155f-4c38-b00b-e97171314169"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "O footprint 'PinHeader_1x03_P2.54mm_Horizontal' não corresponde à cópia na biblioteca 'Connector_PinHeader_2.54mm'",
+            "items": [
+                {
+                    "description": "Footprint J4",
+                    "pos": {
+                        "x": 90.5,
+                        "y": 49.5
+                    },
+                    "uuid": "c4b141b4-67ae-45f8-aac1-45bf887246d4"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "O footprint 'PinHeader_1x10_P2.54mm_Horizontal' não corresponde à cópia na biblioteca 'Connector_PinHeader_2.54mm'",
+            "items": [
+                {
+                    "description": "Footprint J_ADS",
+                    "pos": {
+                        "x": 34.64,
+                        "y": 49.0
+                    },
+                    "uuid": "e039be72-837d-402c-abb1-444acf5642e0"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "O footprint 'PinHeader_1x06_P2.54mm_Vertical' não corresponde à cópia na biblioteca 'Connector_PinHeader_2.54mm'",
+            "items": [
+                {
+                    "description": "Footprint J_PCA_OUT",
+                    "pos": {
+                        "x": 93.0,
+                        "y": 65.7
+                    },
+                    "uuid": "f74cc92d-8735-4cb2-801b-024ad56daa48"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "O footprint 'PinHeader_1x09_P2.54mm_Horizontal' não corresponde à cópia na biblioteca 'Connector_PinHeader_2.54mm'",
+            "items": [
+                {
+                    "description": "Footprint J2",
+                    "pos": {
+                        "x": 35.0,
+                        "y": 33.78
+                    },
+                    "uuid": "1ff5650a-25be-4e09-a7b5-27aecd4308f9"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "O footprint 'SKRKAEE020' não corresponde à cópia na biblioteca 'PS4_joystick'",
+            "items": [
+                {
+                    "description": "Footprint SW2",
+                    "pos": {
+                        "x": 74.6,
+                        "y": 61.5
+                    },
+                    "uuid": "60477f79-f0b0-4dd7-8ddc-78fadd1fbfe7"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "O footprint 'PinHeader_1x09_P2.54mm_Horizontal' não corresponde à cópia na biblioteca 'Connector_PinHeader_2.54mm'",
+            "items": [
+                {
+                    "description": "Footprint J1",
+                    "pos": {
+                        "x": 35.0,
+                        "y": 16.0
+                    },
+                    "uuid": "629801eb-1792-4a70-9bb7-afe44941c398"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "O footprint 'SKRKAEE020' não corresponde à cópia na biblioteca 'PS4_joystick'",
+            "items": [
+                {
+                    "description": "Footprint SW1",
+                    "pos": {
+                        "x": 62.0,
+                        "y": 61.5
+                    },
+                    "uuid": "ae97197e-576f-4322-932a-d1a88dacf31f"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "O footprint 'SKRKAEE020' não corresponde à cópia na biblioteca 'PS4_joystick'",
+            "items": [
+                {
+                    "description": "Footprint SW4",
+                    "pos": {
+                        "x": 68.5,
+                        "y": 66.0
+                    },
+                    "uuid": "b56fae77-555d-43f2-b87b-d6d3ed9ef676"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "O footprint 'SKRKAEE020' não corresponde à cópia na biblioteca 'PS4_joystick'",
+            "items": [
+                {
+                    "description": "Footprint SW3",
+                    "pos": {
+                        "x": 68.4,
+                        "y": 56.5
+                    },
+                    "uuid": "bde49368-89db-4e9f-9a48-f0d27ab7454b"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "O footprint 'Alps_RKJXV1224005' não corresponde à cópia na biblioteca 'PS5_joystick'",
+            "items": [
+                {
+                    "description": "Footprint JOY1",
+                    "pos": {
+                        "x": 20.0,
+                        "y": 62.0
+                    },
+                    "uuid": "efb4e9b0-ee69-4333-9ddf-653801144260"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Silkscreen clearance",
+            "items": [
+                {
+                    "description": "Campo de referência do J3",
+                    "pos": {
+                        "x": 22.16,
+                        "y": 14.73
+                    },
+                    "uuid": "6b5a821b-2618-4de1-bf93-049f2bc413dc"
+                },
+                {
+                    "description": "Retângulo no F.Silkscreen",
+                    "pos": {
+                        "x": 12.5,
+                        "y": 14.5
+                    },
+                    "uuid": "a1ce3ff6-3659-409f-bb26-a7c2568d8ffc"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_overlap"
+        },
+        {
+            "description": "Silkscreen clearance",
+            "items": [
+                {
+                    "description": "Segmento de J3 em F.Silkscreen",
+                    "pos": {
+                        "x": 23.23,
+                        "y": 17.33
+                    },
+                    "uuid": "0a86c209-a062-43d1-96cb-f4123118afd6"
+                },
+                {
+                    "description": "Retângulo no F.Silkscreen",
+                    "pos": {
+                        "x": 12.5,
+                        "y": 14.5
+                    },
+                    "uuid": "a1ce3ff6-3659-409f-bb26-a7c2568d8ffc"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_overlap"
+        },
+        {
+            "description": "Silkscreen clearance",
+            "items": [
+                {
+                    "description": "Ilha PTH 5 [/IO2_SCK] de J3",
+                    "pos": {
+                        "x": 29.64,
+                        "y": 16.0
+                    },
+                    "uuid": "98db6408-d72b-4174-8051-03c5fe7ecc2d"
+                },
+                {
+                    "description": "Retângulo no F.Silkscreen",
+                    "pos": {
+                        "x": 12.5,
+                        "y": 14.5
+                    },
+                    "uuid": "a1ce3ff6-3659-409f-bb26-a7c2568d8ffc"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_overlap"
+        },
+        {
+            "description": "Silkscreen clearance",
+            "items": [
+                {
+                    "description": "Segmento de J3 em F.Silkscreen",
+                    "pos": {
+                        "x": 33.51,
+                        "y": 17.33
+                    },
+                    "uuid": "4f5c005b-8ad7-4647-86ca-4c66d6206122"
+                },
+                {
+                    "description": "Retângulo no F.Silkscreen",
+                    "pos": {
+                        "x": 12.5,
+                        "y": 14.5
+                    },
+                    "uuid": "a1ce3ff6-3659-409f-bb26-a7c2568d8ffc"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_overlap"
+        }
+    ]
+}

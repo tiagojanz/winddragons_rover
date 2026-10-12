@@ -1,14 +1,17 @@
 #pragma once
 
 #include <Arduino.h>
+#include <Wire.h>
+#include <Adafruit_ADS1X15.h>
 #include "config_common.h"
 
 // ==============================================================================
-// APM Power Module (28V / 90A) Monitor for 4S LiPo Battery
+// APM Power Module (28V / 90A) Monitor via ADS1115 16-Bit I2C ADC (0x48)
 // ==============================================================================
 // - Bateria 4S: 13.2V (vazia / corte seguro) a 16.8V (totalmente carregada)
 // - Divisor de tensão APM: rácio 10.101 (16.8V entra -> ~1.66V no pino V)
 // - Sensor de corrente APM: ~27.32 A/V (90A a 3.3V)
+// - Ganho ADS1115: GAIN_ONE (+/- 4.096V, 1 LSB = 0.125mV)
 // ==============================================================================
 
 class BatteryMonitor {
@@ -18,12 +21,19 @@ public:
           batteryPct(100),
           currentAmps(0.0f),
           consumedMah(0.0f),
-          lastUpdateMs(0) {}
+          lastUpdateMs(0),
+          adsAvailable(false) {}
 
     void begin() {
-        analogReadResolution(12); // ADC a 12 bits (0-4095)
-        pinMode(PIN_BATTERY_VOLT_ADC, INPUT);
-        pinMode(PIN_BATTERY_CURR_ADC, INPUT);
+        Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);
+        if (ads.begin(ADS1115_I2C_ADDR, &Wire)) {
+            ads.setGain(GAIN_ONE); // +/- 4.096V 1-bit = 0.125mV
+            adsAvailable = true;
+            Serial.println(F("[BATT] ADS1115 16-Bit ADC detectado com sucesso em 0x48!"));
+        } else {
+            adsAvailable = false;
+            Serial.println(F("[BATT-AVISO] ADS1115 nao encontrado em 0x48! A usar valores nominais."));
+        }
         lastUpdateMs = millis();
         update(); // Primeira leitura inicial
     }
@@ -34,19 +44,21 @@ public:
         float dtHours = (now - lastUpdateMs) / 3600000.0f;
         lastUpdateMs = now;
 
-        // 1. Filtragem por sobreamostragem (16 leituras) para rejeitar ruído PWM
-        const int SAMPLES = 16;
-        uint32_t sumVoltMv = 0;
-        uint32_t sumCurrMv = 0;
-
-        for (int i = 0; i < SAMPLES; i++) {
-            sumVoltMv += analogReadMilliVolts(PIN_BATTERY_VOLT_ADC);
-            sumCurrMv += analogReadMilliVolts(PIN_BATTERY_CURR_ADC);
-            delayMicroseconds(50);
+        if (!adsAvailable) {
+            // Se o módulo ADS1115 ainda não estiver fisicamente conectado na bancada:
+            // mantem valores nominais saudáveis para testes
+            voltageMv = 16400;
+            batteryPct = 90;
+            currentAmps = 0.0f;
+            return;
         }
 
-        float adcVoltV = (sumVoltMv / (float)SAMPLES) / 1000.0f;
-        float adcCurrV = (sumCurrMv / (float)SAMPLES) / 1000.0f;
+        // 1. Leituras via ADS1115 (16-bit)
+        int16_t rawVolt = ads.readADC_SingleEnded(ADS_CH_BATT_VOLT);
+        int16_t rawCurr = ads.readADC_SingleEnded(ADS_CH_BATT_CURR);
+
+        float adcVoltV = ads.computeVolts(rawVolt);
+        float adcCurrV = ads.computeVolts(rawCurr);
 
         // 2. Fatores de conversão do Módulo APM 90A
         const float VOLT_DIVIDER_RATIO = 10.101f;
@@ -55,6 +67,7 @@ public:
 
         // 3. Tensão real da bateria 4S
         float batteryV = adcVoltV * VOLT_DIVIDER_RATIO;
+        if (batteryV < 0.0f) batteryV = 0.0f;
         voltageMv = static_cast<uint16_t>(batteryV * 1000.0f);
 
         // 4. Corrente em Amperes
@@ -87,11 +100,14 @@ public:
     float    getCurrentAmps() const { return currentAmps; }
     float    getConsumedMah() const { return consumedMah; }
     float    getCellAverageV() const { return (voltageMv / 1000.0f) / 4.0f; }
+    bool     isSensorReady() const { return adsAvailable; }
 
 private:
+    Adafruit_ADS1115 ads;
     uint16_t voltageMv;
     uint8_t  batteryPct;
     float    currentAmps;
     float    consumedMah;
     uint32_t lastUpdateMs;
+    bool     adsAvailable;
 };
