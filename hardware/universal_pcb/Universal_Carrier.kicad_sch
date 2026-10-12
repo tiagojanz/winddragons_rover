@@ -4439,7 +4439,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "0178209c-f062-4f7c-b451-18a7b8a056b3")
-		(property "Reference" "H3"
+		(property "Reference" "H?"
 			(at 215.9 189.23 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -4490,6 +4490,14 @@
 				)
 			)
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "H?")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Connector_Generic:Conn_01x02")
@@ -4502,7 +4510,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "08b5ff85-9d26-4159-be54-ed84d54f56ca")
-		(property "Reference" "J11"
+		(property "Reference" "J?"
 			(at 53.34 148.36 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -4559,6 +4567,14 @@
 		(pin "2"
 			(uuid "61dd56ee-9577-4dd3-b7a1-afde122ee033")
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "J?")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Mechanical:MountingHole")
@@ -4571,7 +4587,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "0f851895-e5b6-45da-ac9a-dbb485a3d685")
-		(property "Reference" "H2"
+		(property "Reference" "H?"
 			(at 190.5 189.23 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -4622,6 +4638,14 @@
 				)
 			)
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "H?")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Mechanical:MountingHole")
@@ -4634,7 +4658,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "18c2f95e-2954-48ad-bea5-0d41a5b1a805")
-		(property "Reference" "H4"
+		(property "Reference" "H?"
 			(at 241.3 189.23 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -4685,6 +4709,14 @@
 				)
 			)
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "H?")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Switch:SW_Push")
@@ -4697,7 +4729,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "1c7ae3e3-d5ad-4764-9201-4358cf819457")
-		(property "Reference" "SW1"
+		(property "Reference" "SW?"
 			(at 309.88 231 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -4754,6 +4786,14 @@
 		(pin "2"
 			(uuid "8e021229-cddf-454a-b443-8c57a9f91f3b")
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "SW?")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Connector_Generic:Conn_01x02")
@@ -4766,7 +4806,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "1fdf177d-0cf3-4f9d-820c-a3b9d35b79a2")
-		(property "Reference" "J5"
+		(property "Reference" "J?"
 			(at 114.3 161.06 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -4823,6 +4863,14 @@
 		(pin "2"
 			(uuid "ede82ca9-0dfe-429e-bd90-09efbca08e9f")
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "J?")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Connector_Generic:Conn_01x07")
@@ -4835,7 +4883,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "5ae8b5d0-cf3b-4670-a3ed-08b97dcd9f3d")
-		(property "Reference" "J6"
+		(property "Reference" "J?"
 			(at 218.44 126.77 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -4907,6 +4955,14 @@
 		(pin "7"
 			(uuid "82e73254-e1f7-4ad4-9754-280e6eaa54c3")
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "J?")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Connector_Generic:Conn_01x10")
@@ -4919,7 +4975,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "5c53296c-8387-4b5d-aa6e-6d97c5ee8e3c")
-		(property "Reference" "J_ADS"
+		(property "Reference" "J_ADS?"
 			(at 140 233.8 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -5000,6 +5056,14 @@
 		(pin "10"
 			(uuid "70865e53-aad9-4d12-909b-d762af89aae1")
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "J_ADS?")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Device:Joystick_PS5_Thumbstick")
@@ -5012,7 +5076,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "6c368155-812f-4eaa-bd4f-d6068da88692")
-		(property "Reference" "JOY1"
+		(property "Reference" "JOY?"
 			(at 314.96 48.26 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -5105,6 +5169,14 @@
 		(pin "14"
 			(uuid "8d722a13-80e0-4cc4-8370-bc9ea0cfdcd6")
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "JOY?")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Connector_Generic:Conn_01x06")
@@ -5117,7 +5189,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "7153212e-42d6-4550-9435-b10032373660")
-		(property "Reference" "J_PCA_OUT"
+		(property "Reference" "J_PCA_OUT?"
 			(at 370 150.88 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -5186,6 +5258,14 @@
 		(pin "6"
 			(uuid "1621e6cd-f9a8-4623-8360-dc0f423727c5")
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "J_PCA_OUT?")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Connector_Generic:Conn_01x02")
@@ -5198,7 +5278,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "79da40f7-11ac-4abf-bba4-14929baa3714")
-		(property "Reference" "J12"
+		(property "Reference" "J?"
 			(at 53.34 176.3 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -5255,6 +5335,14 @@
 		(pin "2"
 			(uuid "04c0df95-1615-4112-ab6c-6d2fa9605d9e")
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "J?")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Connector_Generic:Conn_01x03")
@@ -5267,7 +5355,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "7c24a057-302f-4e6e-9c39-91c9f0e78741")
-		(property "Reference" "J4"
+		(property "Reference" "J?"
 			(at 381 59.46 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -5327,6 +5415,14 @@
 		(pin "3"
 			(uuid "01678085-a72c-45ce-895d-c8bc35f91068")
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "J?")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Switch:SW_Push")
@@ -5339,7 +5435,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "88e2bd6d-c45f-45fc-9a1e-edc22c55e6ba")
-		(property "Reference" "SW2"
+		(property "Reference" "SW?"
 			(at 370 231 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -5396,6 +5492,14 @@
 		(pin "2"
 			(uuid "9a51dae0-7e96-4ae7-b458-2c4f5da873c3")
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "SW?")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Mechanical:MountingHole")
@@ -5408,7 +5512,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "9a8a481a-c261-4dd2-a56b-63306e6c6ed3")
-		(property "Reference" "H1"
+		(property "Reference" "H?"
 			(at 165.1 189.23 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -5459,6 +5563,14 @@
 				)
 			)
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "H?")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Switch:SW_Push")
@@ -5471,7 +5583,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "c6c1fb49-6841-42b8-838f-686d949b31c4")
-		(property "Reference" "SW3"
+		(property "Reference" "SW?"
 			(at 309.88 256 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -5528,6 +5640,14 @@
 		(pin "2"
 			(uuid "c2bf927f-e8c3-4120-9d3e-5480c46d246e")
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "SW?")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Switch:SW_Push")
@@ -5540,7 +5660,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "d42f174f-9060-4d60-917c-f426cf657989")
-		(property "Reference" "SW4"
+		(property "Reference" "SW?"
 			(at 370 256 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -5597,6 +5717,14 @@
 		(pin "2"
 			(uuid "49030155-ec37-41fa-9bbd-383692fbb7a8")
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "SW?")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Connector_Generic:Conn_01x09")
@@ -5609,7 +5737,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "d7476ae3-2554-44e6-8851-9fa5883818d4")
-		(property "Reference" "J1"
+		(property "Reference" "J?"
 			(at 50.8 53.11 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -5687,6 +5815,14 @@
 		(pin "9"
 			(uuid "6b147cf1-94c9-4a25-8795-9a820f61eb35")
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "J?")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Connector_Generic:Conn_01x09_Right")
@@ -5699,7 +5835,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "df317a7e-06e3-4352-885b-a645e4e59351")
-		(property "Reference" "J2"
+		(property "Reference" "J?"
 			(at 111.76 53.11 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -5777,6 +5913,14 @@
 		(pin "9"
 			(uuid "7325a5e1-5088-476e-a668-00c0a6d7c416")
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "J?")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Connector_Generic:Conn_02x04_Odd_Even")
@@ -5789,7 +5933,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "f37fd6a9-ba88-49a6-8fa9-1b5119a9674c")
-		(property "Reference" "J3"
+		(property "Reference" "J?"
 			(at 208.28 43.18 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -5864,6 +6008,14 @@
 		(pin "8"
 			(uuid "5c799249-5fba-41d2-937c-35a607d92a63")
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "J?")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Connector_Generic:Conn_01x06")
@@ -5876,7 +6028,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "fa5a25c1-05e1-47a7-ac7b-309755551e74")
-		(property "Reference" "J_PCA_IN"
+		(property "Reference" "J_PCA_IN?"
 			(at 309.88 150.88 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -5945,10 +6097,19 @@
 		(pin "6"
 			(uuid "045499b5-f96d-47e3-a5ae-08e7c104c737")
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "J_PCA_IN?")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(sheet_instances
 		(path "/"
 			(page "1")
 		)
 	)
+	(embedded_fonts no)
 )

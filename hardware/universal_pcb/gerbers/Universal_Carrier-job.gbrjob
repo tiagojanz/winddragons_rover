@@ -5,13 +5,13 @@
       "Application": "Pcbnew",
       "Version": "10.0.6"
     },
-    "CreationDate": "2026-10-09T16:16:54+01:00"
+    "CreationDate": "2026-10-12T15:45:27+01:00"
   },
   "GeneralSpecs": {
     "ProjectId": {
       "Name": "Universal_Carrier",
       "GUID": "556e6976-6572-4736-916c-5f4361727269",
-      "Revision": "V4.1 - Zero DRC Parity Clean"
+      "Revision": "V4.2 - I2C PCA9685 & ADS1115 Clean"
     },
     "Size": {
       "X": 100.15,

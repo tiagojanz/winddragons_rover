@@ -3885,6 +3885,14 @@
 				)
 			)
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "H1")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Switch:SW_Push")
@@ -3954,6 +3962,14 @@
 		(pin "2"
 			(uuid "3d3f9f1a-dbb5-41ca-aa0e-b7b66cf0795d")
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "SW2")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Mechanical:MountingHole")
@@ -4014,6 +4030,14 @@
 			(effects
 				(font
 					(size 1.27 1.27)
+				)
+			)
+		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "H4")
+					(unit 1)
 				)
 			)
 		)
@@ -4086,6 +4110,14 @@
 		(pin "2"
 			(uuid "06bb1f9a-e9fe-4e96-a734-d2d5944808e2")
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "J12")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Connector_Generic:Conn_01x02")
@@ -4155,6 +4187,14 @@
 		(pin "2"
 			(uuid "59a51b91-cd1e-4157-88b9-b570c8662ce7")
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "J11")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Mechanical:MountingHole")
@@ -4215,6 +4255,14 @@
 			(effects
 				(font
 					(size 1.27 1.27)
+				)
+			)
+		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "H3")
+					(unit 1)
 				)
 			)
 		)
@@ -4308,6 +4356,14 @@
 		(pin "9"
 			(uuid "67ab2318-3d45-4c3e-a97f-4cf268c0fb6c")
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "J2")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Switch:SW_Push")
@@ -4376,6 +4432,14 @@
 		)
 		(pin "2"
 			(uuid "6101a8b0-0cc3-46cd-beac-048a15682e94")
+		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "SW3")
+					(unit 1)
+				)
+			)
 		)
 	)
 	(symbol
@@ -4449,6 +4513,14 @@
 		(pin "3"
 			(uuid "a86309bd-80b4-466b-ac68-63823a281d74")
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "J8")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Switch:SW_Push")
@@ -4517,6 +4589,14 @@
 		)
 		(pin "2"
 			(uuid "bdb1a438-94a1-454f-8e62-7fc89fa333a5")
+		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "SW1")
+					(unit 1)
+				)
+			)
 		)
 	)
 	(symbol
@@ -4587,6 +4667,14 @@
 		(pin "2"
 			(uuid "71df4c24-06bc-4f58-b3b9-8899840fda8b")
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "SW4")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Connector_Generic:Conn_01x02")
@@ -4655,6 +4743,14 @@
 		)
 		(pin "2"
 			(uuid "9e2c1269-e1b7-49dc-80eb-3539636c79d1")
+		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "J5")
+					(unit 1)
+				)
+			)
 		)
 	)
 	(symbol
@@ -4740,6 +4836,14 @@
 		(pin "7"
 			(uuid "ac1c82ae-cfc5-43fe-96f7-e0a7a50c3d69")
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "J6")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Connector_Generic:Conn_01x03")
@@ -4812,6 +4916,14 @@
 		(pin "3"
 			(uuid "4e8244c2-c046-4e37-ae29-ee8b4fcbc9f6")
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "J9")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Connector_Generic:Conn_01x03")
@@ -4883,6 +4995,14 @@
 		)
 		(pin "3"
 			(uuid "f28bfefa-5150-4343-90b8-c81ea7664b29")
+		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "J4")
+					(unit 1)
+				)
+			)
 		)
 	)
 	(symbol
@@ -4974,6 +5094,14 @@
 		(pin "4"
 			(uuid "bd5e63e7-8851-47dc-ba91-be8f1f5b3447")
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "J1")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Connector_Generic:Conn_01x03")
@@ -5045,6 +5173,14 @@
 		)
 		(pin "3"
 			(uuid "9fe0600f-c4fa-462d-90ee-fdff6516a879")
+		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "J7")
+					(unit 1)
+				)
+			)
 		)
 	)
 	(symbol
@@ -5151,6 +5287,14 @@
 		(pin "14"
 			(uuid "4b4251d4-8621-4a62-b72d-c7b60470060d")
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "JOY1")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Connector_Generic:Conn_01x03")
@@ -5222,6 +5366,14 @@
 		)
 		(pin "3"
 			(uuid "97809410-a3f9-4aa0-a3da-01f1896d2c9f")
+		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "J10")
+					(unit 1)
+				)
+			)
 		)
 	)
 	(symbol
@@ -5310,6 +5462,14 @@
 		(pin "8"
 			(uuid "9de9b9af-0026-4626-8784-f3e28146a406")
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "J3")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Connector_Generic:Conn_01x04")
@@ -5385,6 +5545,14 @@
 		(pin "4"
 			(uuid "f38e124f-a347-44d6-bb11-ca6de520f05c")
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "JP_RBL")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Mechanical:MountingHole")
@@ -5448,10 +5616,19 @@
 				)
 			)
 		)
+		(instances
+			(project "Universal_Carrier"
+				(path "/c0000000-0000-0000-0000-000000000001"
+					(reference "H2")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(sheet_instances
 		(path "/"
 			(page "1")
 		)
 	)
+	(embedded_fonts no)
 )
