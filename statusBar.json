@@ -16,6 +16,14 @@
     "tooltip": "Compilar e Enviar Firmware para a Estação Base"
   },
   {
+    "id": "btn-upload-sdcard",
+    "label": "$(database) Upload SDCard",
+    "command": "workbench.action.tasks.runTask",
+    "args": "Upload SDCard",
+    "color": "#fb923c",
+    "tooltip": "Gerar e Enviar Ficheiros e Páginas Web para o Cartão MicroSD"
+  },
+  {
     "id": "btn-monitor-rover",
     "label": "$(terminal) Monitor Rover",
     "command": "workbench.action.tasks.runTask",

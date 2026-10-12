@@ -572,7 +572,7 @@ void loop() {
                             wifiConfig.getSSID().c_str(), wifiConfig.getRSSI(),
                             wifiConfig.getAPStationCount(),
                             wifiConfig.getAPPassword().c_str());
-        Serial.printf("[ROVER] Display page switched to: %d (1:NAV, 2:BATT, 3:ACT, 4:NET)\n", roverDisplay.getCurrentPage() + 1);
+        Serial.printf("[ROVER] Display page switched to: %d (1:NAV, 2:BATT, 3:ACT, 4:NET, 5:MAC)\n", roverDisplay.getCurrentPage() + 1);
     }
 
     // 2. Process GPS

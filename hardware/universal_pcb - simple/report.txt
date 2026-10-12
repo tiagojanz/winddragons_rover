@@ -1,0 +1,49 @@
+Informação: A ler o ficheiro netlist '/Users/tiagotorredovale/Documents/projectos/winddragon/rover/hardware/universal_pcb/Universal_Carrier.net'.
+
+Informação: Usando tstamps (IDs exclusivos) para combinar os símbolos e os footprints.
+
+Informação: Processando o símbolo 'JOY1:PS4_joystick:XDCR_COM-09032'.
+Informação: Processando o símbolo 'J12:Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Horizontal'.
+Informação: Processando o símbolo 'SW1:PS4_joystick:SKRKAEE020'.
+Informação: Processando o símbolo 'J11:Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Horizontal'.
+Informação: Processando o símbolo 'SW2:PS4_joystick:SKRKAEE020'.
+Informação: Processando o símbolo 'J5:Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical'.
+Informação: Processando o símbolo 'SW3:PS4_joystick:SKRKAEE020'.
+Informação: Processando o símbolo 'J10:Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Horizontal'.
+Informação: Processando o símbolo 'SW4:PS4_joystick:SKRKAEE020'.
+Informação: Processando o símbolo 'J9:Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Horizontal'.
+Informação: Processando o símbolo 'H1:MountingHole:MountingHole_3.2mm_M3'.
+Informação: Processando o símbolo 'J8:Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Horizontal'.
+Informação: Processando o símbolo 'H2:MountingHole:MountingHole_3.2mm_M3'.
+Informação: Processando o símbolo 'J7:Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Horizontal'.
+Informação: Processando o símbolo 'H3:MountingHole:MountingHole_3.2mm_M3'.
+Informação: Processando o símbolo 'J4:Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical'.
+Informação: Processando o símbolo 'H4:MountingHole:MountingHole_3.2mm_M3'.
+Informação: Processando o símbolo 'J6:Connector_PinHeader_2.54mm:PinHeader_1x07_P2.54mm_Vertical'.
+Informação: Processando o símbolo 'J3:Connector_PinHeader_2.54mm:PinHeader_2x04_P2.54mm_Vertical'.
+Informação: Processando o símbolo 'J2:Connector_PinHeader_2.54mm:PinHeader_1x09_P2.54mm_Horizontal'.
+Informação: Processando o símbolo 'J1:Connector_PinHeader_2.54mm:PinHeader_1x09_P2.54mm_Horizontal'.
+Adiciona J1 (footprint 'Connector_PinHeader_2.54mm:PinHeader_1x09_P2.54mm_Horizontal').
+Adiciona J3 (footprint 'Connector_PinHeader_2.54mm:PinHeader_2x04_P2.54mm_Vertical').
+Adiciona J2 (footprint 'Connector_PinHeader_2.54mm:PinHeader_1x09_P2.54mm_Horizontal').
+Adiciona H4 (footprint 'MountingHole:MountingHole_3.2mm_M3').
+Adiciona J6 (footprint 'Connector_PinHeader_2.54mm:PinHeader_1x07_P2.54mm_Vertical').
+Adiciona H3 (footprint 'MountingHole:MountingHole_3.2mm_M3').
+Adiciona J4 (footprint 'Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical').
+Adiciona H2 (footprint 'MountingHole:MountingHole_3.2mm_M3').
+Adiciona J7 (footprint 'Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Horizontal').
+Adiciona H1 (footprint 'MountingHole:MountingHole_3.2mm_M3').
+Adiciona J8 (footprint 'Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Horizontal').
+Adiciona SW4 (footprint 'PS4_joystick:SKRKAEE020').
+Adiciona J9 (footprint 'Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Horizontal').
+Adiciona SW3 (footprint 'PS4_joystick:SKRKAEE020').
+Adiciona J10 (footprint 'Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Horizontal').
+Adiciona SW2 (footprint 'PS4_joystick:SKRKAEE020').
+Adiciona J5 (footprint 'Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical').
+Adiciona SW1 (footprint 'PS4_joystick:SKRKAEE020').
+Adiciona J11 (footprint 'Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Horizontal').
+Adiciona JOY1 (footprint 'PS4_joystick:XDCR_COM-09032').
+Adiciona J12 (footprint 'Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Horizontal').
+
+
+Informação: Total de avisos: 0, erros: 0.

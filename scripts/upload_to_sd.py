@@ -18,6 +18,7 @@ import argparse
 import subprocess
 import json
 import urllib.request
+import urllib.parse
 from pathlib import Path
 
 import socket
@@ -25,7 +26,9 @@ import socket
 DEFAULT_ROVER_IP = os.environ.get("ROVER_IP", "192.168.1.112")
 DEFAULT_BASE_IP  = os.environ.get("BASE_IP", "192.168.1.66")
 AP_IP            = "192.168.4.1"
-WWW_DIR = Path(__file__).resolve().parent.parent / "data" / "www"
+DATA_DIR         = Path(__file__).resolve().parent.parent / "data"
+WWW_DIR          = DATA_DIR / "www"
+SYSTEM_DIR       = DATA_DIR / "system"
 
 def is_reachable(ip, timeout=0.8):
     try:
@@ -49,7 +52,7 @@ def detect_device_type(ip):
 def make_sd_dir(ip, directory):
     try:
         url = f"http://{ip}/api/sd/mkdir"
-        data = json.dumps({"dir": directory}).encode("utf-8")
+        data = json.dumps({"dir": directory, "path": directory}).encode("utf-8")
         req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=4) as response:
             pass
@@ -57,11 +60,17 @@ def make_sd_dir(ip, directory):
         pass
 
 def upload_file(ip, local_path, remote_dir):
-    print(f"  -> A carregar: {remote_dir}/{local_path.name} ({local_path.stat().st_size} bytes)...", end="", flush=True)
+    fsize = local_path.stat().st_size
+    print(f"  -> A carregar: {remote_dir}/{local_path.name} ({fsize} bytes)...", end="", flush=True)
+    # Timeout dinâmico: pelo menos 30s + 1s por cada 15KB para transferências grandes (ex: fontes woff2)
+    timeout_sec = max(30, int(30 + (fsize / 15000)))
+    encoded_dir = urllib.parse.quote(remote_dir)
     cmd = [
         "curl", "-s", "-S",
+        "--connect-timeout", "4",
+        "--max-time", str(timeout_sec),
         "-F", f"file=@{local_path}",
-        f"http://{ip}/api/sd/upload?dir={remote_dir}"
+        f"http://{ip}/api/sd/upload?dir={encoded_dir}"
     ]
     res = subprocess.run(cmd, capture_output=True, text=True)
     if res.returncode == 0 and ("sucesso" in res.stdout.lower() or "success" in res.stdout.lower() or res.stdout == ""):
@@ -72,15 +81,38 @@ def upload_file(ip, local_path, remote_dir):
         return False
 
 def sync_device(ip, device_type):
-    print(f"\n[*] A sincronizar frontend para {device_type.upper()} em http://{ip}/ ...")
+    print(f"\n[*] A testar ligação a http://{ip}/ ...")
+    if not is_reachable(ip, timeout=1.5):
+        print(f"[!] Não foi possível contactar o dispositivo em http://{ip}/")
+        print("    - Confirma se o ESP32 está ligado e conectado à rede.")
+        print("    - Confirma se o endereço IP corresponde ao mostrado no ecrã OLED.")
+        return 0
+
+    print(f"[*] A sincronizar frontend e ficheiros de sistema para {device_type.upper()} em http://{ip}/ ...")
     make_sd_dir(ip, "/www")
     make_sd_dir(ip, "/www/rover")
     make_sd_dir(ip, "/www/base")
+    make_sd_dir(ip, "/system")
+    make_sd_dir(ip, "/system/fonts")
 
     total = 0
     success = 0
 
-    # 1. Ficheiros partilhados na raiz (/www/)
+    # 1. Ficheiros de sistema (Fontes Font Awesome, etc.)
+    if SYSTEM_DIR.exists():
+        for root, dirs, files in os.walk(SYSTEM_DIR):
+            rel_dir = Path(root).relative_to(DATA_DIR)
+            remote_dir = "/" + str(rel_dir).replace("\\", "/")
+            make_sd_dir(ip, remote_dir)
+            for fname in sorted(files):
+                if fname.startswith("."):
+                    continue
+                fpath = Path(root) / fname
+                total += 1
+                if upload_file(ip, fpath, remote_dir):
+                    success += 1
+
+    # 2. Ficheiros partilhados na raiz (/www/)
     for fname in ["style.css", "app.js"]:
         f = WWW_DIR / fname
         if f.exists():
@@ -88,7 +120,7 @@ def sync_device(ip, device_type):
             if upload_file(ip, f, "/www"):
                 success += 1
 
-    # 2. Páginas especializadas
+    # 3. Páginas especializadas
     subfolder = "base" if device_type == "base" else "rover"
     src_dir = WWW_DIR / subfolder
     if src_dir.exists():
@@ -104,6 +136,69 @@ def sync_device(ip, device_type):
     print(f"[OK] {device_type.upper()}: {success}/{total} ficheiros enviados com sucesso.")
     return success
 
+LAST_IP_FILE = Path(__file__).resolve().parent.parent / ".last_sd_ip"
+
+def is_valid_ip_format(val):
+    if not val:
+        return False
+    parts = val.split(".")
+    return len(parts) == 4 and all(p.isdigit() and 0 <= int(p) <= 255 for p in parts)
+
+def get_last_ip():
+    if LAST_IP_FILE.exists():
+        try:
+            val = LAST_IP_FILE.read_text(encoding="utf-8").strip()
+            if is_valid_ip_format(val):
+                return val
+        except Exception:
+            return ""
+    return ""
+
+def save_last_ip(ip):
+    if not is_valid_ip_format(ip):
+        return
+    try:
+        LAST_IP_FILE.write_text(ip.strip(), encoding="utf-8")
+    except Exception:
+        pass
+
+def prompt_for_ip():
+    last_ip = get_last_ip()
+    default_ip = last_ip if last_ip else DEFAULT_BASE_IP
+
+    print("\n" + "=" * 58)
+    print("  🛰️  WindDragons - Upload para o Cartão MicroSD (SDCard)")
+    print("=" * 58)
+    print(f"  [1] Base Station (padrão: {DEFAULT_BASE_IP})")
+    print(f"  [2] Boia Rover   (padrão: {DEFAULT_ROVER_IP})")
+    print(f"  [3] Ponto Acesso (AP: {AP_IP})")
+    if last_ip and last_ip not in [DEFAULT_BASE_IP, DEFAULT_ROVER_IP, AP_IP]:
+        print(f"  [4] Último IP usado ({last_ip})")
+    print(f"  [a] Procurar automaticamente na rede local")
+    print("-" * 58)
+
+    prompt = f"Introduz o IP do dispositivo [Enter = {default_ip}]: "
+    try:
+        choice = input(prompt).strip()
+    except (EOFError, KeyboardInterrupt):
+        print("\n[!] Operação cancelada.")
+        sys.exit(0)
+
+    if not choice:
+        return default_ip
+    elif choice == "1":
+        return DEFAULT_BASE_IP
+    elif choice == "2":
+        return DEFAULT_ROVER_IP
+    elif choice == "3":
+        return AP_IP
+    elif choice == "4" and last_ip:
+        return last_ip
+    elif choice.lower() in ["a", "auto", "scan"]:
+        return "auto"
+    else:
+        return choice
+
 def main():
     parser = argparse.ArgumentParser(description="Upload de páginas web para o Cartão MicroSD do Rover ou da Base Station.")
     parser.add_argument("ip", nargs="?", default=None, help="Endereço IP do dispositivo (ex: 192.168.1.112)")
@@ -114,10 +209,17 @@ def main():
         print(f"[ERR] Diretório {WWW_DIR} não encontrado.")
         sys.exit(1)
 
-    # Caso IP fornecido explicitamente
-    if args.ip:
-        target = args.target if args.target != "auto" else detect_device_type(args.ip)
-        sync_device(args.ip, target)
+    ip = args.ip
+
+    # Se não foi fornecido IP e não há alvo forçado, perguntar ao utilizador
+    if not ip and args.target == "auto":
+        ip = prompt_for_ip()
+
+    # Caso IP fornecido explicitamente ou escolhido no prompt
+    if ip and ip != "auto":
+        save_last_ip(ip)
+        target = args.target if args.target != "auto" else detect_device_type(ip)
+        sync_device(ip, target)
         return
 
     # Modo explícito com IP default
@@ -132,7 +234,7 @@ def main():
         sync_device(DEFAULT_BASE_IP, "base")
         return
 
-    # Modo AUTO: detectar quem está online na rede
+    # Modo AUTO: detetar quem está online na rede
     print("[*] A detetar dispositivos WindDragons na rede...")
     found = False
 
@@ -142,11 +244,12 @@ def main():
         ("Ponto de Acesso AP", AP_IP, None)
     ]
 
-    for name, ip, forced_type in candidates:
-        if is_reachable(ip):
-            dtype = forced_type if forced_type else detect_device_type(ip)
-            print(f"  [+] Detetado {name} ({dtype.upper()}) em http://{ip}/")
-            sync_device(ip, dtype)
+    for name, candidate_ip, forced_type in candidates:
+        if is_reachable(candidate_ip):
+            dtype = forced_type if forced_type else detect_device_type(candidate_ip)
+            print(f"  [+] Detetado {name} ({dtype.upper()}) em http://{candidate_ip}/")
+            save_last_ip(candidate_ip)
+            sync_device(candidate_ip, dtype)
             found = True
 
     if not found:
@@ -159,4 +262,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 

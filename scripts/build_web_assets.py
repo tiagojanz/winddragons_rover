@@ -1515,12 +1515,19 @@ SD_CONTENT = """
       <span id="viewerTitle"><i class="fa-solid fa-file-lines"></i> Ficheiro</span>
       <button onclick="closeModal('viewerModal')" class="btn btn-secondary" style="padding:4px 8px;"><i class="fa-solid fa-xmark"></i></button>
     </div>
+    <div id="binaryNotice" style="display:none;padding:32px 20px;text-align:center;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;margin-bottom:12px;">
+      <div id="binaryIcon" style="font-size:3rem;margin-bottom:12px;"><i class="fa-solid fa-file"></i></div>
+      <h3 id="binaryName" style="margin-bottom:6px;font-size:1.1rem;color:var(--text);">Ficheiro Binário</h3>
+      <p style="color:var(--muted);font-size:0.85rem;margin-bottom:18px;">Este ficheiro não é um ficheiro de texto e não pode ser editado diretamente no browser.</p>
+      <button type="button" onclick="downloadCurrentFile()" class="btn btn-primary" style="display:inline-flex;align-items:center;gap:8px;"><i class="fa-solid fa-download"></i> Descarregar Ficheiro</button>
+    </div>
     <textarea id="viewerContent" rows="18" style="font-family:monospace;font-size:0.85rem;line-height:1.4;white-space:pre;"></textarea>
     <div class="btn-group" style="justify-content:space-between;margin-top:14px;">
       <span id="viewerPath" style="color:var(--muted);font-size:0.8rem;align-self:center;"></span>
       <div class="btn-group">
         <button type="button" onclick="closeModal('viewerModal')" class="btn btn-secondary">Fechar</button>
-        <button type="button" onclick="saveEditedFile()" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> Guardar Alterações</button>
+        <button type="button" id="viewerDownloadBtn" onclick="downloadCurrentFile()" class="btn btn-secondary"><i class="fa-solid fa-download"></i> Descarregar</button>
+        <button type="button" id="viewerSaveBtn" onclick="saveEditedFile()" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> Guardar Alterações</button>
       </div>
     </div>
   </div>
@@ -1673,6 +1680,19 @@ function renderExplorer() {
   listEl.innerHTML = listHtml;
 }
 
+let currentViewingPath = '';
+
+const BINARY_EXTENSIONS = [
+  '.woff2', '.woff', '.ttf', '.otf', '.eot',
+  '.png', '.jpg', '.jpeg', '.gif', '.ico', '.webp', '.bmp',
+  '.bin', '.zip', '.tar', '.gz', '.pdf', '.mp3', '.wav'
+];
+
+function isBinaryFile(p) {
+  const lower = p.toLowerCase();
+  return BINARY_EXTENSIONS.some(ext => lower.endsWith(ext));
+}
+
 function onItemClick(path, isDir) {
   if (isDir) {
     changeDir(path);
@@ -1682,26 +1702,69 @@ function onItemClick(path, isDir) {
 }
 
 function previewFile(path) {
-  fetch('/api/sd/read?path=' + encodeURIComponent(path))
-    .then(r => r.text())
-    .then(content => {
-      document.getElementById('viewerPath').innerText = path;
-      document.getElementById('viewerTitle').innerHTML = '<i class="fa-solid fa-file-lines"></i> ' + path.split('/').pop();
-      document.getElementById('viewerContent').value = content;
-      document.getElementById('viewerModal').style.display = 'flex';
-    })
-    .catch(() => showToast('Erro ao ler ficheiro', true));
+  currentViewingPath = path;
+  document.getElementById('viewerPath').innerText = path;
+  const fileName = path.split('/').pop();
+  document.getElementById('viewerTitle').innerHTML = getFileIcon(fileName, false) + ' ' + fileName;
+
+  const binaryBox = document.getElementById('binaryNotice');
+  const txtArea = document.getElementById('viewerContent');
+  const saveBtn = document.getElementById('viewerSaveBtn');
+
+  if (isBinaryFile(path)) {
+    binaryBox.style.display = 'block';
+    document.getElementById('binaryName').innerText = fileName;
+    document.getElementById('binaryIcon').innerHTML = getFileIcon(fileName, false);
+    txtArea.style.display = 'none';
+    saveBtn.style.display = 'none';
+    document.getElementById('viewerModal').style.display = 'flex';
+  } else {
+    binaryBox.style.display = 'none';
+    txtArea.style.display = 'block';
+    saveBtn.style.display = 'inline-flex';
+    txtArea.value = 'A carregar...';
+    document.getElementById('viewerModal').style.display = 'flex';
+
+    fetch('/api/sd/read?file=' + encodeURIComponent(path) + '&path=' + encodeURIComponent(path))
+      .then(r => {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.text();
+      })
+      .then(content => {
+        txtArea.value = content;
+      })
+      .catch(err => {
+        txtArea.value = 'Erro ao ler ficheiro (' + err.message + ')';
+        showToast('Erro ao ler ficheiro', true);
+      });
+  }
+}
+
+function downloadCurrentFile() {
+  if (currentViewingPath) {
+    downloadFile(currentViewingPath);
+  }
+}
+
+function downloadFile(path) {
+  const url = '/api/sd/download?file=' + encodeURIComponent(path) + '&path=' + encodeURIComponent(path);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = path.split('/').pop();
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 }
 
 function saveEditedFile() {
-  const path = document.getElementById('viewerPath').innerText;
+  const path = currentViewingPath || document.getElementById('viewerPath').innerText;
   const content = document.getElementById('viewerContent').value;
   showToast('A gravar ficheiro...');
 
   fetch('/api/sd/save', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path: path, content: content })
+    body: JSON.stringify({ file: path, path: path, content: content })
   })
   .then(r => r.json())
   .then(res => {
@@ -1712,11 +1775,8 @@ function saveEditedFile() {
     } else {
       showToast(res.msg || 'Erro ao gravar', true);
     }
-  });
-}
-
-function downloadFile(path) {
-  window.open('/api/sd/download?path=' + encodeURIComponent(path), '_blank');
+  })
+  .catch(() => showToast('Erro ao comunicar com o servidor', true));
 }
 
 function deleteItem(path, isDir) {
@@ -1729,7 +1789,7 @@ function deleteItem(path, isDir) {
   fetch('/api/sd/delete', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path: path, is_dir: isDir })
+    body: JSON.stringify({ file: path, path: path, is_dir: isDir })
   })
   .then(r => r.json())
   .then(res => {
@@ -1739,7 +1799,8 @@ function deleteItem(path, isDir) {
     } else {
       showToast(res.msg || 'Erro ao eliminar', true);
     }
-  });
+  })
+  .catch(() => showToast('Erro ao comunicar com o servidor', true));
 }
 
 function openMkdirModal() {

@@ -8,6 +8,7 @@
 #include "fleet_manager.h"
 #include "logo_bmp.h"
 #include "network_config.h"
+#include "qrcode_helper.h"
 #include <WiFi.h>
 
 // Standard 16-bit RGB565 color definitions
@@ -31,7 +32,8 @@ enum BaseScreenPage {
     BASE_PAGE_NETWORK  = 2, // Página de WiFi / Rede
     BASE_PAGE_CLOUD    = 3, // Página de Ligação ao Portal Cloud
     BASE_PAGE_JOYSTICK = 4, // Página de Teste do Joystick e Botões
-    BASE_PAGE_COUNT    = 5
+    BASE_PAGE_MAC      = 5, // Página de Endereço MAC & QR Code
+    BASE_PAGE_COUNT    = 6
 };
 
 struct BootLogItem {
@@ -251,6 +253,9 @@ public:
 
         if (!canvas) return;
 
+        // Limpar o buffer por completo para eliminar quaisquer resíduos do ecrã anterior
+        canvas->fillScreen(UI_BLACK);
+
         // 1. Cabeçalho Superior Global (Altura: 24px)
         renderHeader(fleet, wifiOk, cloudOk, sdOk, isApMode);
 
@@ -270,6 +275,9 @@ public:
                 break;
             case BASE_PAGE_JOYSTICK:
                 renderJoystickPage(rawX, rawY, throttle, rudder, deadband, btnJoy, btnMode, btnUp, btnDown, joyClicks);
+                break;
+            case BASE_PAGE_MAC:
+                renderMacPage(macStr);
                 break;
             default:
                 break;
@@ -819,6 +827,54 @@ public:
         canvas->print("SEGURA JOY (1s) OU MODE: Sair | BOOT: Prox");
     }
 
+    // =========================================================================
+    // PÁGINA 6: ENDEREÇO MAC & QR CODE DE IDENTIFICAÇÃO
+    // =========================================================================
+    void renderMacPage(const char* macStr = nullptr) {
+        int cardY = 26;
+        int cardH = 122;
+        String mac = (macStr && strlen(macStr) > 0) ? String(macStr) : getDeviceMacAddress();
+
+        // --- Card Esquerdo: QR Code (x=4..128, w=124, h=122) ---
+        canvas->fillRect(4, cardY, 124, cardH, UI_PANEL_BG);
+        canvas->drawRect(4, cardY, 124, cardH, UI_CARD_BG);
+
+        // Desenhar QR Code centrado
+        drawQrCode(canvas, mac.c_str(), 8, cardY + 4, 116, cardH - 8);
+
+        // --- Card Direito: Endereço MAC em Tamanho Gigante (x=132..316, w=184, h=122) ---
+        canvas->fillRect(132, cardY, 184, cardH, UI_PANEL_BG);
+        canvas->drawRect(132, cardY, 184, cardH, UI_CARD_BG);
+
+        // MAC em TAMANHO GIGANTE (Size 4 = 24x32px por caractere) sem textos secundários
+        canvas->setTextSize(4);
+        canvas->setTextColor(UI_CYAN);
+
+        if (mac.length() >= 17) {
+            // 3 linhas alinhadas à esquerda (2 octetos por linha):
+            // x = 152 para todas as linhas para ficarem perfeitamente alinhadas
+            // Altura total = 32*3 + 4*2 = 104px -> y = 26 + (122 - 104)/2 = 35
+            canvas->setCursor(152, 35);
+            canvas->print(mac.substring(0, 6));
+
+            canvas->setCursor(152, 71);
+            canvas->print(mac.substring(6, 12));
+
+            canvas->setCursor(152, 107);
+            canvas->print(mac.substring(12));
+        } else {
+            canvas->setCursor(142, 60);
+            canvas->print(mac);
+        }
+
+        // Rodapé
+        canvas->fillRect(0, 150, SCREEN_W, 22, UI_NAVY);
+        canvas->setTextColor(UI_LIGHTGREY);
+        canvas->setTextSize(1);
+        canvas->setCursor(8, 156);
+        canvas->print("BOOT: Prox Ecra | JOY CLIQUE: Voltar");
+    }
+
 private:
     // =========================================================================
     // CABEÇALHO GLOBAL (TOPO 24px)
@@ -833,7 +889,7 @@ private:
         canvas->print(" BASE");
 
         // Nome da página ativa no centro
-        canvas->setCursor(120, 8);
+        canvas->setCursor(114, 8);
         if (currentPage == BASE_PAGE_CONTROL) {
             canvas->setTextColor(UI_YELLOW);
             canvas->print("[1.COMANDO]");
@@ -849,16 +905,19 @@ private:
         } else if (currentPage == BASE_PAGE_JOYSTICK) {
             canvas->setTextColor(UI_YELLOW);
             canvas->print("[5.TESTE JOY]");
+        } else if (currentPage == BASE_PAGE_MAC) {
+            canvas->setTextColor(UI_GREEN);
+            canvas->print("[6.MAC/QR]");
         }
 
         // Ícones de Estado: SD, WiFi, Cloud
-        canvas->fillCircle(236, 12, 4, sdOk ? UI_CYAN : UI_DARKGREY);
-        canvas->fillCircle(250, 12, 4, isApMode ? UI_ORANGE : (wifiOk ? UI_GREEN : UI_RED));
-        canvas->fillCircle(264, 12, 4, cloudOk ? UI_GREEN : UI_DARKGREY);
+        canvas->fillCircle(224, 12, 4, sdOk ? UI_CYAN : UI_DARKGREY);
+        canvas->fillCircle(238, 12, 4, isApMode ? UI_ORANGE : (wifiOk ? UI_GREEN : UI_RED));
+        canvas->fillCircle(252, 12, 4, cloudOk ? UI_GREEN : UI_DARKGREY);
 
         // Pontos indicadores de página (BASE_PAGE_COUNT páginas)
         for (uint8_t i = 0; i < BASE_PAGE_COUNT; ++i) {
-            int dotX = 278 + i * 8;
+            int dotX = 266 + i * 9;
             if (i == currentPage) {
                 canvas->fillCircle(dotX, 12, 3, UI_YELLOW);
             } else {

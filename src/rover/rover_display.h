@@ -10,6 +10,7 @@
 #include "battery_monitor.h"
 #include "actuators.h"
 #include "logo_bmp.h"
+#include "qrcode_helper.h"
 
 // Colors (RGB565)
 #define UI_BLACK     0x0000
@@ -27,11 +28,12 @@
 #define UI_PANEL_BG  0x10A2
 
 enum RoverScreenPage {
-    ROVER_PAGE_NAV = 0,
-    ROVER_PAGE_POWER = 1,
+    ROVER_PAGE_NAV       = 0,
+    ROVER_PAGE_POWER     = 1,
     ROVER_PAGE_ACTUATORS = 2,
-    ROVER_PAGE_NETWORK = 3,
-    ROVER_PAGE_COUNT = 4
+    ROVER_PAGE_NETWORK   = 3,
+    ROVER_PAGE_MAC       = 4,
+    ROVER_PAGE_COUNT     = 5
 };
 
 struct BootLogItem {
@@ -226,6 +228,9 @@ public:
 
         if (!canvas) return;
 
+        // Limpar o buffer por completo para eliminar quaisquer resíduos do ecrã anterior
+        canvas->fillScreen(UI_BLACK);
+
         // 1. Top Header Bar (Height: 24px)
         canvas->fillRect(0, 0, SCREEN_W, 24, UI_NAVY);
         canvas->setTextColor(UI_WHITE);
@@ -243,17 +248,19 @@ public:
             canvas->print("BATERIA");
         } else if (currentPage == ROVER_PAGE_ACTUATORS) {
             canvas->print("ATUADOR");
-        } else {
+        } else if (currentPage == ROVER_PAGE_NETWORK) {
             canvas->print("WIFI/AP");
+        } else if (currentPage == ROVER_PAGE_MAC) {
+            canvas->print("MAC/QR");
         }
 
         // MicroSD status indicator dot (Cyan = Ready, Dark Grey = Not present)
-        canvas->fillCircle(250, 12, 4, sdOk ? UI_CYAN : UI_DARKGREY);
+        canvas->fillCircle(246, 12, 4, sdOk ? UI_CYAN : UI_DARKGREY);
 
-        // Page tabs indicators (4 dots at top right)
+        // Page tabs indicators (5 dots at top right)
         for (int i = 0; i < ROVER_PAGE_COUNT; ++i) {
             uint16_t dotCol = (i == currentPage) ? UI_YELLOW : UI_DARKGREY;
-            canvas->fillCircle(268 + i * 12, 12, 4, dotCol);
+            canvas->fillCircle(262 + i * 11, 12, 4, dotCol);
         }
 
         // 2. Render Page Content in 2-Column Landscape Layout
@@ -270,6 +277,9 @@ public:
             case ROVER_PAGE_NETWORK:
                 renderNetworkPage(isApMode, ip, ssid, wifiRssi, apClients, apPassword);
                 break;
+            case ROVER_PAGE_MAC:
+                renderMacPage(roverId);
+                break;
             default:
                 break;
         }
@@ -279,7 +289,7 @@ public:
         canvas->setTextColor(UI_YELLOW);
         canvas->setTextSize(1);
         canvas->setCursor(10, 156);
-        canvas->printf("PAG %d/4 | CLIQUE [BOOT] P/ MUDAR PAGINA", currentPage + 1);
+        canvas->printf("PAG %d/%d | CLIQUE [BOOT] P/ MUDAR PAGINA", currentPage + 1, ROVER_PAGE_COUNT);
 
         // 4. Push complete frame to physical ST7789 display
         display.drawPixelBuffer(0, 0, LCD_WIDTH - 1, LCD_HEIGHT - 1, canvas->getFramebuffer());
@@ -605,6 +615,44 @@ private:
             canvas->setTextColor(UI_CYAN);
             canvas->setCursor(12, cardY + 84);
             canvas->print(ip ? ip : "192.168.4.1");
+        }
+    }
+
+    void renderMacPage(uint8_t roverId) {
+        int cardY = 26;
+        int cardH = 122;
+        String mac = getDeviceMacAddress();
+
+        // --- Card Esquerdo: QR Code do Endereço MAC (x=4..128, w=124, h=122) ---
+        canvas->fillRect(4, cardY, 124, cardH, UI_PANEL_BG);
+        canvas->drawRect(4, cardY, 124, cardH, UI_CARD_BG);
+
+        // Desenhar QR Code centrado
+        drawQrCode(canvas, mac.c_str(), 8, cardY + 4, 116, cardH - 8);
+
+        // --- Card Direito: Endereço MAC em Tamanho Gigante (x=132..316, w=184, h=122) ---
+        canvas->fillRect(132, cardY, 184, cardH, UI_PANEL_BG);
+        canvas->drawRect(132, cardY, 184, cardH, UI_CARD_BG);
+
+        // MAC em TAMANHO GIGANTE (Size 4 = 24x32px por caractere) sem textos secundários
+        canvas->setTextSize(4);
+        canvas->setTextColor(UI_YELLOW);
+
+        if (mac.length() >= 17) {
+            // 3 linhas alinhadas à esquerda (2 octetos por linha):
+            // x = 152 para todas as linhas para ficarem perfeitamente alinhadas
+            // Altura total = 32*3 + 4*2 = 104px -> y = 26 + (122 - 104)/2 = 35
+            canvas->setCursor(152, 35);
+            canvas->print(mac.substring(0, 6));
+
+            canvas->setCursor(152, 71);
+            canvas->print(mac.substring(6, 12));
+
+            canvas->setCursor(152, 107);
+            canvas->print(mac.substring(12));
+        } else {
+            canvas->setCursor(142, 60);
+            canvas->print(mac);
         }
     }
 

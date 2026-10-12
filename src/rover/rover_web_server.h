@@ -11,6 +11,7 @@
 #include "battery_monitor.h"
 #include "actuators.h"
 #include "rover_display.h"
+#include "qrcode_helper.h"
 
 class RoverWebServer {
 public:
@@ -369,6 +370,8 @@ private:
         html += ".fa-list:before{content:'\\f03a';}";
         html += ".fa-copy:before{content:'\\f0c5';}";
         html += ".fa-filter:before{content:'\\f0b0';}";
+        html += ".fa-qrcode:before{content:'\\f029';}";
+        html += ".fa-camera:before{content:'\\f030';}";
         html += "</style></head><body>";
 
         // Navbar
@@ -407,19 +410,29 @@ private:
     // -------------------------------------------------------------
     void handleWifiPage() {
         String html = getHtmlHeader("Configuração WiFi", "wifi");
+        String mac = getDeviceMacAddress();
+        String qrSvg = generateQrCodeSvg(mac.c_str(), 140);
 
-        // Card 1: Estado Atual
+        // Card 1: Estado Atual & Identificação com QR Code
         html += "<div class='card'>";
-        html += "<div class='card-title'><span><i class='fa-solid fa-network-wired'></i> Estado da Ligação de Rede da Boia</span></div>";
+        html += "<div class='card-title'><span><i class='fa-solid fa-network-wired'></i> Estado da Ligação & Identificação</span><span class='badge' style='background:#065f46;color:#6ee7b7;'><i class='fa-solid fa-qrcode'></i> QR Code MAC</span></div>";
+        html += "<div style='display:flex;align-items:center;gap:20px;flex-wrap:wrap;margin-bottom:14px;'>";
+        html += "<div style='text-align:center;'>";
+        html += qrSvg;
+        html += "<div style='font-size:0.75rem;color:var(--muted);margin-top:6px;'><i class='fa-solid fa-camera'></i> Digitalizar MAC</div>";
+        html += "</div>";
+        html += "<div style='flex:1;min-width:240px;'>";
         html += "<div class='grid-2'>";
+        html += "<div class='stat-box'><div class='stat-label'>Endereço MAC (Hardware)</div><div class='stat-value' style='color:var(--primary);font-family:monospace;font-size:1.15rem;word-break:break-all;'>" + mac + "</div></div>";
+        html += "<div class='stat-box'><div class='stat-label'>Dispositivo / ID</div><div class='stat-value' style='color:var(--yellow);'>ROVER-" + String(_roverId < 10 ? "0" : "") + String(_roverId) + "</div></div>";
         html += "<div class='stat-box'><div class='stat-label'>Modo de Operação</div><div class='stat-value' style='color:" + String(_wifi.isAPMode() ? "var(--yellow)" : "var(--green)") + "'>";
         html += _wifi.isAPMode() ? "Ponto de Acesso (AP)" : "Conectado à Rede (STA)";
         html += "</div></div>";
         html += "<div class='stat-box'><div class='stat-label'>Endereço IP</div><div class='stat-value' style='color:var(--primary);'>" + _wifi.getIPAddress() + "</div></div>";
-        html += "<div class='stat-box'><div class='stat-label'>SSID Ativo</div><div class='stat-value'>" + _wifi.getSSID() + "</div></div>";
+        html += "<div class='stat-box'><div class='stat-label'>SSID Ativo</div><div class='stat-value' style='word-break:break-all;'>" + _wifi.getSSID() + "</div></div>";
         html += "<div class='stat-box'><div class='stat-label'>" + String(_wifi.isAPMode() ? "Dispositivos Conectados" : "Sinal WiFi (RSSI)") + "</div>";
         html += "<div class='stat-value'>" + String(_wifi.isAPMode() ? String(_wifi.getAPStationCount()) : String(_wifi.getRSSI()) + " dBm") + "</div></div>";
-        html += "</div>";
+        html += "</div></div></div>";
 
         if (_wifi.isAPMode()) {
             html += "<div style='margin-top:16px;padding:12px;background:#451a03;border-left:4px solid var(--yellow);border-radius:6px;font-size:0.875rem;'>";
@@ -540,6 +553,20 @@ private:
         html += "<div class='stat-box'><div class='stat-label'>SSID AP Local</div><div class='stat-value' style='font-size:0.95rem;word-break:break-all;'>" + _config.getApSsid() + "</div></div>";
         html += "<div class='stat-box'><div class='stat-label'>Estado do MicroSD</div><div class='stat-value' style='font-size:0.95rem;color:" + String(hasSd ? "var(--green)" : "var(--yellow)") + "'>" + (hasSd ? "Cartão Pronto" : "Sem Cartão") + "</div></div>";
         html += "</div></div>";
+
+        // Card: Identificação do Dispositivo & Endereço MAC (com QR Code)
+        String cfgMac = getDeviceMacAddress();
+        String cfgQrSvg = generateQrCodeSvg(cfgMac.c_str(), 140);
+
+        html += "<div class='card' style='border-left:4px solid var(--primary);'>";
+        html += "<div class='card-title'><span><i class='fa-solid fa-qrcode'></i> Endereço MAC & QR Code</span></div>";
+        html += "<div style='display:flex;align-items:center;gap:24px;flex-wrap:wrap;'>";
+        html += "<div style='text-align:center;'>";
+        html += cfgQrSvg;
+        html += "</div>";
+        html += "<div style='flex:1;min-width:240px;'>";
+        html += "<div style='color:var(--primary);font-family:monospace;letter-spacing:2px;font-size:2.6rem;font-weight:900;word-break:break-all;line-height:1.2;'>" + cfgMac + "</div>";
+        html += "</div></div></div>";
 
         // Formulário Principal
         html += "<form id='configForm' onsubmit='saveAllConfig(event)'>";
@@ -1840,12 +1867,16 @@ private:
     }
 
     void handleApiSdRead() {
-        if (!_server.hasArg("file")) {
-            _server.send(400, "text/plain", "Parâmetro 'file' ausente");
+        String path = "";
+        if (_server.hasArg("file")) {
+            path = _server.arg("file");
+        } else if (_server.hasArg("path")) {
+            path = _server.arg("path");
+        } else {
+            _server.send(400, "text/plain", "Parâmetro 'file' ou 'path' ausente");
             return;
         }
 
-        String path = _server.arg("file");
         if (!path.startsWith("/")) path = "/" + path;
 
         if (!_sd.isReady() || !_sd.fileExists(path.c_str())) {
@@ -1858,12 +1889,16 @@ private:
     }
 
     void handleApiSdDownload() {
-        if (!_server.hasArg("file")) {
-            _server.send(400, "text/plain", "Parâmetro 'file' ausente");
+        String path = "";
+        if (_server.hasArg("file")) {
+            path = _server.arg("file");
+        } else if (_server.hasArg("path")) {
+            path = _server.arg("path");
+        } else {
+            _server.send(400, "text/plain", "Parâmetro 'file' ou 'path' ausente");
             return;
         }
 
-        String path = _server.arg("file");
         if (!path.startsWith("/")) path = "/" + path;
 
         if (!_sd.isReady() || !_sd.fileExists(path.c_str())) {
@@ -1893,7 +1928,7 @@ private:
         JsonDocument doc;
         deserializeJson(doc, _server.arg("plain"));
 
-        String path = doc["file"] | "";
+        String path = doc["file"] | (doc["path"] | "");
         String content = doc["content"] | "";
         if (!path.startsWith("/")) path = "/" + path;
 

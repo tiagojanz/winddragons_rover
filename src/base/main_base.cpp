@@ -359,6 +359,17 @@ void handleInputsAndMenu(uint32_t now) {
                 display.nextPage();
             }
         }
+        else if (page == BASE_PAGE_MAC) {
+            if (btnModePressed || joystick.wasShortClicked()) {
+                display.setPage(BASE_PAGE_CONTROL);
+            }
+            else if (joystick.wasLongClicked()) {
+                currentScreen = SCREEN_MENU;
+                menuSelectedIndex = 0;
+                lastMenuActivityMs = now;
+                menuFeedback = nullptr;
+            }
+        }
     } 
     else if (currentScreen == SCREEN_MENU) {
         // Step UP / DOWN with joystick
@@ -468,7 +479,7 @@ void loop() {
                 display.nextPage();
             }
             forceDisplay = true;
-            Serial.printf("[BASE] Ecrã alterado para página %d (0:CONTROL, 1:FLEET, 2:NETWORK, 3:CLOUD, 4:JOYSTICK)\n", display.getCurrentPage());
+            Serial.printf("[BASE] Ecrã alterado para página %d (0:CONTROL, 1:FLEET, 2:NETWORK, 3:CLOUD, 4:JOYSTICK, 5:MAC)\n", display.getCurrentPage());
         }
     }
 

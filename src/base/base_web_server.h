@@ -9,6 +9,7 @@
 #include "lora_protocol.h"
 #include "network_config.h"
 #include "base_network.h"
+#include "qrcode_helper.h"
 #include <esp_mac.h>
 
 class BaseWebServer {
@@ -176,6 +177,14 @@ private:
             handlePortalPage();
         });
         _server.on("/wifi", [this]() {
+            if (tryServeSdFile("/www/wifi.html")) return;
+            handleWifiPage();
+        });
+        _server.on("/config", [this]() {
+            if (tryServeSdFile("/www/wifi.html")) return;
+            handleWifiPage();
+        });
+        _server.on("/settings", [this]() {
             if (tryServeSdFile("/www/wifi.html")) return;
             handleWifiPage();
         });
@@ -359,18 +368,27 @@ private:
         String html = getHtmlHeader("Configuração WiFi", "wifi");
 
         String mac = getMacAddress();
+        String qrSvg = generateQrCodeSvg(mac.c_str(), 140);
 
-        // Card 1: Estado Atual da Conexão
+        // Card 1: Estado Atual da Conexão & Identificação com QR Code
         html += "<div class='card'>";
-        html += "<div class='card-title'>Estado da Ligação de Rede & Identificação</div>";
+        html += "<div class='card-title'><span>Estado da Ligação de Rede & Identificação</span><span class='badge' style='background:#065f46;color:#6ee7b7;'>● QR Code Ativo</span></div>";
+        html += "<div style='display:flex;align-items:center;gap:24px;flex-wrap:wrap;margin-bottom:16px;'>";
+        html += "<div style='text-align:center;'>";
+        html += qrSvg;
+        html += "<div style='font-size:0.75rem;color:var(--muted);margin-top:6px;'>Digitalizar MAC</div>";
+        html += "</div>";
+        html += "<div style='flex:1;min-width:240px;'>";
         html += "<div class='grid-2'>";
-        html += "<div class='stat-box'><div class='stat-label'>ID Único / MAC Hardware (Portal)</div><div class='stat-value' style='color:var(--primary);font-family:monospace;'>" + mac + "</div></div>";
+        html += "<div class='stat-box'><div class='stat-label'>ID Único / MAC Hardware (Portal)</div><div class='stat-value' style='color:var(--primary);font-family:monospace;font-size:1.15rem;word-break:break-all;'>" + mac + "</div></div>";
         html += "<div class='stat-box'><div class='stat-label'>Nome da Estação Base</div><div class='stat-value' style='color:var(--yellow);'>" + String(BASE_STATION_ID) + "</div></div>";
         html += "<div class='stat-box'><div class='stat-label'>Modo de Operação</div><div class='stat-value' style='color:" + String(_wifi.isAPMode() ? "var(--yellow)" : "var(--green)") + "'>";
         html += _wifi.isAPMode() ? "Ponto de Acesso (AP)" : "Conectado à Rede (STA)";
         html += "</div></div>";
         html += "<div class='stat-box'><div class='stat-label'>Endereço IP</div><div class='stat-value' style='color:var(--primary);'>" + _wifi.getIPAddress() + "</div></div>";
-        html += "<div class='stat-box'><div class='stat-label'>SSID Ativo</div><div class='stat-value'>" + _wifi.getSSID() + "</div></div>";
+        html += "</div></div></div>";
+        html += "<div class='grid-2'>";
+        html += "<div class='stat-box'><div class='stat-label'>SSID Ativo</div><div class='stat-value' style='word-break:break-all;'>" + _wifi.getSSID() + "</div></div>";
         html += "<div class='stat-box'><div class='stat-label'>" + String(_wifi.isAPMode() ? "Dispositivos Conectados" : "Sinal WiFi (RSSI)") + "</div>";
         html += "<div class='stat-value'>" + String(_wifi.isAPMode() ? String(_wifi.getAPStationCount()) : String(_wifi.getRSSI()) + " dBm") + "</div></div>";
         html += "</div>";
@@ -490,12 +508,19 @@ private:
         html += "<div class='stat-box'><div class='stat-label'>Ciclo Envio</div><div class='stat-value' style='color:var(--primary);'>3.0s</div></div>";
         html += "</div>";
 
-        html += "<div style='margin-top:16px;' class='grid-2'>";
+        String qrSvg = generateQrCodeSvg(mac.c_str(), 140);
+        html += "<div style='margin-top:16px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;'>";
+        html += "<div style='text-align:center;'>";
+        html += qrSvg;
+        html += "<div style='font-size:0.75rem;color:var(--muted);margin-top:6px;'>Digitalizar MAC Station</div>";
+        html += "</div>";
+        html += "<div style='flex:1;min-width:240px;'>";
+        html += "<div class='grid-2'>";
         html += "<div class='stat-box'><div class='stat-label'>Endereço MAC de Hardware (Station ID)</div><div class='stat-value' style='color:var(--primary);font-family:monospace;'>" + mac + "</div></div>";
         html += "<div class='stat-box'><div class='stat-label'>Nome da Estação Base</div><div class='stat-value' style='color:var(--yellow);'>" + String(BASE_STATION_ID) + "</div></div>";
         html += "</div>";
-
-        html += "<div style='margin-top:16px;' class='stat-box'><div class='stat-label'>Endpoint Cloud API</div><div class='stat-value' style='font-size:0.95rem;font-family:monospace;color:var(--text);word-break:break-all;'>" + String(WINDDRAGONS_API_URL) + "</div></div>";
+        html += "<div style='margin-top:12px;' class='stat-box'><div class='stat-label'>Endpoint Cloud API</div><div class='stat-value' style='font-size:0.95rem;font-family:monospace;color:var(--text);word-break:break-all;'>" + String(WINDDRAGONS_API_URL) + "</div></div>";
+        html += "</div></div>";
         html += "</div>";
 
         html += getHtmlFooter();
@@ -1088,11 +1113,15 @@ private:
     }
 
     void handleApiSdRead() {
-        if (!_server.hasArg("file")) {
-            _server.send(400, "text/plain", "Parâmetro 'file' ausente");
+        String path = "";
+        if (_server.hasArg("file")) {
+            path = _server.arg("file");
+        } else if (_server.hasArg("path")) {
+            path = _server.arg("path");
+        } else {
+            _server.send(400, "text/plain", "Parâmetro 'file' ou 'path' ausente");
             return;
         }
-        String path = _server.arg("file");
         if (!path.startsWith("/")) path = "/" + path;
 
         if (!_sd || !_sd->isReady() || !_sd->fileExists(path.c_str())) {
@@ -1105,11 +1134,15 @@ private:
     }
 
     void handleApiSdDownload() {
-        if (!_server.hasArg("file")) {
-            _server.send(400, "text/plain", "Parâmetro 'file' ausente");
+        String path = "";
+        if (_server.hasArg("file")) {
+            path = _server.arg("file");
+        } else if (_server.hasArg("path")) {
+            path = _server.arg("path");
+        } else {
+            _server.send(400, "text/plain", "Parâmetro 'file' ou 'path' ausente");
             return;
         }
-        String path = _server.arg("file");
         if (!path.startsWith("/")) path = "/" + path;
 
         if (!_sd || !_sd->isReady() || !_sd->fileExists(path.c_str())) {
@@ -1138,7 +1171,7 @@ private:
         JsonDocument doc;
         deserializeJson(doc, _server.arg("plain"));
 
-        String path = doc["file"] | "";
+        String path = doc["file"] | (doc["path"] | "");
         String content = doc["content"] | "";
         if (!path.startsWith("/")) path = "/" + path;
 
