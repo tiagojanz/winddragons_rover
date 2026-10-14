@@ -61,6 +61,19 @@
 #define PIN_I2C_SCL        1   // ESP32 GPIO 1 (SCL)
 
 // ==========================================
+// INTER-ESP UART DEFINITIONS (Lafvin LCD <-> ESP32-C6 Slave)
+// ==========================================
+// Testado e validado em bancada a 115200 bps (0% perdas, RTT ~4-6ms)
+// Amarelo: C6 TX (GPIO 13) -> Lafvin RX (GPIO 2)
+// Verde:   Lafvin TX (GPIO 4) -> C6 RX (GPIO 22)
+// Preto:   GND Comum
+#define PIN_INTER_ESP_LAFVIN_TX   4   // Lafvin Top Header (GPIO 4)
+#define PIN_INTER_ESP_LAFVIN_RX   2   // Lafvin Top Header (GPIO 2)
+#define PIN_INTER_ESP_C6_TX      13   // C6 DevKit Header J3 (GPIO 13)
+#define PIN_INTER_ESP_C6_RX      22   // C6 DevKit Header J3 (GPIO 22)
+#define INTER_ESP_BAUDRATE   115200
+
+// ==========================================
 // ROVER PIN DEFINITIONS
 // ==========================================
 // GPS Quectel LC29H on Bottom Header (Hardware UART on RX/TX)

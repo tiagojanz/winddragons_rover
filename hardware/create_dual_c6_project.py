@@ -169,7 +169,7 @@ def generate_kicad_sch(path):
         '  )',
         '  (text "FRONT PANEL: 1.47 INCH IPS LCD, PS5 JOYSTICK & 4x TACTILE BUTTONS" (at 20 20 0) (effects (font (size 2 2) (bold yes))))',
         '  (text "BACK PERIPHERALS: ESP32-C6 DEVKITC-1, SX1278 LORA & 4x DIRECT SERVOS" (at 180 20 0) (effects (font (size 2 2) (bold yes))))',
-        '  (text "INTER-ESP UART: HIGH-SPEED BIDIRECTIONAL LINK (GPIO 2 & 3 @ 921600)" (at 100 80 0) (effects (font (size 2 2) (bold yes))))',
+        '  (text "INTER-ESP UART: LAFVIN (TX=GPIO4, RX=GPIO2) <---> DEVKITC (TX=GPIO13, RX=GPIO22)" (at 100 80 0) (effects (font (size 2 2) (bold yes))))',
         ')'
     ]
     with open(path, "w") as f:
@@ -200,7 +200,7 @@ def generate_kicad_pcb(path, force=False):
         "/BATT_VOLT", "/BATT_CURR", "/WATER_SENS",
         "/JOY_X", "/JOY_Y", "/IO9_BOOT",
         "/IO18_UP", "/IO19_MODE", "/IO20_DN",
-        "/IO4_FREE", "/IO5_FREE", "/IO12_FREE", "/IO13_FREE"
+        "/IO3_FREE", "/IO4_FREE", "/IO5_FREE", "/IO12_FREE", "/IO13_FREE"
     ]
     net_map = {n: i for i, n in enumerate(all_nets)}
     def get_net(n):
@@ -314,9 +314,9 @@ def generate_kicad_pcb(path, force=False):
     lines.append('  (gr_text "ST7789 1.47 INCH LCD (320x172)" (at 58.0 24.5 0) (layer "F.SilkS") (effects (font (size 0.8 0.8) (thickness 0.15))))')
 
     # Exact J1: ESP32_T_LANDSCAPE at (48.0, 13.5) on F.Cu
-    # Pin 1: IO5, 2: IO4, 3: IO3(M2S), 4: IO2(S2M), 5: IO1(JOY_Y), 6: IO0(JOY_X), 7: +3V3, 8: GND, 9: +5V
+    # Pin 1: IO5, 2: IO4(M2S TX), 3: IO3(FREE/TF-MISO), 4: IO2(S2M RX), 5: IO1(JOY_Y), 6: IO0(JOY_X), 7: +3V3, 8: GND, 9: +5V
     j1_nets = [
-        "/IO5_FREE", "/IO4_FREE", "/INTER_TX_M2S", "/INTER_RX_S2M",
+        "/IO5_FREE", "/INTER_TX_M2S", "/IO3_FREE", "/INTER_RX_S2M",
         "/JOY_Y", "/JOY_X", "/+3V3", "/GND", "/+5V"
     ]
     lines.append(f'  (footprint "Connector_PinHeader_2.54mm:PinHeader_1x09_P2.54mm_Horizontal" (layer "F.Cu") (uuid "{new_uuid()}")')
@@ -419,10 +419,11 @@ def generate_kicad_pcb(path, force=False):
     lines.append('  (gr_text "DIRECT LEDC PWM SERVOS" (at 46.0 97.75 180) (layer "B.SilkS") (effects (font (size 0.75 0.75) (thickness 0.12) (bold yes)) (justify mirror)))')
 
     # Right Header (J_DK_R at 35.5, 52.25)
+    # Pin 1: GND, 3: ESC(IO17), 4: RUD(IO15), 5: WINCH(IO23), 6: INTER_RX(IO22), 7: RACK(IO21), 12: GND, 13: INTER_TX(IO13), 14: IO12, 15: GND
     dk_r_nets = [
-        "/GND", "", "/SERVO_ESC", "/SERVO_RUDDER", "/SERVO_WINCH", "/SERVO_RACK",
-        "", "", "", "", "", "/GND",
-        "/INTER_TX_M2S", "/INTER_RX_S2M", "/GND", "/SERVO_ESC"
+        "/GND", "", "/SERVO_ESC", "/SERVO_RUDDER", "/SERVO_WINCH", "/INTER_TX_M2S",
+        "/SERVO_RACK", "", "", "", "", "/GND",
+        "/INTER_RX_S2M", "/IO12_FREE", "/GND", ""
     ]
     lines.append(f'  (footprint "Connector_PinHeader_2.54mm:PinHeader_1x16_P2.54mm_Vertical" (layer "B.Cu") (uuid "{new_uuid()}")')
     lines.append('    (at 35.5 52.25)')
@@ -501,22 +502,26 @@ def generate_kicad_pcb(path, force=False):
         lines.append(f'    (pad "{i+1}" thru_hole {p_shape} (at {px:.2f} 0) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net(n)} "{n}"))')
     lines.append('  )')
 
-    # --- 4. DIRECT RC SERVO HEADERS (4 CHANNELS) (B.Cu) ---
+    # --- 4. DIRECT RC SERVO HEADERS (4 CHANNELS) (F.Cu & F.SilkS) ---
     servos = [
-        ("ESC", "ESC (IO4)", 10.0, 73.58, "/SERVO_ESC"),
-        ("RUD", "RUDDER (IO5)", 13.0, 73.58, "/SERVO_RUDDER"),
-        ("WIN", "WINCH (IO6)", 16.0, 73.5, "/SERVO_WINCH"),
-        ("RCK", "RACK (IO7)", 19.0, 73.5, "/SERVO_RACK"),
+        ("ESC", "ESC", 10.0, 73.58, "/SERVO_ESC"),
+        ("RUD", "RUDDER", 13.0, 73.58, "/SERVO_RUDDER"),
+        ("WIN", "WINCH", 16.0, 73.5, "/SERVO_WINCH"),
+        ("RCK", "RACK", 19.0, 73.5, "/SERVO_RACK"),
     ]
+    lines.append('  (gr_text "RC SERVOS" (at 14.5 66.0 0) (layer "F.SilkS") (effects (font (size 0.85 0.85) (thickness 0.14) (bold yes))))')
+    lines.append('  (gr_text "SIG" (at 7.6 68.5 0) (layer "F.SilkS") (effects (font (size 0.65 0.65) (thickness 0.12))))')
+    lines.append('  (gr_text "+5V" (at 7.6 71.04 0) (layer "F.SilkS") (effects (font (size 0.65 0.65) (thickness 0.12))))')
+    lines.append('  (gr_text "GND" (at 7.6 73.58 0) (layer "F.SilkS") (effects (font (size 0.65 0.65) (thickness 0.12))))')
     for ref, lbl, sx, sy, sig_net in servos:
-        lines.append(f'  (footprint "Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical" (layer "B.Cu") (uuid "{new_uuid()}")')
+        lines.append(f'  (footprint "Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical" (layer "F.Cu") (uuid "{new_uuid()}")')
         lines.append(f'    (at {sx} {sy} 180)')
         ref_x = -0.5 if ref == "WIN" else 0
-        lines.append(f'    (property "Reference" "{ref}" (at {ref_x} -2.4 0) (layer "B.SilkS") (effects (font (size 0.65 0.65) (thickness 0.1)) (justify mirror)))')
-        lines.append(f'    (property "Value" "{lbl}" (at 0 7.5 90) (layer "B.SilkS") (effects (font (size 0.6 0.6) (thickness 0.1)) (justify mirror)))')
-        lines.append(f'    (pad "1" thru_hole rect (at 0 0 180) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("/GND")} "/GND"))')
-        lines.append(f'    (pad "2" thru_hole circle (at 0 2.54 180) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("/+5V_SERVO")} "/+5V_SERVO"))')
-        lines.append(f'    (pad "3" thru_hole circle (at 0 5.08 180) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net(sig_net)} "{sig_net}"))')
+        lines.append(f'    (property "Reference" "{ref}" (at {ref_x} -2.4 0) (layer "F.SilkS") (effects (font (size 0.7 0.7) (thickness 0.12) (bold yes))))')
+        lines.append(f'    (property "Value" "{lbl}" (at 0 7.5 90) (layer "F.SilkS") (effects (font (size 0.6 0.6) (thickness 0.1))))')
+        lines.append(f'    (pad "1" thru_hole rect (at 0 0 180) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "F.SilkS") (net {get_net("/GND")} "/GND"))')
+        lines.append(f'    (pad "2" thru_hole circle (at 0 2.54 180) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "F.SilkS") (net {get_net("/+5V_SERVO")} "/+5V_SERVO"))')
+        lines.append(f'    (pad "3" thru_hole circle (at 0 5.08 180) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "F.SilkS") (net {get_net(sig_net)} "{sig_net}"))')
         lines.append('  )')
 
     # --- 5. POWER & TELEMETRY HEADERS (B.Cu) ---
