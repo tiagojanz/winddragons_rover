@@ -5,23 +5,28 @@ Dimensions: 100.0 x 100.0 mm (2-Layer JLCPCB Standard)
 
 FRONT (F.Cu / F.SilkS) - USER INTERFACE PANEL:
     * ESP32-C6 LCD 1.47" (LAFVIN Master) with EXACT footprint from Universal PCB:
-        - J1 at (35.0, 16.0)
-        - J2 at (35.0, 33.78)
-        - Board outline: (21.5, 12.5) to (69.5, 37.5)
-        - Active ST7789 1.47" LCD: (34.0, 18.0) to (56.0, 32.0)
-        - USB-C connector on right: (68.5, 22.5) to (72.5, 28.5)
-    * PS5 3D Analog Joystick (JOY1: Alps RKJXV1224005) at (20.0, 68.0)
-    * 4x Alps SKRKAEE020 SMD Tactile Buttons at (65.0..77.6, 62.0..74.0)
-    * WindDragons Vector Logo (20mm) centered at (45.0, 58.0)
+        - J1 at (48.0, 13.5)
+        - J2 at (48.0, 31.28)
+        - Board outline: (34.5, 10.0) to (82.5, 35.0)
+        - Active ST7789 1.47" LCD: (47.0, 15.5) to (69.0, 29.5)
+        - USB-C connector on right: (81.5, 20.0) to (85.5, 26.0)
+    * PS5 3D Analog Joystick (JOY1: Alps RKJXV1224005) at (79.25, 49.75)
+    * 4x Alps SKRKAEE020 SMD Tactile Buttons at left (X=10.13..22.73, Y=45.22..57.22)
+    * WindDragons Vector Logo
 
 BACK (B.Cu / B.SilkS) - DAUGHTERBOARDS, RF & ACTUATORS:
-    * ESP32-C6-DevKitC-1 V1.2 (Slave - LoRa & Servos) at X=33.5 & X=56.36, Y=46.0..84.1
-    * SX1278 (Ra-02 433MHz) LoRa Module at (14.0, 18.0)
-    * Quectel LC29H GNSS GPS Module at (76.0, 18.0)
-    * 4x Direct RC Servo Headers (CH0 ESC, CH1 Rudder, CH2 Winch, CH3 Rack) at Y=92.0
-    * Dual Power Inputs (5V ESP, 5V High-Current Servos) at Y=92.0
-    * Battery (APM V/I) & Water/Anchor Telemetry at X=90.0
-    * Mirrored WindDragons Logo (18mm) at (85.0, 78.0)
+    * ESP32-C6-DevKitC-1 V1.2 (Slave - LoRa & Servos - USB facing DOWN):
+        - J_DK_R at (35.5, 52.25)
+        - J_DK_L at (58.36, 52.25)
+        - Board outline: (32.5, 50.25) to (61.5, 93.25)
+        - USB-UART connector outline at bottom: (43.0, 91.75) to (51.0, 96.25)
+    * SX1278 (Ra-02 433MHz) LoRa Module at (84.81, 70.23, -90 deg)
+        - Outline: (71.19, 64.23) to (89.19, 87.23)
+    * Quectel LC29H GNSS GPS Module at (11.88, 12.5)
+        - Outline: (3.5, 10.0) to (30.5, 41.0)
+    * 4x Direct RC Servo Headers (ESC, RUD, WIN, RCK) at Y=73.58..73.5 (X=10.0, 13.0, 16.0, 19.0)
+    * Telemetry Headers: J_BATT at (22.0, 73.5), J_WATER at (25.0, 73.5)
+    * Dual Power Inputs: 5V Servo (J_PWR_SRV) at (5.0, 77.73), 5V ESP (J_PWR_ESP) at (95.5, 51.5)
 """
 
 import os
@@ -173,7 +178,19 @@ def generate_kicad_sch(path):
 # ==============================================================================
 # 3. KICAD PCB (.kicad_pcb)
 # ==============================================================================
-def generate_kicad_pcb(path):
+def generate_kicad_pcb(path, force=False):
+    template_path = os.path.join(os.path.dirname(path), f"{PROJECT_NAME}_template.kicad_pcb")
+    if os.path.exists(path) and not force:
+        print(f"Preserving existing user-modified PCB: {path}")
+        return
+    if os.path.exists(template_path):
+        print(f"Writing PCB from master user-calibrated template: {template_path}")
+        with open(template_path, "r") as tf:
+            content = tf.read()
+        with open(path, "w") as f:
+            f.write(content)
+        return
+
     all_nets = [
         "", "/GND", "/+3V3", "/+5V", "/+5V_SERVO",
         "/INTER_TX_M2S", "/INTER_RX_S2M",
@@ -278,27 +295,32 @@ def generate_kicad_pcb(path):
     # 1. LAFVIN ESP32-C6 1.47" LCD (Master) - EXACT UNIVERSAL PCB FOOTPRINT
     # 2. PS5 3D Analog Joystick (JOY1: Alps RKJXV1224005)
     # 3. 4x Alps SKRKAEE020 SMD Tactile Buttons (SW1-SW4)
-    # 4. WindDragons Vector Logo (20mm)
+    # ==============================================================================
+    # FRONT SIDE (F.Cu / F.SilkS):
+    # 1. LAFVIN ESP32-C6 1.47" LCD (Master)
+    # 2. PS5 3D Analog Joystick (JOY1: Alps RKJXV1224005 on right)
+    # 3. 4x Alps SKRKAEE020 SMD Tactile Buttons (SW1-SW4 on left)
+    # 4. WindDragons Vector Logo
     # ==============================================================================
 
-    # --- 1. LAFVIN ESP32-C6 1.47" LCD (EXACT UNIVERSAL PCB PARITY) ---
-    # Exact Board Outline from Universal PCB:
-    lines.append('  (gr_rect (start 21.5 12.5) (end 69.5 37.5) (stroke (width 0.2) (type default)) (fill none) (layer "F.SilkS"))')
-    # Exact Active ST7789 1.47" LCD Outline from Universal PCB:
-    lines.append('  (gr_rect (start 34.0 18.0) (end 56.0 32.0) (stroke (width 0.18) (type default)) (fill none) (layer "F.SilkS"))')
+    # --- 1. LAFVIN ESP32-C6 1.47" LCD ---
+    # Exact Board Outline from Universal PCB (shifted to center):
+    lines.append('  (gr_rect (start 34.5 10.0) (end 82.5 35.0) (stroke (width 0.2) (type default)) (fill none) (layer "F.SilkS"))')
+    # Exact Active ST7789 1.47" LCD Outline:
+    lines.append('  (gr_rect (start 47.0 15.5) (end 69.0 29.5) (stroke (width 0.18) (type default)) (fill none) (layer "F.SilkS"))')
     # Exact USB-C Connector Outline on right edge:
-    lines.append('  (gr_rect (start 68.5 22.5) (end 72.5 28.5) (stroke (width 0.15) (type default)) (fill none) (layer "F.SilkS"))')
-    lines.append('  (gr_text "USB-C" (at 66.0 25.5 0) (layer "F.SilkS") (effects (font (size 0.7 0.7) (thickness 0.15))))')
-    lines.append('  (gr_text "ST7789 1.47 INCH LCD (320x172)" (at 45.0 27.0 0) (layer "F.SilkS") (effects (font (size 0.85 0.85) (thickness 0.15))))')
+    lines.append('  (gr_rect (start 81.5 20.0) (end 85.5 26.0) (stroke (width 0.15) (type default)) (fill none) (layer "F.SilkS"))')
+    lines.append('  (gr_text "USB-C" (at 79.0 23.0 0) (layer "F.SilkS") (effects (font (size 0.7 0.7) (thickness 0.15))))')
+    lines.append('  (gr_text "ST7789 1.47 INCH LCD (320x172)" (at 58.0 24.5 0) (layer "F.SilkS") (effects (font (size 0.8 0.8) (thickness 0.15))))')
 
-    # Exact J1: ESP32_T_LANDSCAPE at (35.0, 16.0) on F.Cu
+    # Exact J1: ESP32_T_LANDSCAPE at (48.0, 13.5) on F.Cu
     # Pin 1: IO5, 2: IO4, 3: IO3(M2S), 4: IO2(S2M), 5: IO1(JOY_Y), 6: IO0(JOY_X), 7: +3V3, 8: GND, 9: +5V
     j1_nets = [
         "/IO5_FREE", "/IO4_FREE", "/INTER_TX_M2S", "/INTER_RX_S2M",
         "/JOY_Y", "/JOY_X", "/+3V3", "/GND", "/+5V"
     ]
     lines.append(f'  (footprint "Connector_PinHeader_2.54mm:PinHeader_1x09_P2.54mm_Horizontal" (layer "F.Cu") (uuid "{new_uuid()}")')
-    lines.append('    (at 35.0 16.0)')
+    lines.append('    (at 48.0 13.5)')
     lines.append('    (property "Reference" "J1" (at 0 -2.5 0) (layer "F.SilkS") (effects (font (size 0.8 0.8) (thickness 0.15))))')
     lines.append('    (property "Value" "ESP32_T_LANDSCAPE" (at 10.16 -2.5 0) (layer "F.SilkS") (effects (font (size 0.8 0.8) (thickness 0.15))))')
     for i in range(9):
@@ -308,14 +330,14 @@ def generate_kicad_pcb(path):
         lines.append(f'    (pad "{i+1}" thru_hole {p_shape} (at {px:.2f} 0) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "F.SilkS") (net {get_net(n)} "{n}"))')
     lines.append('  )')
 
-    # Exact J2: ESP32_B_LANDSCAPE at (35.0, 33.78) on F.Cu
+    # Exact J2: ESP32_B_LANDSCAPE at (48.0, 31.28) on F.Cu
     # Pin 1: IO9(BOOT/CLICK), 2: IO18(UP), 3: IO19(MODE), 4: IO20(DN), 5: IO23(PPS), 6: IO12, 7: IO13, 8: IO16(GPS_RX), 9: IO17(GPS_TX)
     j2_nets = [
         "/IO9_BOOT", "/IO18_UP", "/IO19_MODE", "/IO20_DN",
         "/GPS_PPS", "/IO12_FREE", "/IO13_FREE", "/GPS_RX", "/GPS_TX"
     ]
     lines.append(f'  (footprint "Connector_PinHeader_2.54mm:PinHeader_1x09_P2.54mm_Horizontal" (layer "F.Cu") (uuid "{new_uuid()}")')
-    lines.append('    (at 35.0 33.78)')
+    lines.append('    (at 48.0 31.28)')
     lines.append('    (property "Reference" "J2" (at 0 2.5 0) (layer "F.SilkS") (effects (font (size 0.8 0.8) (thickness 0.15))))')
     lines.append('    (property "Value" "ESP32_B_LANDSCAPE" (at 10.16 2.5 0) (layer "F.SilkS") (effects (font (size 0.8 0.8) (thickness 0.15))))')
     for i in range(9):
@@ -325,10 +347,9 @@ def generate_kicad_pcb(path):
         lines.append(f'    (pad "{i+1}" thru_hole {p_shape} (at {px:.2f} 0) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "F.SilkS") (net {get_net(n)} "{n}"))')
     lines.append('  )')
 
-    # --- 2. PS5 3D ANALOG JOYSTICK (JOY1: Alps RKJXV1224005 on F.Cu) ---
-    # Position: CX = 20.0, CY = 68.0
-    joy_cx, joy_cy = 20.0, 68.0
-    lines.append('  (gr_text "PS5 3D JOYSTICK (ALPS RKJXV)" (at 20.0 81.5 0) (layer "F.SilkS") (effects (font (size 0.8 0.8) (thickness 0.14))))')
+    # --- 2. PS5 3D ANALOG JOYSTICK (JOY1: Alps RKJXV1224005 on F.Cu at right) ---
+    joy_cx, joy_cy = 78.2525, 51.715
+    lines.append('  (gr_text "PS5 3D JOYSTICK (ALPS RKJXV)" (at 78.5 37.5 0) (layer "F.SilkS") (effects (font (size 0.8 0.8) (thickness 0.14))))')
     lines.append(f'  (footprint "PS5_joystick:Alps_RKJXV1224005" (layer "F.Cu") (uuid "{new_uuid()}")')
     lines.append(f'    (at {joy_cx} {joy_cy})')
     lines.append('    (fp_text reference "JOY1" (at 0 -11.5) (layer "F.SilkS") (effects (font (size 0.8 0.8) (thickness 0.15))))')
@@ -362,19 +383,19 @@ def generate_kicad_pcb(path):
     lines.append('    (pad "" np_thru_hole circle (at 4.3 0.0) (size 1.6 1.6) (drill 1.6) (layers *.Cu *.Mask))')
     lines.append('  )')
 
-    # --- 3. 4x ALPS SKRKAEE020 SMD TACTILE SWITCHES (F.Cu) ---
+    # --- 3. 4x ALPS SKRKAEE020 SMD TACTILE SWITCHES (F.Cu at left) ---
     buttons = [
-        ("SW1", "subir ancora", 65.0, 68.0, "/IO18_UP"),
-        ("SW2", "MODE", 77.6, 68.0, "/IO19_MODE"),
-        ("SW3", "largar ancora", 71.3, 74.0, "/IO20_DN"),
-        ("SW4", "BOOT", 71.3, 62.0, "/IO9_BOOT"),
+        ("SW4", "BOOT", 16.43, 45.22, "/IO9_BOOT"),
+        ("SW1", "subir ancora", 10.13, 51.22, "/IO18_UP"),
+        ("SW2", "MODE", 22.73, 51.22, "/IO19_MODE"),
+        ("SW3", "largar ancora", 16.43, 57.22, "/IO20_DN"),
     ]
     for ref, val, bx, by, sig_net in buttons:
         lines.append(f'  (footprint "PS4_joystick:SKRKAEE020" (layer "F.Cu") (uuid "{new_uuid()}")')
         lines.append(f'    (at {bx} {by})')
         lines.append(f'    (property "Reference" "{ref}" (at 0 -2.3 0) (layer "F.SilkS") (uuid "{new_uuid()}") (effects (font (size 0.75 0.75) (thickness 0.14))))')
         lines.append(f'    (property "Value" "{val}" (at 0 2.3 0) (layer "F.SilkS") (uuid "{new_uuid()}") (effects (font (size 0.65 0.65) (thickness 0.12))))')
-        lines.append(f'    (attr smd)')
+        lines.append('    (attr smd)')
         lines.append(f'    (fp_line (start -2.05 -1.55) (end 2.05 -1.55) (stroke (width 0.12) (type solid)) (layer "F.SilkS") (uuid "{new_uuid()}"))')
         lines.append(f'    (fp_line (start 2.05 1.55) (end -2.05 1.55) (stroke (width 0.12) (type solid)) (layer "F.SilkS") (uuid "{new_uuid()}"))')
         lines.append(f'    (fp_line (start -2.75 -1.75) (end 2.75 -1.75) (stroke (width 0.05) (type solid)) (layer "F.CrtYd") (uuid "{new_uuid()}"))')
@@ -387,46 +408,25 @@ def generate_kicad_pcb(path):
 
     # ==============================================================================
     # BACK SIDE (B.Cu / B.SilkS):
-    # 1. ESP32-C6-DevKitC-1 V1.2 (Slave - LoRa & Servos)
-    # 2. SX1278 (Ra-02 433MHz) LoRa Module
-    # 3. Quectel LC29H GNSS GPS Module
-    # 4. 4x Direct RC Servo Headers (CH0-CH3)
-    # 5. Power & Telemetry Headers
     # ==============================================================================
 
-    # --- 1. ESP32-C6 DEVKITC-1 V1.2 (B.Cu) ---
-    # Centered in Lower-Middle Back: J_DK_L at X=33.5, J_DK_R at X=56.36 (22.86mm apart)
-    # 16 pins vertical from Y=46.0 to Y=84.1
-    lines.append('  (gr_text "ESP32-C6 DEVKITC-1 (SLAVE: RF & SERVOS)" (at 44.93 42.5 0) (layer "B.SilkS") (effects (font (size 0.85 0.85) (thickness 0.14) (bold yes)) (justify mirror)))')
-    lines.append('  (gr_rect (start 30.5 44.0) (end 59.5 87.0) (stroke (width 0.15) (type default)) (fill none) (layer "B.SilkS"))')
-    lines.append('  (gr_rect (start 41.0 85.5) (end 49.0 90.0) (stroke (width 0.15) (type default)) (fill none) (layer "B.SilkS"))')
-    lines.append('  (gr_text "USB-UART" (at 45.0 87.5 0) (layer "B.SilkS") (effects (font (size 0.6 0.6) (thickness 0.1)) (justify mirror)))')
-    lines.append('  (gr_text "! J5 CLOSED !" (at 45.0 45.0 0) (layer "B.SilkS") (effects (font (size 0.65 0.65) (thickness 0.12) (bold yes)) (justify mirror)))')
+    # --- 1. ESP32-C6 DEVKITC-1 V1.2 (B.Cu - USB FACING DOWN) ---
+    lines.append('  (gr_text "ESP32-C6 DEVKITC-1 (SLAVE: RF & SERVOS)" (at 17.5 86.5 0) (layer "B.SilkS") (effects (font (size 0.85 0.85) (thickness 0.14) (bold yes)) (justify mirror)))')
+    lines.append('  (gr_rect (start 32.5 50.25) (end 61.5 93.25) (stroke (width 0.15) (type default)) (fill none) (layer "B.SilkS"))')
+    lines.append('  (gr_rect (start 43.0 91.75) (end 51.0 96.25) (stroke (width 0.15) (type default)) (fill none) (layer "B.SilkS"))')
+    lines.append('  (gr_text "USB-UART" (at 47.0 93.75 180) (layer "B.SilkS") (effects (font (size 0.6 0.6) (thickness 0.1)) (justify mirror)))')
+    lines.append('  (gr_text "! J5 CLOSED !" (at 47.0 51.25 180) (layer "B.SilkS") (effects (font (size 0.65 0.65) (thickness 0.12) (bold yes)) (justify mirror)))')
+    lines.append('  (gr_text "DIRECT LEDC PWM SERVOS" (at 46.0 97.75 180) (layer "B.SilkS") (effects (font (size 0.75 0.75) (thickness 0.12) (bold yes)) (justify mirror)))')
 
-    # Left Header (J1 on DevKit)
-    dk_l_nets = [
-        "/+3V3", "", "/SERVO_ESC", "/SERVO_RUDDER", "/SERVO_WINCH", "/SERVO_RACK",
-        "/BATT_VOLT", "/BATT_CURR", "", "/WATER_SENS", "",
-        "/INTER_TX_M2S", "/INTER_RX_S2M", "/+5V", "/GND", ""
-    ]
-    lines.append(f'  (footprint "Connector_PinHeader_2.54mm:PinHeader_1x16_P2.54mm_Vertical" (layer "B.Cu") (uuid "{new_uuid()}")')
-    lines.append('    (at 33.5 46.0)')
-    lines.append('    (property "Reference" "J_DK_L" (at -2.5 19.05 90) (layer "B.SilkS") (effects (font (size 0.8 0.8) (thickness 0.15)) (justify mirror)) (hide yes))')
-    for i in range(16):
-        py = i * 2.54
-        n = dk_l_nets[i]
-        p_shape = "rect" if i == 0 else "circle"
-        lines.append(f'    (pad "{i+1}" thru_hole {p_shape} (at 0 {py:.2f}) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net(n)} "{n}"))')
-    lines.append('  )')
-
-    # Right Header (J3 on DevKit)
+    # Right Header (J_DK_R at 35.5, 52.25)
     dk_r_nets = [
-        "/GND", "/LORA_NSS", "/LORA_SCK", "/LORA_MOSI", "/LORA_MISO",
-        "/LORA_RST", "/LORA_DIO0", "", "", "", "", "/GND", "", "", "/GND", ""
+        "/GND", "", "/SERVO_ESC", "/SERVO_RUDDER", "/SERVO_WINCH", "/SERVO_RACK",
+        "", "", "", "", "", "/GND",
+        "/INTER_TX_M2S", "/INTER_RX_S2M", "/GND", "/SERVO_ESC"
     ]
     lines.append(f'  (footprint "Connector_PinHeader_2.54mm:PinHeader_1x16_P2.54mm_Vertical" (layer "B.Cu") (uuid "{new_uuid()}")')
-    lines.append('    (at 56.36 46.0)')
-    lines.append('    (property "Reference" "J_DK_R" (at 2.5 19.05 90) (layer "B.SilkS") (effects (font (size 0.8 0.8) (thickness 0.15)) (justify mirror)) (hide yes))')
+    lines.append('    (at 35.5 52.25)')
+    lines.append('    (property "Reference" "J_DK_R" (at -2.5 19.05 90) (layer "B.SilkS") (effects (font (size 0.8 0.8) (thickness 0.15)) (justify mirror)) (hide yes))')
     for i in range(16):
         py = i * 2.54
         n = dk_r_nets[i]
@@ -434,50 +434,62 @@ def generate_kicad_pcb(path):
         lines.append(f'    (pad "{i+1}" thru_hole {p_shape} (at 0 {py:.2f}) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net(n)} "{n}"))')
     lines.append('  )')
 
-    # --- 2. SX1278 (Ra-02 433MHz) LORA MODULE (B.Cu) - EXACT UNIVERSAL PCB PARITY ---
-    # Position: (17.08, 18.5) rotated -90 degrees
-    lines.append('  (gr_text "SX1278 LORA 2x4" (at 6.5 22.0 90) (layer "B.SilkS") (effects (font (size 0.75 0.75) (thickness 0.13) (bold yes)) (justify mirror)))')
-    lines.append('  (gr_rect (start 5.0 16.0) (end 21.5 45.5) (stroke (width 0.2) (type default)) (fill none) (layer "B.SilkS"))')
-    lines.append('  (gr_text "SX1278 433MHz" (at 12.5 40.0 0) (layer "B.SilkS") (effects (font (size 0.85 0.85) (thickness 0.15)) (justify mirror)))')
+    # Left Header (J_DK_L at 58.36, 52.25)
+    dk_l_nets = [
+        "/+3V3", "/LORA_RST", "/LORA_MISO", "/LORA_SCK", "/LORA_NSS",
+        "/LORA_MOSI", "/LORA_DIO0", "", "", "/WATER_SENS", "", "/BATT_VOLT",
+        "/BATT_CURR", "/+5V", "/GND", ""
+    ]
+    lines.append(f'  (footprint "Connector_PinHeader_2.54mm:PinHeader_1x16_P2.54mm_Vertical" (layer "B.Cu") (uuid "{new_uuid()}")')
+    lines.append('    (at 58.36 52.25)')
+    lines.append('    (property "Reference" "J_DK_L" (at 2.5 19.05 90) (layer "B.SilkS") (effects (font (size 0.8 0.8) (thickness 0.15)) (justify mirror)) (hide yes))')
+    for i in range(16):
+        py = i * 2.54
+        n = dk_l_nets[i]
+        p_shape = "rect" if i == 0 else "circle"
+        lines.append(f'    (pad "{i+1}" thru_hole {p_shape} (at 0 {py:.2f}) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net(n)} "{n}"))')
+    lines.append('  )')
+
+    # --- 2. SX1278 (Ra-02 433MHz) LORA MODULE (B.Cu) ---
+    lines.append('  (gr_text "SX1278 LORA 2x4" (at 67.5 79.46 90) (layer "B.SilkS") (effects (font (size 0.75 0.75) (thickness 0.13) (bold yes)) (justify mirror)))')
+    lines.append('  (gr_rect (start 64.46 69.96) (end 82.46 92.96) (stroke (width 0.2) (type default)) (fill none) (layer "B.SilkS"))')
+    lines.append('  (gr_text "SX1278 433MHz" (at 74.96 90.96 0) (layer "B.SilkS") (effects (font (size 0.85 0.85) (thickness 0.15)) (justify mirror)))')
 
     lines.append(f'  (footprint "Connector_PinHeader_2.54mm:PinHeader_2x04_P2.54mm_Vertical" (layer "B.Cu") (uuid "{new_uuid()}")')
-    lines.append('    (at 17.08 18.5 -90)')
+    lines.append('    (at 77.54 72.0 -90)')
     lines.append('    (property "Reference" "J3" (at 1.27 -2.4 90) (layer "B.SilkS") (effects (font (size 0.9 0.9) (thickness 0.14)) (justify mirror)))')
-    lines.append('    (property "Value" "SX1278_LORA_2x4" (at 1.27 10.2 90) (layer "B.Fab") (effects (font (size 0.9 0.9) (thickness 0.14)) (justify mirror)))')
+    lines.append('    (property "Value" "SX1278_LORA_2x4" (at 11.54 -2.92 90) (layer "B.Fab") (effects (font (size 0.9 0.9) (thickness 0.14)) (justify mirror)))')
     lines.append('    (fp_line (start -1.33 8.95) (end -1.33 -1.33) (stroke (width 0.12) (type solid)) (layer "B.SilkS"))')
     lines.append('    (fp_line (start 3.87 8.95) (end -1.33 8.95) (stroke (width 0.12) (type solid)) (layer "B.SilkS"))')
     lines.append('    (fp_line (start -1.33 -1.33) (end 3.87 -1.33) (stroke (width 0.12) (type solid)) (layer "B.SilkS"))')
     lines.append('    (fp_line (start 3.87 -1.33) (end 3.87 8.95) (stroke (width 0.12) (type solid)) (layer "B.SilkS"))')
-    # Pin Labels (mirrored for B.SilkS)
-    lines.append('    (fp_text user "MISO" (at -4.2 7.7 90) (layer "B.SilkS") (effects (font (size 0.7 0.7) (thickness 0.12)) (justify mirror)))')
-    lines.append('    (fp_text user "DIO0" (at 5.7 7.62 90) (layer "B.SilkS") (effects (font (size 0.7 0.7) (thickness 0.12)) (justify mirror)))')
-    lines.append('    (fp_text user "SCK" (at -4.0 5.16 90) (layer "B.SilkS") (effects (font (size 0.7 0.7) (thickness 0.12)) (justify mirror)))')
-    lines.append('    (fp_text user "MOSI" (at 5.7 5.08 90) (layer "B.SilkS") (effects (font (size 0.7 0.7) (thickness 0.12)) (justify mirror)))')
-    lines.append('    (fp_text user "NC" (at -4.0 2.62 90) (layer "B.SilkS") (effects (font (size 0.7 0.7) (thickness 0.12)) (justify mirror)))')
-    lines.append('    (fp_text user "NSS" (at 5.4 2.54 90) (layer "B.SilkS") (effects (font (size 0.7 0.7) (thickness 0.12)) (justify mirror)))')
-    lines.append('    (fp_text user "GND" (at -4.0 0.08 90) (layer "B.SilkS") (effects (font (size 0.7 0.7) (thickness 0.12)) (justify mirror)))')
-    lines.append('    (fp_text user "3V3" (at 5.4 0.0 90) (layer "B.SilkS") (effects (font (size 0.7 0.7) (thickness 0.12)) (justify mirror)))')
-    # 8 Pads with 270 deg rotation matching Universal
-    lines.append(f'    (pad "1" thru_hole rect (at 0 0 270) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("/GND")} "/GND"))')
-    lines.append(f'    (pad "2" thru_hole circle (at 2.54 0 270) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("/+3V3")} "/+3V3"))')
-    lines.append(f'    (pad "3" thru_hole circle (at 0 2.54 270) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("/LORA_RST")} "/LORA_RST"))')
-    lines.append(f'    (pad "4" thru_hole circle (at 2.54 2.54 270) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("/LORA_NSS")} "/LORA_NSS"))')
-    lines.append(f'    (pad "5" thru_hole circle (at 0 5.08 270) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("/LORA_SCK")} "/LORA_SCK"))')
-    lines.append(f'    (pad "6" thru_hole circle (at 2.54 5.08 270) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("/LORA_MOSI")} "/LORA_MOSI"))')
-    lines.append(f'    (pad "7" thru_hole circle (at 0 7.62 270) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("/LORA_MISO")} "/LORA_MISO"))')
-    lines.append(f'    (pad "8" thru_hole circle (at 2.54 7.62 270) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("/LORA_DIO0")} "/LORA_DIO0"))')
+    lines.append('    (fp_text user "GND" (at -4.0 7.7 90) (layer "B.SilkS") (effects (font (size 0.7 0.7) (thickness 0.12)) (justify mirror)))')
+    lines.append('    (fp_text user "3V3" (at 5.4 7.62 90) (layer "B.SilkS") (effects (font (size 0.7 0.7) (thickness 0.12)) (justify mirror)))')
+    lines.append('    (fp_text user "NC" (at -4.0 5.16 90) (layer "B.SilkS") (effects (font (size 0.7 0.7) (thickness 0.12)) (justify mirror)))')
+    lines.append('    (fp_text user "NSS" (at 5.4 5.08 90) (layer "B.SilkS") (effects (font (size 0.7 0.7) (thickness 0.12)) (justify mirror)))')
+    lines.append('    (fp_text user "SCK" (at -4.0 2.62 90) (layer "B.SilkS") (effects (font (size 0.7 0.7) (thickness 0.12)) (justify mirror)))')
+    lines.append('    (fp_text user "MOSI" (at 5.7 2.54 90) (layer "B.SilkS") (effects (font (size 0.7 0.7) (thickness 0.12)) (justify mirror)))')
+    lines.append('    (fp_text user "MISO" (at -4.2 0.08 90) (layer "B.SilkS") (effects (font (size 0.7 0.7) (thickness 0.12)) (justify mirror)))')
+    lines.append('    (fp_text user "DIO0" (at 5.7 0.0 90) (layer "B.SilkS") (effects (font (size 0.7 0.7) (thickness 0.12)) (justify mirror)))')
+    lines.append(f'    (pad "1" thru_hole rect (at 0 7.62 270) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("/GND")} "/GND"))')
+    lines.append(f'    (pad "2" thru_hole circle (at 2.54 7.62 270) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("/+3V3")} "/+3V3"))')
+    lines.append(f'    (pad "3" thru_hole circle (at 0 5.08 270) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("/LORA_RST")} "/LORA_RST"))')
+    lines.append(f'    (pad "4" thru_hole circle (at 2.54 5.08 270) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("/LORA_NSS")} "/LORA_NSS"))')
+    lines.append(f'    (pad "5" thru_hole circle (at 0 2.54 270) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("/LORA_SCK")} "/LORA_SCK"))')
+    lines.append(f'    (pad "6" thru_hole circle (at 2.54 2.54 270) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("/LORA_MOSI")} "/LORA_MOSI"))')
+    lines.append(f'    (pad "7" thru_hole circle (at 0 0 270) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("/LORA_MISO")} "/LORA_MISO"))')
+    lines.append(f'    (pad "8" thru_hole circle (at 2.54 0 270) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("/LORA_DIO0")} "/LORA_DIO0"))')
     lines.append('  )')
 
-    # --- 3. QUECTEL LC29H GNSS GPS MODULE (B.Cu) - EXACT UNIVERSAL PCB PARITY ---
-    # Position: (76.38, 18.5)
-    lines.append('  (gr_text "QUECTEL LC29H" (at 81.5 13.5 0) (layer "B.SilkS") (effects (font (size 0.85 0.85) (thickness 0.14) (bold yes)) (justify mirror)))')
-    lines.append('  (gr_rect (start 68.0 16.0) (end 95.0 47.0) (stroke (width 0.2) (type default)) (fill none) (layer "B.SilkS"))')
-    lines.append('  (gr_text "GPS 26.2x30.1mm" (at 84.0 44.0 0) (layer "B.SilkS") (effects (font (size 0.8 0.8) (thickness 0.15)) (justify mirror)))')
+    # --- 3. QUECTEL LC29H GNSS GPS MODULE (B.Cu) ---
+    lines.append('  (gr_text "QUECTEL LC29H" (at 17.0 7.5 0) (layer "B.SilkS") (effects (font (size 0.85 0.85) (thickness 0.14) (bold yes)) (justify mirror)))')
+    lines.append('  (gr_rect (start 3.5 10.0) (end 30.5 41.0) (stroke (width 0.2) (type default)) (fill none) (layer "B.SilkS"))')
+    lines.append('  (gr_text "GPS 26.2x30.1mm" (at 19.5 38.0 0) (layer "B.SilkS") (effects (font (size 0.8 0.8) (thickness 0.15)) (justify mirror)))')
     
     gps_nets = ["/GPS_PPS", "", "", "/GPS_TX", "/GPS_RX", "/GND", "/+3V3"]
     gps_labels = ["P", "T2", "R2", "R1", "T1", "G", "V"]
     lines.append(f'  (footprint "Connector_PinHeader_2.54mm:PinHeader_1x07_P2.54mm_Horizontal" (layer "B.Cu") (uuid "{new_uuid()}")')
-    lines.append('    (at 76.38 18.5)')
+    lines.append('    (at 11.88 12.5)')
     lines.append('    (property "Reference" "J6" (at 0 3.0 0) (layer "B.SilkS") (effects (font (size 0.8 0.8) (thickness 0.13)) (justify mirror)))')
     lines.append('    (property "Value" "GPS_LC29H_7PIN" (at 7.62 9.5 0) (layer "B.Fab") (effects (font (size 0.9 0.9) (thickness 0.14)) (justify mirror)))')
     for i in range(7):
@@ -491,58 +503,58 @@ def generate_kicad_pcb(path):
 
     # --- 4. DIRECT RC SERVO HEADERS (4 CHANNELS) (B.Cu) ---
     servos = [
-        ("J_SRV_ESC", "ESC (IO4)", 20.0, 92.0, "/SERVO_ESC"),
-        ("J_SRV_RUD", "RUDDER (IO5)", 28.0, 92.0, "/SERVO_RUDDER"),
-        ("J_SRV_WIN", "WINCH (IO6)", 64.0, 92.0, "/SERVO_WINCH"),
-        ("J_SRV_RCK", "RACK (IO7)", 72.0, 92.0, "/SERVO_RACK"),
+        ("ESC", "ESC (IO4)", 10.0, 73.58, "/SERVO_ESC"),
+        ("RUD", "RUDDER (IO5)", 13.0, 73.58, "/SERVO_RUDDER"),
+        ("WIN", "WINCH (IO6)", 16.0, 73.5, "/SERVO_WINCH"),
+        ("RCK", "RACK (IO7)", 19.0, 73.5, "/SERVO_RACK"),
     ]
-    lines.append('  (gr_text "DIRECT LEDC PWM SERVOS" (at 46.0 91.5 0) (layer "B.SilkS") (effects (font (size 0.75 0.75) (thickness 0.12) (bold yes)) (justify mirror)))')
     for ref, lbl, sx, sy, sig_net in servos:
         lines.append(f'  (footprint "Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical" (layer "B.Cu") (uuid "{new_uuid()}")')
-        lines.append(f'    (at {sx} {sy})')
-        lines.append(f'    (property "Reference" "{ref}" (at 0 -2.4 0) (layer "B.SilkS") (effects (font (size 0.65 0.65) (thickness 0.1)) (justify mirror)))')
+        lines.append(f'    (at {sx} {sy} 180)')
+        ref_x = -0.5 if ref == "WIN" else 0
+        lines.append(f'    (property "Reference" "{ref}" (at {ref_x} -2.4 0) (layer "B.SilkS") (effects (font (size 0.65 0.65) (thickness 0.1)) (justify mirror)))')
         lines.append(f'    (property "Value" "{lbl}" (at 0 7.5 90) (layer "B.SilkS") (effects (font (size 0.6 0.6) (thickness 0.1)) (justify mirror)))')
-        lines.append(f'    (pad "1" thru_hole rect (at 0 0) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("/GND")} "/GND"))')
-        lines.append(f'    (pad "2" thru_hole circle (at 0 2.54) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("/+5V_SERVO")} "/+5V_SERVO"))')
-        lines.append(f'    (pad "3" thru_hole circle (at 0 5.08) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net(sig_net)} "{sig_net}"))')
+        lines.append(f'    (pad "1" thru_hole rect (at 0 0 180) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("/GND")} "/GND"))')
+        lines.append(f'    (pad "2" thru_hole circle (at 0 2.54 180) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("/+5V_SERVO")} "/+5V_SERVO"))')
+        lines.append(f'    (pad "3" thru_hole circle (at 0 5.08 180) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net(sig_net)} "{sig_net}"))')
         lines.append('  )')
 
     # --- 5. POWER & TELEMETRY HEADERS (B.Cu) ---
-    # PWR_ESP_5V (at 10.0, 92.0)
-    lines.append(f'  (footprint "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical" (layer "B.Cu") (uuid "{new_uuid()}")')
-    lines.append('    (at 10.0 92.0)')
-    lines.append('    (property "Reference" "J_PWR_ESP" (at 0 -2.4 0) (layer "B.SilkS") (effects (font (size 0.65 0.65) (thickness 0.1)) (justify mirror)))')
-    lines.append('    (property "Value" "5V_ESP" (at 0 5.0 90) (layer "B.SilkS") (effects (font (size 0.6 0.6) (thickness 0.1)) (justify mirror)))')
-    lines.append(f'    (pad "1" thru_hole rect (at 0 0) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("/GND")} "/GND"))')
-    lines.append(f'    (pad "2" thru_hole circle (at 0 2.54) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("/+5V")} "/+5V"))')
+    # BATT_SENSE (APM V/I at 22.0, 73.5, rot 180)
+    lines.append(f'  (footprint "Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical" (layer "B.Cu") (uuid "{new_uuid()}")')
+    lines.append('    (at 22.0 73.5 180)')
+    lines.append('    (property "Reference" "J_BATT" (at 0 -2.4 0) (layer "B.SilkS") (effects (font (size 0.65 0.65) (thickness 0.1)) (justify mirror)))')
+    lines.append('    (property "Value" "BATT V/I/G" (at 0 7.5 90) (layer "B.SilkS") (effects (font (size 0.6 0.6) (thickness 0.1)) (justify mirror)))')
+    lines.append(f'    (pad "1" thru_hole rect (at 0 0 180) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("/GND")} "/GND"))')
+    lines.append(f'    (pad "2" thru_hole circle (at 0 2.54 180) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("/BATT_CURR")} "/BATT_CURR"))')
+    lines.append(f'    (pad "3" thru_hole circle (at 0 5.08 180) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("/BATT_VOLT")} "/BATT_VOLT"))')
     lines.append('  )')
 
-    # PWR_SERVO_5V (at 82.0, 92.0)
+    # WATER / ANCHOR SENSOR (at 25.0, 73.5, rot 180)
     lines.append(f'  (footprint "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical" (layer "B.Cu") (uuid "{new_uuid()}")')
-    lines.append('    (at 82.0 92.0)')
+    lines.append('    (at 25.0 73.5 180)')
+    lines.append('    (property "Reference" "J_WATER" (at -1 -2.5 0) (layer "B.SilkS") (effects (font (size 0.65 0.65) (thickness 0.1)) (justify mirror)))')
+    lines.append('    (property "Value" "WATER/ANC" (at 0 7.0 90) (layer "B.SilkS") (effects (font (size 0.6 0.6) (thickness 0.1)) (justify mirror)))')
+    lines.append(f'    (pad "1" thru_hole rect (at 0 0 180) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("/GND")} "/GND"))')
+    lines.append(f'    (pad "2" thru_hole circle (at 0 2.54 180) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("/WATER_SENS")} "/WATER_SENS"))')
+    lines.append('  )')
+
+    # PWR_SERVO_5V (at 5.0, 77.73)
+    lines.append(f'  (footprint "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical" (layer "B.Cu") (uuid "{new_uuid()}")')
+    lines.append('    (at 5.0 77.73)')
     lines.append('    (property "Reference" "J_PWR_SRV" (at 0 -2.4 0) (layer "B.SilkS") (effects (font (size 0.65 0.65) (thickness 0.1)) (justify mirror)))')
     lines.append('    (property "Value" "5V_SERVO" (at 0 5.0 90) (layer "B.SilkS") (effects (font (size 0.6 0.6) (thickness 0.1)) (justify mirror)))')
     lines.append(f'    (pad "1" thru_hole rect (at 0 0) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("/GND")} "/GND"))')
     lines.append(f'    (pad "2" thru_hole circle (at 0 2.54) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("/+5V_SERVO")} "/+5V_SERVO"))')
     lines.append('  )')
 
-    # BATT_SENSE (APM V/I at 88.0, 51.5)
-    lines.append(f'  (footprint "Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical" (layer "B.Cu") (uuid "{new_uuid()}")')
-    lines.append('    (at 88.0 51.5)')
-    lines.append('    (property "Reference" "J_BATT" (at 0 -2.4 0) (layer "B.SilkS") (effects (font (size 0.65 0.65) (thickness 0.1)) (justify mirror)))')
-    lines.append('    (property "Value" "BATT V/I/G" (at 0 7.5 90) (layer "B.SilkS") (effects (font (size 0.6 0.6) (thickness 0.1)) (justify mirror)))')
-    lines.append(f'    (pad "1" thru_hole rect (at 0 0) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("/BATT_VOLT")} "/BATT_VOLT"))')
-    lines.append(f'    (pad "2" thru_hole circle (at 0 2.54) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("/BATT_CURR")} "/BATT_CURR"))')
-    lines.append(f'    (pad "3" thru_hole circle (at 0 5.08) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("/GND")} "/GND"))')
-    lines.append('  )')
-
-    # WATER / ANCHOR SENSOR (at 88.0, 61.5)
+    # PWR_ESP_5V (at 95.5, 51.5)
     lines.append(f'  (footprint "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical" (layer "B.Cu") (uuid "{new_uuid()}")')
-    lines.append('    (at 88.0 61.5)')
-    lines.append('    (property "Reference" "J_WATER" (at 0 -2.4 0) (layer "B.SilkS") (effects (font (size 0.65 0.65) (thickness 0.1)) (justify mirror)))')
-    lines.append('    (property "Value" "WATER/ANC" (at 0 5.0 90) (layer "B.SilkS") (effects (font (size 0.6 0.6) (thickness 0.1)) (justify mirror)))')
+    lines.append('    (at 95.5 51.5)')
+    lines.append('    (property "Reference" "J_PWR_ESP" (at 0 -2.4 0) (layer "B.SilkS") (effects (font (size 0.65 0.65) (thickness 0.1)) (justify mirror)))')
+    lines.append('    (property "Value" "5V_ESP" (at 0 5.0 90) (layer "B.SilkS") (effects (font (size 0.6 0.6) (thickness 0.1)) (justify mirror)))')
     lines.append(f'    (pad "1" thru_hole rect (at 0 0) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("/GND")} "/GND"))')
-    lines.append(f'    (pad "2" thru_hole circle (at 0 2.54) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("/WATER_SENS")} "/WATER_SENS"))')
+    lines.append(f'    (pad "2" thru_hole circle (at 0 2.54) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask "B.SilkS") (net {get_net("/+5V")} "/+5V"))')
     lines.append('  )')
 
     # ==============================================================================

@@ -13,16 +13,16 @@
 		(comment 2 "Slave (Back): ESP32-C6 DevKitC-1, SX1278 LoRa, Quectel GPS, 4x LEDC Servos")
 	)
 	(lib_symbols)
-	(text "INTER-ESP UART: HIGH-SPEED BIDIRECTIONAL LINK (GPIO 2 & 3 @ 921600)"
+	(text "FRONT PANEL: 1.47 INCH IPS LCD, PS5 JOYSTICK & 4x TACTILE BUTTONS"
 		(exclude_from_sim no)
-		(at 100 80 0)
+		(at 20 20 0)
 		(effects
 			(font
 				(size 2 2)
 				(bold yes)
 			)
 		)
-		(uuid "31d0fdc7-f2c3-45a1-b351-37bc181ae0e8")
+		(uuid "655faac8-ebad-47db-a493-2a1e5e0de2f1")
 	)
 	(text "BACK PERIPHERALS: ESP32-C6 DEVKITC-1, SX1278 LORA & 4x DIRECT SERVOS"
 		(exclude_from_sim no)
@@ -33,17 +33,17 @@
 				(bold yes)
 			)
 		)
-		(uuid "e0ae3ef9-ef7f-4abb-b6bc-f8b3f8e2c03b")
+		(uuid "a810b050-e56e-485a-a214-559ca08e49a5")
 	)
-	(text "FRONT PANEL: 1.47 INCH IPS LCD, PS5 JOYSTICK & 4x TACTILE BUTTONS"
+	(text "INTER-ESP UART: HIGH-SPEED BIDIRECTIONAL LINK (GPIO 2 & 3 @ 921600)"
 		(exclude_from_sim no)
-		(at 20 20 0)
+		(at 100 80 0)
 		(effects
 			(font
 				(size 2 2)
 				(bold yes)
 			)
 		)
-		(uuid "e8b5413a-5345-4e56-a9bb-3130ea6da026")
+		(uuid "ffd0c23b-f590-4059-b7de-3f7986b506c8")
 	)
 )
