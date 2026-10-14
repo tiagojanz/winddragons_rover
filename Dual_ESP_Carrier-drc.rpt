@@ -1,0 +1,497 @@
+** Drc report for Dual_ESP_Carrier.kicad_pcb **
+** Created on 2026-10-14T10:14:12 **
+** Report includes: Errors, Warnings **
+
+** Found 110 DRC violations **
+[silk_edge_clearance]: Silkscreen clipped by board edge
+    Rule: configuração da serigrafia da placa; warning
+    @(100.0000 mm, 100.0000 mm): Segmento no Edge.Cuts
+    @(20.7500 mm, 93.7500 mm): Retângulo no F.Silkscreen
+[lib_footprint_mismatch]: O footprint 'PinHeader_1x09_P2.54mm_Horizontal' não corresponde à cópia na biblioteca 'Connector_PinHeader_2.54mm'
+    Local override; warning
+    @(14.0000 mm, 33.7800 mm): Footprint J_LCD_BOT
+[lib_footprint_mismatch]: O footprint 'PinHeader_1x04_P2.54mm_Horizontal' não corresponde à cópia na biblioteca 'Connector_PinHeader_2.54mm'
+    Local override; warning
+    @(14.0000 mm, 61.5000 mm): Footprint J_PWR
+[lib_footprint_mismatch]: O footprint 'PinHeader_1x03_P2.54mm_Vertical' não corresponde à cópia na biblioteca 'Connector_PinHeader_2.54mm'
+    Local override; warning
+    @(74.8600 mm, 79.0000 mm): Footprint SRV4
+[lib_footprint_mismatch]: O footprint 'PinHeader_1x07_P2.54mm_Horizontal' não corresponde à cópia na biblioteca 'Connector_PinHeader_2.54mm'
+    Local override; warning
+    @(14.0000 mm, 45.0000 mm): Footprint J_GPS
+[lib_footprint_mismatch]: O footprint 'PinHeader_2x04_P2.54mm_Vertical' não corresponde à cópia na biblioteca 'Connector_PinHeader_2.54mm'
+    Local override; warning
+    @(80.0000 mm, 66.0000 mm): Footprint J_LORA
+[lib_footprint_mismatch]: O footprint 'SW_PUSH_6mm' não corresponde à cópia na biblioteca 'Button_Switch_THT'
+    Local override; warning
+    @(30.0000 mm, 91.0000 mm): Footprint SW2_RIGHT
+[lib_footprint_mismatch]: O footprint 'MountingHole_3.2mm_M3' não corresponde à cópia na biblioteca 'MountingHole'
+    Local override; warning
+    @(4.5000 mm, 95.5000 mm): Footprint H3
+[lib_footprint_mismatch]: O footprint 'SW_PUSH_6mm' não corresponde à cópia na biblioteca 'Button_Switch_THT'
+    Local override; warning
+    @(24.0000 mm, 97.0000 mm): Footprint SW4_DOWN
+[lib_footprint_mismatch]: O footprint 'PinHeader_1x04_P2.54mm_Horizontal' não corresponde à cópia na biblioteca 'Connector_PinHeader_2.54mm'
+    Local override; warning
+    @(14.0000 mm, 70.5000 mm): Footprint J_BATT
+[lib_footprint_mismatch]: O footprint 'PinHeader_1x09_P2.54mm_Horizontal' não corresponde à cópia na biblioteca 'Connector_PinHeader_2.54mm'
+    Local override; warning
+    @(14.0000 mm, 16.0000 mm): Footprint J_LCD_TOP
+[lib_footprint_mismatch]: O footprint 'PinHeader_1x16_P2.54mm_Vertical' não corresponde à cópia na biblioteca 'Connector_PinHeader_2.54mm'
+    Local override; warning
+    @(87.4000 mm, 16.0000 mm): Footprint J_DK_R
+[lib_footprint_mismatch]: O footprint 'MountingHole_3.2mm_M3' não corresponde à cópia na biblioteca 'MountingHole'
+    Local override; warning
+    @(4.5000 mm, 4.5000 mm): Footprint H1
+[lib_footprint_mismatch]: O footprint 'PinHeader_1x03_P2.54mm_Vertical' não corresponde à cópia na biblioteca 'Connector_PinHeader_2.54mm'
+    Local override; warning
+    @(52.0000 mm, 79.0000 mm): Footprint SRV1
+[lib_footprint_issues]: A configuração atual não inclui a biblioteca de footprints 'WindDragons'
+    Local override; warning
+    @(48.0000 mm, 48.0000 mm): Footprint LOGO1
+[lib_footprint_mismatch]: O footprint 'PinHeader_1x03_P2.54mm_Vertical' não corresponde à cópia na biblioteca 'Connector_PinHeader_2.54mm'
+    Local override; warning
+    @(67.2400 mm, 79.0000 mm): Footprint SRV3
+[lib_footprint_mismatch]: O footprint 'SW_PUSH_6mm' não corresponde à cópia na biblioteca 'Button_Switch_THT'
+    Local override; warning
+    @(24.0000 mm, 85.0000 mm): Footprint SW3_UP
+[lib_footprint_mismatch]: O footprint 'MountingHole_3.2mm_M3' não corresponde à cópia na biblioteca 'MountingHole'
+    Local override; warning
+    @(95.5000 mm, 4.5000 mm): Footprint H2
+[lib_footprint_mismatch]: O footprint 'PinHeader_1x16_P2.54mm_Vertical' não corresponde à cópia na biblioteca 'Connector_PinHeader_2.54mm'
+    Local override; warning
+    @(62.0000 mm, 16.0000 mm): Footprint J_DK_L
+[lib_footprint_mismatch]: O footprint 'PinHeader_1x03_P2.54mm_Vertical' não corresponde à cópia na biblioteca 'Connector_PinHeader_2.54mm'
+    Local override; warning
+    @(59.6200 mm, 79.0000 mm): Footprint SRV2
+[lib_footprint_mismatch]: O footprint 'SW_PUSH_6mm' não corresponde à cópia na biblioteca 'Button_Switch_THT'
+    Local override; warning
+    @(18.0000 mm, 91.0000 mm): Footprint SW1_LEFT
+[lib_footprint_mismatch]: O footprint 'MountingHole_3.2mm_M3' não corresponde à cópia na biblioteca 'MountingHole'
+    Local override; warning
+    @(95.5000 mm, 95.5000 mm): Footprint H4
+[lib_footprint_issues]: A configuração atual não inclui a biblioteca de footprints 'WindDragons'
+    Local override; warning
+    @(50.0000 mm, 50.0000 mm): Footprint LOGO2
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5000 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(14.0000 mm, 64.2000 mm): Texto da PCI '5V_L' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5000 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(14.0000 mm, 74.2000 mm): Texto da PCI 'V_BAT' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5000 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(16.5400 mm, 64.2000 mm): Texto da PCI '5V_S' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5000 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(16.5400 mm, 74.2000 mm): Texto da PCI 'I_BAT' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5000 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(19.0800 mm, 64.2000 mm): Texto da PCI 'GND' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5000 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(19.0800 mm, 74.2000 mm): Texto da PCI 'W_SEN' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5000 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(21.6200 mm, 64.2000 mm): Texto da PCI 'GND' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5000 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(21.6200 mm, 74.2000 mm): Texto da PCI 'GND' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5000 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(65.5000 mm, 16.0000 mm): Texto da PCI '3V3' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5000 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(65.5000 mm, 18.5400 mm): Texto da PCI 'RST' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5000 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(65.5000 mm, 21.0800 mm): Texto da PCI 'ESC' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5000 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(65.5000 mm, 23.6200 mm): Texto da PCI 'RUD' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5000 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(65.5000 mm, 26.1600 mm): Texto da PCI 'WNC' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5000 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(65.5000 mm, 28.7000 mm): Texto da PCI 'RCK' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5000 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(65.5000 mm, 31.2400 mm): Texto da PCI 'V_B' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5000 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(65.5000 mm, 33.7800 mm): Texto da PCI 'I_B' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5000 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(65.5000 mm, 36.3200 mm): Texto da PCI 'RGB' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5000 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(65.5000 mm, 38.8600 mm): Texto da PCI 'WTR' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5000 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(65.5000 mm, 41.4000 mm): Texto da PCI 'AUX' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5000 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(65.5000 mm, 43.9400 mm): Texto da PCI 'TX' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5000 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(65.5000 mm, 46.4800 mm): Texto da PCI 'RX' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5000 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(65.5000 mm, 49.0200 mm): Texto da PCI '5V' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5000 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(65.5000 mm, 51.5600 mm): Texto da PCI 'GND' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5000 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(74.7000 mm, 36.5000 mm): Texto da PCI '(CLOSE JUMPER)' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5000 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(83.8000 mm, 16.0000 mm): Texto da PCI 'GND' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5000 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(83.8000 mm, 18.5400 mm): Texto da PCI 'TX0' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5000 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(83.8000 mm, 21.0800 mm): Texto da PCI 'RX0' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5000 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(83.8000 mm, 23.6200 mm): Texto da PCI '15' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5000 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(83.8000 mm, 26.1600 mm): Texto da PCI 'DIO0' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5000 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(83.8000 mm, 28.7000 mm): Texto da PCI 'RST' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5000 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(83.8000 mm, 31.2400 mm): Texto da PCI 'MISO' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5000 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(83.8000 mm, 33.7800 mm): Texto da PCI 'MOSI' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5000 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(83.8000 mm, 36.3200 mm): Texto da PCI 'SCK' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5000 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(83.8000 mm, 38.8600 mm): Texto da PCI 'NSS' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5000 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(83.8000 mm, 41.4000 mm): Texto da PCI '9' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5000 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(83.8000 mm, 43.9400 mm): Texto da PCI 'GND' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5500 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(14.0000 mm, 14.2000 mm): Texto da PCI '5V' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5500 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(14.0000 mm, 35.6000 mm): Texto da PCI 'SW4' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5500 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(14.0000 mm, 47.5000 mm): Texto da PCI '3V3' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5500 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(16.5400 mm, 14.2000 mm): Texto da PCI 'GND' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5500 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(16.5400 mm, 35.6000 mm): Texto da PCI 'SW1' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5500 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(16.5400 mm, 47.5000 mm): Texto da PCI 'GND' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5500 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(19.0800 mm, 14.2000 mm): Texto da PCI '3V3' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5500 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(19.0800 mm, 35.6000 mm): Texto da PCI 'SW2' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5500 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(19.0800 mm, 47.5000 mm): Texto da PCI 'TX' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5500 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(21.6200 mm, 14.2000 mm): Texto da PCI 'SDA' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5500 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(21.6200 mm, 35.6000 mm): Texto da PCI 'SW3' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5500 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(21.6200 mm, 47.5000 mm): Texto da PCI 'RX' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5500 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(24.1600 mm, 14.2000 mm): Texto da PCI 'SCL' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5500 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(24.1600 mm, 47.5000 mm): Texto da PCI 'PPS' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5500 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(26.7000 mm, 14.2000 mm): Texto da PCI 'RX' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5500 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(29.2400 mm, 14.2000 mm): Texto da PCI 'TX' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5500 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(31.0000 mm, 50.5000 mm): Texto da PCI 'GPS ANT' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5500 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(31.7800 mm, 35.6000 mm): Texto da PCI 'RX_G' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5500 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(34.3200 mm, 35.6000 mm): Texto da PCI 'TX_G' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5500 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(77.2000 mm, 73.6200 mm): Texto da PCI 'MISO' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5500 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(77.5000 mm, 66.0000 mm): Texto da PCI 'GND' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5500 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(77.5000 mm, 68.5400 mm): Texto da PCI 'RST' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5500 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(77.5000 mm, 71.0800 mm): Texto da PCI 'SCK' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5500 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(85.0000 mm, 66.0000 mm): Texto da PCI '3V3' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5500 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(85.0000 mm, 68.5400 mm): Texto da PCI 'NSS' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5500 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(85.0000 mm, 71.0800 mm): Texto da PCI 'MOSI' em F.Silkscreen
+[text_height]: A altura do texto está fora do alcance (configuração da restrição da altura da serigrafia do texto da placa altura mín 0.6000 mm; atual 0.5500 mm)
+    Rule: configuração da restrição da altura da serigrafia do texto da placa; warning
+    @(85.2000 mm, 73.6200 mm): Texto da PCI 'DIO0' em F.Silkscreen
+[silk_overlap]: Silkscreen clearance
+    Rule: configuração da serigrafia da placa; warning
+    @(85.0000 mm, 66.0000 mm): Texto da PCI '3V3' em F.Silkscreen
+    @(84.5000 mm, 65.0000 mm): Retângulo no F.Silkscreen
+[silk_overlap]: Silkscreen clearance
+    Rule: configuração da serigrafia da placa; warning
+    @(84.5000 mm, 65.0000 mm): Retângulo no F.Silkscreen
+    @(85.0000 mm, 68.5400 mm): Texto da PCI 'NSS' em F.Silkscreen
+[silk_overlap]: Silkscreen clearance
+    Rule: configuração da serigrafia da placa; warning
+    @(84.5000 mm, 65.0000 mm): Retângulo no F.Silkscreen
+    @(85.0000 mm, 71.0800 mm): Texto da PCI 'MOSI' em F.Silkscreen
+[silk_overlap]: Silkscreen clearance
+    Rule: configuração da serigrafia da placa; warning
+    @(84.5000 mm, 65.0000 mm): Retângulo no F.Silkscreen
+    @(85.2000 mm, 73.6200 mm): Texto da PCI 'DIO0' em F.Silkscreen
+[silk_overlap]: Silkscreen clearance
+    Rule: configuração da serigrafia da placa; warning
+    @(74.8600 mm, 76.5000 mm): Texto da PCI 'CH4:CREM' em F.Silkscreen
+    @(76.5000 mm, 63.5000 mm): Retângulo no F.Silkscreen
+[silk_overlap]: Silkscreen clearance
+    Rule: configuração da serigrafia da placa; warning
+    @(77.2000 mm, 73.6200 mm): Texto da PCI 'MISO' em F.Silkscreen
+    @(76.5000 mm, 63.5000 mm): Retângulo no F.Silkscreen
+[silk_overlap]: Silkscreen clearance
+    Rule: configuração da serigrafia da placa; warning
+    @(63.4000 mm, 71.5000 mm): Texto da PCI '4-CH HARDWARE RC SERVOS (LEDC PWM)' em F.Silkscreen
+    @(76.5000 mm, 63.5000 mm): Retângulo no F.Silkscreen
+[silk_overlap]: Silkscreen clearance
+    Rule: configuração da serigrafia da placa; warning
+    @(78.7000 mm, 74.9000 mm): Segmento de J_LORA em F.Silkscreen
+    @(47.0000 mm, 75.0000 mm): Retângulo no F.Silkscreen
+[silk_overlap]: Silkscreen clearance
+    Rule: configuração da serigrafia da placa; warning
+    @(83.8000 mm, 74.9000 mm): Segmento de J_LORA em F.Silkscreen
+    @(47.0000 mm, 75.0000 mm): Retângulo no F.Silkscreen
+[silk_overlap]: Silkscreen clearance
+    Rule: configuração da serigrafia da placa; warning
+    @(63.4000 mm, 71.5000 mm): Texto da PCI '4-CH HARDWARE RC SERVOS (LEDC PWM)' em F.Silkscreen
+    @(77.5000 mm, 71.0800 mm): Texto da PCI 'SCK' em F.Silkscreen
+[silk_overlap]: Silkscreen clearance
+    Rule: configuração da serigrafia da placa; warning
+    @(4.5000 mm, 98.0000 mm): Campo de referência do H3
+    @(1.5000 mm, 1.5000 mm): Retângulo no F.Silkscreen
+[silk_overlap]: Silkscreen clearance
+    Rule: configuração da serigrafia da placa; warning
+    @(95.5000 mm, 98.0000 mm): Campo de referência do H4
+    @(1.5000 mm, 1.5000 mm): Retângulo no F.Silkscreen
+[silk_over_copper]: Silkscreen clipped by solder mask
+    Local override; warning
+    @(14.7500 mm, 87.7500 mm): Retângulo no F.Silkscreen
+    @(21.2500 mm, 91.0000 mm): Ilha PTH 2 [/GND] de SW1_LEFT
+[silk_over_copper]: Silkscreen clipped by solder mask
+    Local override; warning
+    @(14.7500 mm, 87.7500 mm): Retângulo no F.Silkscreen
+    @(14.7500 mm, 91.0000 mm): Ilha PTH 1 [/UI_SW3] de SW1_LEFT
+[silk_over_copper]: Silkscreen clipped by solder mask
+    Local override; warning
+    @(20.7500 mm, 81.7500 mm): Retângulo no F.Silkscreen
+    @(27.2500 mm, 85.0000 mm): Ilha PTH 2 [/GND] de SW3_UP
+[silk_over_copper]: Silkscreen clipped by solder mask
+    Local override; warning
+    @(20.7500 mm, 81.7500 mm): Retângulo no F.Silkscreen
+    @(20.7500 mm, 85.0000 mm): Ilha PTH 1 [/UI_SW1] de SW3_UP
+[silk_over_copper]: Silkscreen clipped by solder mask
+    Local override; warning
+    @(26.7500 mm, 87.7500 mm): Retângulo no F.Silkscreen
+    @(33.2500 mm, 91.0000 mm): Ilha PTH 2 [/GND] de SW2_RIGHT
+[silk_over_copper]: Silkscreen clipped by solder mask
+    Local override; warning
+    @(26.7500 mm, 87.7500 mm): Retângulo no F.Silkscreen
+    @(26.7500 mm, 91.0000 mm): Ilha PTH 1 [/UI_SW2] de SW2_RIGHT
+[silk_over_copper]: Silkscreen clipped by solder mask
+    Local override; warning
+    @(20.7500 mm, 93.7500 mm): Retângulo no F.Silkscreen
+    @(27.2500 mm, 97.0000 mm): Ilha PTH 2 [/GND] de SW4_DOWN
+[silk_over_copper]: Silkscreen clipped by solder mask
+    Local override; warning
+    @(20.7500 mm, 93.7500 mm): Retângulo no F.Silkscreen
+    @(20.7500 mm, 97.0000 mm): Ilha PTH 1 [/UI_SW4] de SW4_DOWN
+[silk_over_copper]: Silkscreen clipped by solder mask
+    Local override; warning
+    @(52.7530 mm, 61.8390 mm): Polígono de LOGO2 em B.Silkscreen
+    @(62.0000 mm, 46.4800 mm): Ilha PTH 13 [/INTER_TX_M2S] de J_DK_L
+[silk_over_copper]: Silkscreen clipped by solder mask
+    Local override; warning
+    @(52.7530 mm, 61.8390 mm): Polígono de LOGO2 em B.Silkscreen
+    @(62.0000 mm, 49.0200 mm): Ilha PTH 14 [<no net>] de J_DK_L
+[silk_over_copper]: Silkscreen clipped by solder mask
+    Local override; warning
+    @(52.7530 mm, 61.8390 mm): Polígono de LOGO2 em B.Silkscreen
+    @(62.0000 mm, 51.5600 mm): Ilha PTH 15 [<no net>] de J_DK_L
+[silk_over_copper]: Silkscreen clipped by solder mask
+    Local override; warning
+    @(52.7530 mm, 61.8390 mm): Polígono de LOGO2 em B.Silkscreen
+    @(62.0000 mm, 54.1000 mm): Ilha PTH 16 [<no net>] de J_DK_L
+
+** Found 31 unconnected pads **
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(14.0000 mm, 33.7800 mm): Ilha PTH 1 [/UI_SW4] de J_LCD_BOT
+    @(20.7500 mm, 97.0000 mm): Ilha PTH 1 [/UI_SW4] de SW4_DOWN
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(16.5400 mm, 33.7800 mm): Ilha PTH 2 [/UI_SW1] de J_LCD_BOT
+    @(20.7500 mm, 85.0000 mm): Ilha PTH 1 [/UI_SW1] de SW3_UP
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(19.0800 mm, 33.7800 mm): Ilha PTH 3 [/UI_SW2] de J_LCD_BOT
+    @(26.7500 mm, 91.0000 mm): Ilha PTH 1 [/UI_SW2] de SW2_RIGHT
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(14.7500 mm, 91.0000 mm): Ilha PTH 1 [/UI_SW3] de SW1_LEFT
+    @(21.6200 mm, 33.7800 mm): Ilha PTH 4 [/UI_SW3] de J_LCD_BOT
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(21.6200 mm, 45.0000 mm): Ilha PTH 4 [/GPS_RX] de J_GPS
+    @(31.7800 mm, 33.7800 mm): Ilha PTH 8 [/GPS_RX] de J_LCD_BOT
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(19.0800 mm, 45.0000 mm): Ilha PTH 3 [/GPS_TX] de J_GPS
+    @(34.3200 mm, 33.7800 mm): Ilha PTH 9 [/GPS_TX] de J_LCD_BOT
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(62.0000 mm, 28.7000 mm): Ilha PTH 6 [/SERVO_RACK] de J_DK_L
+    @(74.8600 mm, 79.0000 mm): Ilha PTH 1 [/SERVO_RACK] de SRV4
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(52.0000 mm, 81.5400 mm): Ilha PTH 2 [/+5V_SERVO] de SRV1
+    @(59.6200 mm, 81.5400 mm): Ilha PTH 2 [/+5V_SERVO] de SRV2
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(59.6200 mm, 81.5400 mm): Ilha PTH 2 [/+5V_SERVO] de SRV2
+    @(67.2400 mm, 81.5400 mm): Ilha PTH 2 [/+5V_SERVO] de SRV3
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(67.2400 mm, 81.5400 mm): Ilha PTH 2 [/+5V_SERVO] de SRV3
+    @(74.8600 mm, 81.5400 mm): Ilha PTH 2 [/+5V_SERVO] de SRV4
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(27.2500 mm, 85.0000 mm): Ilha PTH 2 [/GND] de SW3_UP
+    @(21.2500 mm, 91.0000 mm): Ilha PTH 2 [/GND] de SW1_LEFT
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(33.2500 mm, 91.0000 mm): Ilha PTH 2 [/GND] de SW2_RIGHT
+    @(27.2500 mm, 85.0000 mm): Ilha PTH 2 [/GND] de SW3_UP
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(33.2500 mm, 91.0000 mm): Ilha PTH 2 [/GND] de SW2_RIGHT
+    @(27.2500 mm, 97.0000 mm): Ilha PTH 2 [/GND] de SW4_DOWN
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(33.2500 mm, 91.0000 mm): Ilha PTH 2 [/GND] de SW2_RIGHT
+    @(52.0000 mm, 84.0800 mm): Ilha PTH 3 [/GND] de SRV1
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(59.6200 mm, 84.0800 mm): Ilha PTH 3 [/GND] de SRV2
+    @(52.0000 mm, 84.0800 mm): Ilha PTH 3 [/GND] de SRV1
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(67.2400 mm, 84.0800 mm): Ilha PTH 3 [/GND] de SRV3
+    @(59.6200 mm, 84.0800 mm): Ilha PTH 3 [/GND] de SRV2
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(74.8600 mm, 84.0800 mm): Ilha PTH 3 [/GND] de SRV4
+    @(67.2400 mm, 84.0800 mm): Ilha PTH 3 [/GND] de SRV3
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(80.0000 mm, 68.5400 mm): Ilha PTH 3 [/LORA_RST] de J_LORA
+    @(87.4000 mm, 28.7000 mm): Ilha PTH 6 [/LORA_RST] de J_DK_R
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(82.5400 mm, 68.5400 mm): Ilha PTH 4 [/LORA_NSS] de J_LORA
+    @(87.4000 mm, 38.8600 mm): Ilha PTH 10 [/LORA_NSS] de J_DK_R
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(80.0000 mm, 71.0800 mm): Ilha PTH 5 [/LORA_SCK] de J_LORA
+    @(87.4000 mm, 36.3200 mm): Ilha PTH 9 [/LORA_SCK] de J_DK_R
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(82.5400 mm, 71.0800 mm): Ilha PTH 6 [/LORA_MOSI] de J_LORA
+    @(87.4000 mm, 33.7800 mm): Ilha PTH 8 [/LORA_MOSI] de J_DK_R
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(80.0000 mm, 73.6200 mm): Ilha PTH 7 [/LORA_MISO] de J_LORA
+    @(87.4000 mm, 31.2400 mm): Ilha PTH 7 [/LORA_MISO] de J_DK_R
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(82.5400 mm, 73.6200 mm): Ilha PTH 8 [/LORA_DIO0] de J_LORA
+    @(87.4000 mm, 26.1600 mm): Ilha PTH 5 [/LORA_DIO0] de J_DK_R
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(14.0000 mm, 70.5000 mm): Ilha PTH 1 [/BATT_VOLT] de J_BATT
+    @(62.0000 mm, 31.2400 mm): Ilha PTH 7 [/BATT_VOLT] de J_DK_L
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(16.5400 mm, 70.5000 mm): Ilha PTH 2 [/BATT_CURR] de J_BATT
+    @(62.0000 mm, 33.7800 mm): Ilha PTH 8 [/BATT_CURR] de J_DK_L
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(19.0800 mm, 70.5000 mm): Ilha PTH 3 [/WATER_SENS] de J_BATT
+    @(62.0000 mm, 38.8600 mm): Ilha PTH 10 [/WATER_SENS] de J_DK_L
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(26.7000 mm, 16.0000 mm): Ilha PTH 6 [/INTER_RX_S2M] de J_LCD_TOP
+    @(62.0000 mm, 43.9400 mm): Ilha PTH 12 [/INTER_RX_S2M] de J_DK_L
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(29.2400 mm, 16.0000 mm): Ilha PTH 7 [/INTER_TX_M2S] de J_LCD_TOP
+    @(62.0000 mm, 46.4800 mm): Ilha PTH 13 [/INTER_TX_M2S] de J_DK_L
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(52.0000 mm, 79.0000 mm): Ilha PTH 1 [/SERVO_ESC] de SRV1
+    @(62.0000 mm, 21.0800 mm): Ilha PTH 3 [/SERVO_ESC] de J_DK_L
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(62.0000 mm, 26.1600 mm): Ilha PTH 5 [/SERVO_WINCH] de J_DK_L
+    @(67.2400 mm, 79.0000 mm): Ilha PTH 1 [/SERVO_WINCH] de SRV3
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(59.6200 mm, 79.0000 mm): Ilha PTH 1 [/SERVO_RUDDER] de SRV2
+    @(62.0000 mm, 23.6200 mm): Ilha PTH 4 [/SERVO_RUDDER] de J_DK_L
+
+** Found 0 Footprint errors **
+
+** Ignored checks **
+    - Footprint has no courtyard defined
+    - Track endpoint not centered on via
+    - Tuning profile track geometries
+    - Footprint doesn't match symbol's footprint filters
+    - Footprint component type doesn't match footprint pads
+
+** End of Report **

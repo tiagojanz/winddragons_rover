@@ -1,0 +1,49 @@
+(kicad_sch
+	(version 20260306)
+	(generator "eeschema")
+	(generator_version "10.0")
+	(uuid "a0000000-0000-0000-0000-000000000001")
+	(paper "A3")
+	(title_block
+		(title "WindDragons Dual ESP32-C6 Carrier")
+		(date "2026-10-14")
+		(rev "V1.0 - Dual C6 100x100mm")
+		(company "WindDragons Autonomous Rover")
+		(comment 1 "Master (Front): ESP32-C6 LCD 1.47 (Universal Footprint), PS5 Joystick, 4x SKRK Buttons")
+		(comment 2 "Slave (Back): ESP32-C6 DevKitC-1, SX1278 LoRa, Quectel GPS, 4x LEDC Servos")
+	)
+	(lib_symbols)
+	(text "INTER-ESP UART: HIGH-SPEED BIDIRECTIONAL LINK (GPIO 2 & 3 @ 921600)"
+		(exclude_from_sim no)
+		(at 100 80 0)
+		(effects
+			(font
+				(size 2 2)
+				(bold yes)
+			)
+		)
+		(uuid "31d0fdc7-f2c3-45a1-b351-37bc181ae0e8")
+	)
+	(text "BACK PERIPHERALS: ESP32-C6 DEVKITC-1, SX1278 LORA & 4x DIRECT SERVOS"
+		(exclude_from_sim no)
+		(at 180 20 0)
+		(effects
+			(font
+				(size 2 2)
+				(bold yes)
+			)
+		)
+		(uuid "e0ae3ef9-ef7f-4abb-b6bc-f8b3f8e2c03b")
+	)
+	(text "FRONT PANEL: 1.47 INCH IPS LCD, PS5 JOYSTICK & 4x TACTILE BUTTONS"
+		(exclude_from_sim no)
+		(at 20 20 0)
+		(effects
+			(font
+				(size 2 2)
+				(bold yes)
+			)
+		)
+		(uuid "e8b5413a-5345-4e56-a9bb-3130ea6da026")
+	)
+)

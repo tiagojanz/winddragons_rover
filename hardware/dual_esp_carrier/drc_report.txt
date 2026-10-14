@@ -1,0 +1,423 @@
+** Drc report for Dual_ESP_Carrier.kicad_pcb **
+** Created on 2026-10-14T11:00:57 **
+** Report includes: Errors, Warnings **
+
+** Found 44 DRC violations **
+[silk_edge_clearance]: Silkscreen clipped by board edge
+    Rule: configuração da serigrafia da placa; warning
+    @(100.0000 mm, 100.0000 mm): Segmento no Edge.Cuts
+    @(20.0000 mm, 99.5000 mm): Valor do campo de J_SRV_ESC (ESC (IO4))
+[silk_edge_clearance]: Silkscreen clipped by board edge
+    Rule: configuração da serigrafia da placa; warning
+    @(100.0000 mm, 100.0000 mm): Segmento no Edge.Cuts
+    @(28.0000 mm, 99.5000 mm): Valor do campo de J_SRV_RUD (RUDDER (IO5))
+[silk_edge_clearance]: Silkscreen clipped by board edge
+    Rule: configuração da serigrafia da placa; warning
+    @(100.0000 mm, 100.0000 mm): Segmento no Edge.Cuts
+    @(72.0000 mm, 99.5000 mm): Valor do campo de J_SRV_RCK (RACK (IO7))
+[silk_edge_clearance]: Silkscreen clipped by board edge
+    Rule: configuração da serigrafia da placa; warning
+    @(100.0000 mm, 100.0000 mm): Segmento no Edge.Cuts
+    @(64.0000 mm, 99.5000 mm): Valor do campo de J_SRV_WIN (WINCH (IO6))
+[lib_footprint_mismatch]: O footprint 'MountingHole_3.2mm_M3' não corresponde à cópia na biblioteca 'MountingHole'
+    Local override; warning
+    @(4.5000 mm, 95.5000 mm): Footprint H3
+[lib_footprint_mismatch]: O footprint 'MountingHole_3.2mm_M3' não corresponde à cópia na biblioteca 'MountingHole'
+    Local override; warning
+    @(95.5000 mm, 95.5000 mm): Footprint H4
+[lib_footprint_mismatch]: O footprint 'MountingHole_3.2mm_M3' não corresponde à cópia na biblioteca 'MountingHole'
+    Local override; warning
+    @(4.5000 mm, 4.5000 mm): Footprint H1
+[lib_footprint_mismatch]: O footprint 'PinHeader_1x09_P2.54mm_Horizontal' não corresponde à cópia na biblioteca 'Connector_PinHeader_2.54mm'
+    Local override; warning
+    @(35.0000 mm, 33.7800 mm): Footprint J2
+[lib_footprint_mismatch]: O footprint 'MountingHole_3.2mm_M3' não corresponde à cópia na biblioteca 'MountingHole'
+    Local override; warning
+    @(95.5000 mm, 4.5000 mm): Footprint H2
+[lib_footprint_issues]: A configuração atual não inclui a biblioteca de footprints 'PS4_joystick'
+    Local override; warning
+    @(77.6000 mm, 68.0000 mm): Footprint SW2
+[lib_footprint_issues]: A configuração atual não inclui a biblioteca de footprints 'PS4_joystick'
+    Local override; warning
+    @(71.3000 mm, 62.0000 mm): Footprint SW4
+[lib_footprint_issues]: A configuração atual não inclui a biblioteca de footprints 'PS5_joystick'
+    Local override; warning
+    @(20.0000 mm, 68.0000 mm): Footprint JOY1
+[lib_footprint_issues]: A configuração atual não inclui a biblioteca de footprints 'PS4_joystick'
+    Local override; warning
+    @(71.3000 mm, 74.0000 mm): Footprint SW3
+[lib_footprint_mismatch]: O footprint 'PinHeader_1x09_P2.54mm_Horizontal' não corresponde à cópia na biblioteca 'Connector_PinHeader_2.54mm'
+    Local override; warning
+    @(35.0000 mm, 16.0000 mm): Footprint J1
+[lib_footprint_issues]: A configuração atual não inclui a biblioteca de footprints 'PS4_joystick'
+    Local override; warning
+    @(65.0000 mm, 68.0000 mm): Footprint SW1
+[lib_footprint_mismatch]: O footprint 'PinHeader_2x04_P2.54mm_Vertical' não corresponde à cópia na biblioteca 'Connector_PinHeader_2.54mm'
+    Local override; warning
+    @(17.0800 mm, 18.5000 mm): Footprint J3
+[lib_footprint_mismatch]: O footprint 'PinHeader_1x03_P2.54mm_Vertical' não corresponde à cópia na biblioteca 'Connector_PinHeader_2.54mm'
+    Local override; warning
+    @(20.0000 mm, 92.0000 mm): Footprint J_SRV_ESC
+[lib_footprint_mismatch]: O footprint 'PinHeader_1x02_P2.54mm_Vertical' não corresponde à cópia na biblioteca 'Connector_PinHeader_2.54mm'
+    Local override; warning
+    @(88.0000 mm, 61.5000 mm): Footprint J_WATER
+[lib_footprint_mismatch]: O footprint 'PinHeader_1x16_P2.54mm_Vertical' não corresponde à cópia na biblioteca 'Connector_PinHeader_2.54mm'
+    Local override; warning
+    @(56.3600 mm, 46.0000 mm): Footprint J_DK_R
+[lib_footprint_mismatch]: O footprint 'PinHeader_1x02_P2.54mm_Vertical' não corresponde à cópia na biblioteca 'Connector_PinHeader_2.54mm'
+    Local override; warning
+    @(10.0000 mm, 92.0000 mm): Footprint J_PWR_ESP
+[lib_footprint_mismatch]: O footprint 'PinHeader_1x02_P2.54mm_Vertical' não corresponde à cópia na biblioteca 'Connector_PinHeader_2.54mm'
+    Local override; warning
+    @(82.0000 mm, 92.0000 mm): Footprint J_PWR_SRV
+[lib_footprint_mismatch]: O footprint 'PinHeader_1x03_P2.54mm_Vertical' não corresponde à cópia na biblioteca 'Connector_PinHeader_2.54mm'
+    Local override; warning
+    @(28.0000 mm, 92.0000 mm): Footprint J_SRV_RUD
+[lib_footprint_mismatch]: O footprint 'PinHeader_1x07_P2.54mm_Horizontal' não corresponde à cópia na biblioteca 'Connector_PinHeader_2.54mm'
+    Local override; warning
+    @(76.3800 mm, 18.5000 mm): Footprint J6
+[lib_footprint_mismatch]: O footprint 'PinHeader_1x03_P2.54mm_Vertical' não corresponde à cópia na biblioteca 'Connector_PinHeader_2.54mm'
+    Local override; warning
+    @(72.0000 mm, 92.0000 mm): Footprint J_SRV_RCK
+[lib_footprint_mismatch]: O footprint 'PinHeader_1x03_P2.54mm_Vertical' não corresponde à cópia na biblioteca 'Connector_PinHeader_2.54mm'
+    Local override; warning
+    @(88.0000 mm, 51.5000 mm): Footprint J_BATT
+[lib_footprint_mismatch]: O footprint 'PinHeader_1x03_P2.54mm_Vertical' não corresponde à cópia na biblioteca 'Connector_PinHeader_2.54mm'
+    Local override; warning
+    @(64.0000 mm, 92.0000 mm): Footprint J_SRV_WIN
+[lib_footprint_mismatch]: O footprint 'PinHeader_1x16_P2.54mm_Vertical' não corresponde à cópia na biblioteca 'Connector_PinHeader_2.54mm'
+    Local override; warning
+    @(33.5000 mm, 46.0000 mm): Footprint J_DK_L
+[silk_overlap]: Silkscreen clearance
+    Rule: configuração da serigrafia da placa; warning
+    @(34.0000 mm, 18.0000 mm): Retângulo no F.Silkscreen
+    @(45.0000 mm, 27.0000 mm): Texto da PCI 'ST7789 1.47 INCH LCD (320x172)' em F.Silkscreen
+[silk_overlap]: Silkscreen clearance
+    Rule: configuração da serigrafia da placa; warning
+    @(82.0000 mm, 94.5400 mm): Ilha PTH 2 [/+5V_SERVO] de J_PWR_SRV
+    @(82.0000 mm, 97.0000 mm): Valor do campo de J_PWR_SRV (5V_SERVO)
+[silk_overlap]: Silkscreen clearance
+    Rule: configuração da serigrafia da placa; warning
+    @(72.0000 mm, 99.5000 mm): Valor do campo de J_SRV_RCK (RACK (IO7))
+    @(72.0000 mm, 97.0800 mm): Ilha PTH 3 [/SERVO_RACK] de J_SRV_RCK
+[silk_overlap]: Silkscreen clearance
+    Rule: configuração da serigrafia da placa; warning
+    @(64.0000 mm, 97.0800 mm): Ilha PTH 3 [/SERVO_WINCH] de J_SRV_WIN
+    @(64.0000 mm, 99.5000 mm): Valor do campo de J_SRV_WIN (WINCH (IO6))
+[silk_overlap]: Silkscreen clearance
+    Rule: configuração da serigrafia da placa; warning
+    @(20.0000 mm, 97.0800 mm): Ilha PTH 3 [/SERVO_ESC] de J_SRV_ESC
+    @(20.0000 mm, 99.5000 mm): Valor do campo de J_SRV_ESC (ESC (IO4))
+[silk_overlap]: Silkscreen clearance
+    Rule: configuração da serigrafia da placa; warning
+    @(28.0000 mm, 99.5000 mm): Valor do campo de J_SRV_RUD (RUDDER (IO5))
+    @(28.0000 mm, 97.0800 mm): Ilha PTH 3 [/SERVO_RUDDER] de J_SRV_RUD
+[silk_overlap]: Silkscreen clearance
+    Rule: configuração da serigrafia da placa; warning
+    @(68.0000 mm, 16.0000 mm): Retângulo no B.Silkscreen
+    @(91.6200 mm, 15.8000 mm): Texto do footprint de J6 (V)
+[silk_overlap]: Silkscreen clearance
+    Rule: configuração da serigrafia da placa; warning
+    @(84.0000 mm, 15.8000 mm): Texto do footprint de J6 (R1)
+    @(68.0000 mm, 16.0000 mm): Retângulo no B.Silkscreen
+[silk_overlap]: Silkscreen clearance
+    Rule: configuração da serigrafia da placa; warning
+    @(81.4600 mm, 15.8000 mm): Texto do footprint de J6 (R2)
+    @(68.0000 mm, 16.0000 mm): Retângulo no B.Silkscreen
+[silk_overlap]: Silkscreen clearance
+    Rule: configuração da serigrafia da placa; warning
+    @(78.9200 mm, 15.8000 mm): Texto do footprint de J6 (T2)
+    @(68.0000 mm, 16.0000 mm): Retângulo no B.Silkscreen
+[silk_overlap]: Silkscreen clearance
+    Rule: configuração da serigrafia da placa; warning
+    @(76.3800 mm, 15.8000 mm): Texto do footprint de J6 (P)
+    @(68.0000 mm, 16.0000 mm): Retângulo no B.Silkscreen
+[silk_overlap]: Silkscreen clearance
+    Rule: configuração da serigrafia da placa; warning
+    @(86.5400 mm, 15.8000 mm): Texto do footprint de J6 (T1)
+    @(68.0000 mm, 16.0000 mm): Retângulo no B.Silkscreen
+[silk_overlap]: Silkscreen clearance
+    Rule: configuração da serigrafia da placa; warning
+    @(89.0800 mm, 15.8000 mm): Texto do footprint de J6 (G)
+    @(68.0000 mm, 16.0000 mm): Retângulo no B.Silkscreen
+[silk_overlap]: Silkscreen clearance
+    Rule: configuração da serigrafia da placa; warning
+    @(88.0000 mm, 59.0000 mm): Valor do campo de J_BATT (BATT V/I/G)
+    @(88.0000 mm, 56.5800 mm): Ilha PTH 3 [/GND] de J_BATT
+[silk_overlap]: Silkscreen clearance
+    Rule: configuração da serigrafia da placa; warning
+    @(88.0000 mm, 59.1000 mm): Campo de referência do J_WATER
+    @(88.0000 mm, 59.0000 mm): Valor do campo de J_BATT (BATT V/I/G)
+[silk_overlap]: Silkscreen clearance
+    Rule: configuração da serigrafia da placa; warning
+    @(88.0000 mm, 61.5000 mm): Ilha PTH 1 [/GND] de J_WATER
+    @(88.0000 mm, 59.0000 mm): Valor do campo de J_BATT (BATT V/I/G)
+[silk_overlap]: Silkscreen clearance
+    Rule: configuração da serigrafia da placa; warning
+    @(88.0000 mm, 64.0400 mm): Ilha PTH 2 [/WATER_SENS] de J_WATER
+    @(88.0000 mm, 66.5000 mm): Valor do campo de J_WATER (WATER/ANC)
+
+** Found 63 unconnected pads **
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(23.2500 mm, 73.7500 mm): Ilha PTH 9 [/IO9_BOOT] de JOY1
+    @(23.2500 mm, 78.2500 mm): Ilha PTH 10 [/IO9_BOOT] de JOY1
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(35.0000 mm, 33.7800 mm): Ilha PTH 1 [/IO9_BOOT] de J2
+    @(23.2500 mm, 73.7500 mm): Ilha PTH 9 [/IO9_BOOT] de JOY1
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(69.2000 mm, 62.0000 mm): Ilha 1 [/IO9_BOOT] de SW4 no F.Cu
+    @(35.0000 mm, 33.7800 mm): Ilha PTH 1 [/IO9_BOOT] de J2
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(37.5400 mm, 33.7800 mm): Ilha PTH 2 [/IO18_UP] de J2
+    @(62.9000 mm, 68.0000 mm): Ilha 1 [/IO18_UP] de SW1 no F.Cu
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(40.0800 mm, 33.7800 mm): Ilha PTH 3 [/IO19_MODE] de J2
+    @(75.5000 mm, 68.0000 mm): Ilha 1 [/IO19_MODE] de SW2 no F.Cu
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(42.6200 mm, 33.7800 mm): Ilha PTH 4 [/IO20_DN] de J2
+    @(69.2000 mm, 74.0000 mm): Ilha 1 [/IO20_DN] de SW3 no F.Cu
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(45.1600 mm, 33.7800 mm): Ilha PTH 5 [/GPS_PPS] de J2
+    @(76.3800 mm, 18.5000 mm): Ilha PTH 1 [/GPS_PPS] de J6
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(52.7800 mm, 33.7800 mm): Ilha PTH 8 [/GPS_RX] de J2
+    @(86.5400 mm, 18.5000 mm): Ilha PTH 5 [/GPS_RX] de J6
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(55.3200 mm, 33.7800 mm): Ilha PTH 9 [/GPS_TX] de J2
+    @(84.0000 mm, 18.5000 mm): Ilha PTH 4 [/GPS_TX] de J6
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(10.0000 mm, 92.0000 mm): Ilha PTH 1 [/GND] de J_PWR_ESP
+    @(20.0000 mm, 92.0000 mm): Ilha PTH 1 [/GND] de J_SRV_ESC
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(11.2700 mm, 65.5000 mm): Ilha PTH 1 [/GND] de JOY1
+    @(13.6750 mm, 63.0000 mm): Ilha PTH 11 [/GND] de JOY1
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(13.6750 mm, 63.0000 mm): Ilha PTH 11 [/GND] de JOY1
+    @(17.5000 mm, 59.2700 mm): Ilha PTH 4 [/GND] de JOY1
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(13.6750 mm, 73.0000 mm): Ilha PTH 13 [/GND] de JOY1
+    @(16.7500 mm, 73.7500 mm): Ilha PTH 7 [/GND] de JOY1
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(13.6750 mm, 73.0000 mm): Ilha PTH 13 [/GND] de JOY1
+    @(11.2700 mm, 65.5000 mm): Ilha PTH 1 [/GND] de JOY1
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(16.7500 mm, 73.7500 mm): Ilha PTH 7 [/GND] de JOY1
+    @(16.7500 mm, 78.2500 mm): Ilha PTH 8 [/GND] de JOY1
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(17.5000 mm, 59.2700 mm): Ilha PTH 4 [/GND] de JOY1
+    @(26.3250 mm, 63.0000 mm): Ilha PTH 12 [/GND] de JOY1
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(20.0000 mm, 92.0000 mm): Ilha PTH 1 [/GND] de J_SRV_ESC
+    @(28.0000 mm, 92.0000 mm): Ilha PTH 1 [/GND] de J_SRV_RUD
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(26.3250 mm, 73.0000 mm): Ilha PTH 14 [/GND] de JOY1
+    @(16.7500 mm, 73.7500 mm): Ilha PTH 7 [/GND] de JOY1
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(26.3250 mm, 73.0000 mm): Ilha PTH 14 [/GND] de JOY1
+    @(33.5000 mm, 81.5600 mm): Ilha PTH 15 [/GND] de J_DK_L
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(28.0000 mm, 92.0000 mm): Ilha PTH 1 [/GND] de J_SRV_RUD
+    @(33.5000 mm, 81.5600 mm): Ilha PTH 15 [/GND] de J_DK_L
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(52.7800 mm, 16.0000 mm): Ilha PTH 8 [/GND] de J1
+    @(56.3600 mm, 46.0000 mm): Ilha PTH 1 [/GND] de J_DK_R
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(52.7800 mm, 16.0000 mm): Ilha PTH 8 [/GND] de J1
+    @(17.0800 mm, 18.5000 mm): Ilha PTH 1 [/GND] de J3
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(56.3600 mm, 46.0000 mm): Ilha PTH 1 [/GND] de J_DK_R
+    @(73.4000 mm, 62.0000 mm): Ilha 2 [/GND] de SW4 no F.Cu
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(56.3600 mm, 73.9400 mm): Ilha PTH 12 [/GND] de J_DK_R
+    @(56.3600 mm, 81.5600 mm): Ilha PTH 15 [/GND] de J_DK_R
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(56.3600 mm, 81.5600 mm): Ilha PTH 15 [/GND] de J_DK_R
+    @(33.5000 mm, 81.5600 mm): Ilha PTH 15 [/GND] de J_DK_L
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(64.0000 mm, 92.0000 mm): Ilha PTH 1 [/GND] de J_SRV_WIN
+    @(72.0000 mm, 92.0000 mm): Ilha PTH 1 [/GND] de J_SRV_RCK
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(64.0000 mm, 92.0000 mm): Ilha PTH 1 [/GND] de J_SRV_WIN
+    @(56.3600 mm, 81.5600 mm): Ilha PTH 15 [/GND] de J_DK_R
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(67.1000 mm, 68.0000 mm): Ilha 2 [/GND] de SW1 no F.Cu
+    @(73.4000 mm, 62.0000 mm): Ilha 2 [/GND] de SW4 no F.Cu
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(67.1000 mm, 68.0000 mm): Ilha 2 [/GND] de SW1 no F.Cu
+    @(56.3600 mm, 73.9400 mm): Ilha PTH 12 [/GND] de J_DK_R
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(72.0000 mm, 92.0000 mm): Ilha PTH 1 [/GND] de J_SRV_RCK
+    @(82.0000 mm, 92.0000 mm): Ilha PTH 1 [/GND] de J_PWR_SRV
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(73.4000 mm, 62.0000 mm): Ilha 2 [/GND] de SW4 no F.Cu
+    @(79.7000 mm, 68.0000 mm): Ilha 2 [/GND] de SW2 no F.Cu
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(79.7000 mm, 68.0000 mm): Ilha 2 [/GND] de SW2 no F.Cu
+    @(73.4000 mm, 74.0000 mm): Ilha 2 [/GND] de SW3 no F.Cu
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(79.7000 mm, 68.0000 mm): Ilha 2 [/GND] de SW2 no F.Cu
+    @(88.0000 mm, 61.5000 mm): Ilha PTH 1 [/GND] de J_WATER
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(88.0000 mm, 56.5800 mm): Ilha PTH 3 [/GND] de J_BATT
+    @(88.0000 mm, 61.5000 mm): Ilha PTH 1 [/GND] de J_WATER
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(89.0800 mm, 18.5000 mm): Ilha PTH 6 [/GND] de J6
+    @(52.7800 mm, 16.0000 mm): Ilha PTH 8 [/GND] de J1
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(11.2700 mm, 68.0000 mm): Ilha PTH 2 [/JOY_Y] de JOY1
+    @(45.1600 mm, 16.0000 mm): Ilha PTH 5 [/JOY_Y] de J1
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(11.2700 mm, 70.5000 mm): Ilha PTH 3 [/+3V3] de JOY1
+    @(22.5000 mm, 59.2700 mm): Ilha PTH 6 [/+3V3] de JOY1
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(33.5000 mm, 46.0000 mm): Ilha PTH 1 [/+3V3] de J_DK_L
+    @(22.5000 mm, 59.2700 mm): Ilha PTH 6 [/+3V3] de JOY1
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(33.5000 mm, 46.0000 mm): Ilha PTH 1 [/+3V3] de J_DK_L
+    @(17.0800 mm, 21.0400 mm): Ilha PTH 2 [/+3V3] de J3
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(50.2400 mm, 16.0000 mm): Ilha PTH 7 [/+3V3] de J1
+    @(17.0800 mm, 21.0400 mm): Ilha PTH 2 [/+3V3] de J3
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(91.6200 mm, 18.5000 mm): Ilha PTH 7 [/+3V3] de J6
+    @(50.2400 mm, 16.0000 mm): Ilha PTH 7 [/+3V3] de J1
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(20.0000 mm, 59.2700 mm): Ilha PTH 5 [/JOY_X] de JOY1
+    @(47.7000 mm, 16.0000 mm): Ilha PTH 6 [/JOY_X] de J1
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(33.5000 mm, 73.9400 mm): Ilha PTH 12 [/INTER_TX_M2S] de J_DK_L
+    @(40.0800 mm, 16.0000 mm): Ilha PTH 3 [/INTER_TX_M2S] de J1
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(33.5000 mm, 76.4800 mm): Ilha PTH 13 [/INTER_RX_S2M] de J_DK_L
+    @(42.6200 mm, 16.0000 mm): Ilha PTH 4 [/INTER_RX_S2M] de J1
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(10.0000 mm, 94.5400 mm): Ilha PTH 2 [/+5V] de J_PWR_ESP
+    @(33.5000 mm, 79.0200 mm): Ilha PTH 14 [/+5V] de J_DK_L
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(33.5000 mm, 79.0200 mm): Ilha PTH 14 [/+5V] de J_DK_L
+    @(55.3200 mm, 16.0000 mm): Ilha PTH 9 [/+5V] de J1
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(14.5400 mm, 18.5000 mm): Ilha PTH 3 [/LORA_RST] de J3
+    @(56.3600 mm, 58.7000 mm): Ilha PTH 6 [/LORA_RST] de J_DK_R
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(14.5400 mm, 21.0400 mm): Ilha PTH 4 [/LORA_NSS] de J3
+    @(56.3600 mm, 48.5400 mm): Ilha PTH 2 [/LORA_NSS] de J_DK_R
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(12.0000 mm, 18.5000 mm): Ilha PTH 5 [/LORA_SCK] de J3
+    @(56.3600 mm, 51.0800 mm): Ilha PTH 3 [/LORA_SCK] de J_DK_R
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(12.0000 mm, 21.0400 mm): Ilha PTH 6 [/LORA_MOSI] de J3
+    @(56.3600 mm, 53.6200 mm): Ilha PTH 4 [/LORA_MOSI] de J_DK_R
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(9.4600 mm, 18.5000 mm): Ilha PTH 7 [/LORA_MISO] de J3
+    @(56.3600 mm, 56.1600 mm): Ilha PTH 5 [/LORA_MISO] de J_DK_R
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(9.4600 mm, 21.0400 mm): Ilha PTH 8 [/LORA_DIO0] de J3
+    @(56.3600 mm, 61.2400 mm): Ilha PTH 7 [/LORA_DIO0] de J_DK_R
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(20.0000 mm, 94.5400 mm): Ilha PTH 2 [/+5V_SERVO] de J_SRV_ESC
+    @(28.0000 mm, 94.5400 mm): Ilha PTH 2 [/+5V_SERVO] de J_SRV_RUD
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(28.0000 mm, 94.5400 mm): Ilha PTH 2 [/+5V_SERVO] de J_SRV_RUD
+    @(64.0000 mm, 94.5400 mm): Ilha PTH 2 [/+5V_SERVO] de J_SRV_WIN
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(64.0000 mm, 94.5400 mm): Ilha PTH 2 [/+5V_SERVO] de J_SRV_WIN
+    @(72.0000 mm, 94.5400 mm): Ilha PTH 2 [/+5V_SERVO] de J_SRV_RCK
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(72.0000 mm, 94.5400 mm): Ilha PTH 2 [/+5V_SERVO] de J_SRV_RCK
+    @(82.0000 mm, 94.5400 mm): Ilha PTH 2 [/+5V_SERVO] de J_PWR_SRV
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(20.0000 mm, 97.0800 mm): Ilha PTH 3 [/SERVO_ESC] de J_SRV_ESC
+    @(33.5000 mm, 51.0800 mm): Ilha PTH 3 [/SERVO_ESC] de J_DK_L
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(33.5000 mm, 68.8600 mm): Ilha PTH 10 [/WATER_SENS] de J_DK_L
+    @(88.0000 mm, 64.0400 mm): Ilha PTH 2 [/WATER_SENS] de J_WATER
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(28.0000 mm, 97.0800 mm): Ilha PTH 3 [/SERVO_RUDDER] de J_SRV_RUD
+    @(33.5000 mm, 53.6200 mm): Ilha PTH 4 [/SERVO_RUDDER] de J_DK_L
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(33.5000 mm, 58.7000 mm): Ilha PTH 6 [/SERVO_RACK] de J_DK_L
+    @(72.0000 mm, 97.0800 mm): Ilha PTH 3 [/SERVO_RACK] de J_SRV_RCK
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(33.5000 mm, 61.2400 mm): Ilha PTH 7 [/BATT_VOLT] de J_DK_L
+    @(88.0000 mm, 51.5000 mm): Ilha PTH 1 [/BATT_VOLT] de J_BATT
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(33.5000 mm, 63.7800 mm): Ilha PTH 8 [/BATT_CURR] de J_DK_L
+    @(88.0000 mm, 54.0400 mm): Ilha PTH 2 [/BATT_CURR] de J_BATT
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(33.5000 mm, 56.1600 mm): Ilha PTH 5 [/SERVO_WINCH] de J_DK_L
+    @(64.0000 mm, 97.0800 mm): Ilha PTH 3 [/SERVO_WINCH] de J_SRV_WIN
+
+** Found 0 Footprint errors **
+
+** Ignored checks **
+    - Footprint has no courtyard defined
+    - Track endpoint not centered on via
+    - Tuning profile track geometries
+    - Footprint doesn't match symbol's footprint filters
+    - Footprint component type doesn't match footprint pads
+
+** End of Report **
