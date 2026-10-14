@@ -27,23 +27,24 @@
 
 // --- Onboard Peripherals ---
 #define PIN_RGB_LED    8   // WS2812 NeoPixel
-#define PIN_BTN_BOOT   18  // Navigation BOOT button (SW1 Left - Bottom Header Pin 2 / IO18)
+#define PIN_BTN_BOOT   9   // Hardware BOOT button on ESP32-C6 & SW4 (BOOT) on Carrier PCB
+#define PIN_BTN_SW1    18  // Navigation SW1 Left (UP) on Carrier PCB
 
 // --- LoRa SX1278 (Ra-02 433MHz) on Dedicated Header SPI ---
 // NOTA CRÍTICA ESP32-C6: O ESP32-C6 tem apenas UM barramento SPI de utilizador (FSPI).
 // Além disso, GPIO 4 e 5 são partilhados com o leitor MicroSD TF onboard.
 // Definir ENABLE_LORA como 1 apenas quando o módulo LoRa estiver fisicamente ligado e a ser usado.
 #ifndef ENABLE_LORA
-#define ENABLE_LORA 0
+#define ENABLE_LORA 1
 #endif
 
-// Top Header: Pin 4 (SCK=2), Pin 3 (MOSI=3), Pin 2 (MISO=4), Pin 1 (NSS=5)
-// Bottom Header: Pin 6 (DIO0=12)
-#define PIN_LORA_SCK   2   // Hardware SPI SCLK (Top Header Pin 4)
-#define PIN_LORA_MOSI  3   // Hardware SPI MOSI (Top Header Pin 3)
-#define PIN_LORA_MISO  4   // Hardware SPI MISO (Top Header Pin 2)
-#define PIN_LORA_NSS   5   // CS for LoRa (Top Header Pin 1)
-#define PIN_LORA_DIO0  -1  // Polling mode (RADIOLIB_NC): não usar GPIO 12 para proteger USB D- (CDC)
+// Top Header: Pin 4 (SCK=2), Pin 3 (MOSI=3)
+// Bottom Header: Pin 3 (MISO=19), Pin 4 (NSS=20), Pin 5 (DIO0=23)
+#define PIN_LORA_SCK   2   // SPI SCLK (Top Header Pin 4)
+#define PIN_LORA_MOSI  3   // SPI MOSI (Top Header Pin 3)
+#define PIN_LORA_MISO  19  // SPI MISO (Bottom Header Pin 3 / GPIO 19 - sem conflito com MicroSD)
+#define PIN_LORA_NSS   20  // CS/NSS for LoRa (Bottom Header Pin 4 / GPIO 20 - sem conflito com MicroSD)
+#define PIN_LORA_DIO0  23  // LoRa DIO0 IRQ (Bottom Header Pin 5 / GPIO 23 - sem conflito com USB)
 #define PIN_LORA_RST   -1  // Not connected / internal pullup
 
 // LoRa RF Settings (433MHz Band)
@@ -109,6 +110,6 @@
 #define PIN_JOYSTICK_SW -1  // Desativado no joystick: GPIO 9 e o botao BOOT com interrupcao dedicada para mudar de pagina
 
 // Physical buttons on Base (Bottom Header)
-#define PIN_BTN_ANCHOR_UP   20  // Button to hoist anchor / UP (SW3 Top - Bottom Header Pin 4 / IO20)
-#define PIN_BTN_ANCHOR_DOWN 9   // Button to drop anchor / DOWN (SW4 Bottom - Bottom Header Pin 1 / IO9)
+#define PIN_BTN_ANCHOR_UP   18  // Button to hoist anchor / UP (SW1 Left - Bottom Header Pin 2 / IO18)
+#define PIN_BTN_ANCHOR_DOWN 20  // Button to drop anchor / DOWN (SW3 Bottom - Bottom Header Pin 4 / IO20)
 #define PIN_BTN_MODE        19  // Button for mode toggle / MODE (SW2 Right - Bottom Header Pin 3 / IO19)

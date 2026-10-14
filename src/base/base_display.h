@@ -27,13 +27,11 @@
 #define UI_PANEL_BG  0x10A2
 
 enum BaseScreenPage {
-    BASE_PAGE_CONTROL  = 0, // Controlo e telemetria do Rover selecionado
-    BASE_PAGE_FLEET    = 1, // Lista da frota de Rovers (1 a 8)
-    BASE_PAGE_NETWORK  = 2, // Página de WiFi / Rede
-    BASE_PAGE_CLOUD    = 3, // Página de Ligação ao Portal Cloud
-    BASE_PAGE_JOYSTICK = 4, // Página de Teste do Joystick e Botões
-    BASE_PAGE_MAC      = 5, // Página de Endereço MAC & QR Code
-    BASE_PAGE_COUNT    = 6
+    BASE_PAGE_STATION  = 0, // 1. Ecrã: Nome da estação, Mac-address, Estado
+    BASE_PAGE_WIFI     = 1, // 2. Ecrã: Conectividade WiFi
+    BASE_PAGE_ROVER    = 2, // 3. Ecrã: Rover selecionado
+    BASE_PAGE_JOYSTICK = 3, // 4. Ecrã: Teste do joystick (opcional)
+    BASE_PAGE_COUNT    = 4
 };
 
 struct BootLogItem {
@@ -44,20 +42,32 @@ struct BootLogItem {
 static const uint8_t BOOT_MAX_LINES = 24;
 static const uint8_t BOOT_VISIBLE_LINES = 13;
 
+#include <Preferences.h>
+
 class BaseDisplay {
 public:
     BaseDisplay() 
-        : canvas(nullptr), currentPage(BASE_PAGE_CONTROL), lastRender(0),
-          _bootLogCount(0), _bootProgress(0), _brightness(85) {}
+        : canvas(nullptr), currentPage(BASE_PAGE_STATION), lastRender(0),
+          _bootLogCount(0), _bootProgress(0), _brightness(85), _joyScreenEnabled(false) {}
 
     void begin(uint8_t initialBrightness = 85) {
         // Desativar CS do cartão MicroSD onboard para evitar colisão SPI
         pinMode(PIN_SD_CS, OUTPUT);
         digitalWrite(PIN_SD_CS, HIGH);
 
+        // Carregar configurações guardadas na NVS (brilho e 4º ecrã joystick)
+        Preferences prefs;
+        if (prefs.begin("base_display", true)) {
+            _brightness = prefs.getUChar("brightness", initialBrightness);
+            _joyScreenEnabled = prefs.getBool("joy_scr", false);
+            prefs.end();
+        } else {
+            _brightness = initialBrightness;
+        }
+
         // Inicializar driver de hardware ST7789
         display.begin();
-        setBrightness(initialBrightness);
+        setBrightness(_brightness);
 
         // Criar canvas em RAM configurado em Landscape (320x172) com DISPLAY_ROTATION (3)
         // Mesma orientação e PCB do Rover
@@ -75,6 +85,15 @@ public:
         if (brightness > 100) brightness = 100;
         _brightness = brightness;
         display.setBacklight(_brightness);
+    }
+
+    void saveBrightness(uint8_t brightness) {
+        setBrightness(brightness);
+        Preferences prefs;
+        if (prefs.begin("base_display", false)) {
+            prefs.putUChar("brightness", _brightness);
+            prefs.end();
+        }
     }
 
     uint8_t getBrightness() const {
@@ -214,18 +233,42 @@ public:
     // =========================================================================
     // NAVEGAÇÃO DE PÁGINAS
     // =========================================================================
+    void setJoystickScreenEnabled(bool enabled) {
+        _joyScreenEnabled = enabled;
+        if (!_joyScreenEnabled && currentPage == BASE_PAGE_JOYSTICK) {
+            currentPage = BASE_PAGE_STATION;
+        }
+        lastRender = 0;
+    }
+
+    bool isJoystickScreenEnabled() const {
+        return _joyScreenEnabled;
+    }
+
+    uint8_t getPageCount() const {
+        return _joyScreenEnabled ? 4 : 3;
+    }
+
     void nextPage() {
-        currentPage = static_cast<BaseScreenPage>((currentPage + 1) % BASE_PAGE_COUNT);
+        uint8_t count = getPageCount();
+        currentPage = static_cast<BaseScreenPage>((currentPage + 1) % count);
         lastRender = 0; // Forçar renderização imediata
     }
 
     void prevPage() {
-        currentPage = static_cast<BaseScreenPage>((currentPage + BASE_PAGE_COUNT - 1) % BASE_PAGE_COUNT);
+        uint8_t count = getPageCount();
+        currentPage = static_cast<BaseScreenPage>((currentPage + count - 1) % count);
         lastRender = 0;
     }
 
     void setPage(BaseScreenPage page) {
-        currentPage = page;
+        if (page == BASE_PAGE_JOYSTICK && !_joyScreenEnabled) {
+            // Se forçado pelo menu de joystick, permite temporariamente
+            currentPage = BASE_PAGE_JOYSTICK;
+        } else {
+            uint8_t count = getPageCount();
+            currentPage = static_cast<BaseScreenPage>(page % count);
+        }
         lastRender = 0;
     }
 
@@ -259,25 +302,19 @@ public:
         // 1. Cabeçalho Superior Global (Altura: 24px)
         renderHeader(fleet, wifiOk, cloudOk, sdOk, isApMode);
 
-        // 2. Renderizar a Página Ativa
+        // 2. Renderizar a Página Ativa (4 Ecrãs Simplificados)
         switch (currentPage) {
-            case BASE_PAGE_CONTROL:
-                renderControlPage(fleet, throttle, rudder, navMode);
+            case BASE_PAGE_STATION:
+                renderStationPage(fleet, macStr);
                 break;
-            case BASE_PAGE_FLEET:
-                renderFleetPage(fleet);
-                break;
-            case BASE_PAGE_NETWORK:
+            case BASE_PAGE_WIFI:
                 renderNetworkPage(isApMode, ip, ssid, wifiRssi, apClients, apPassword);
                 break;
-            case BASE_PAGE_CLOUD:
-                renderCloudPage(wifiOk, cloudOk, lastHttpStatus, cloudSuccessCount, cloudFailCount, lastCloudSyncMs, fleet, macStr);
+            case BASE_PAGE_ROVER:
+                renderControlPage(fleet, throttle, rudder, navMode);
                 break;
             case BASE_PAGE_JOYSTICK:
                 renderJoystickPage(rawX, rawY, throttle, rudder, deadband, btnJoy, btnMode, btnUp, btnDown, joyClicks);
-                break;
-            case BASE_PAGE_MAC:
-                renderMacPage(macStr);
                 break;
             default:
                 break;
@@ -890,34 +927,54 @@ private:
 
         // Nome da página ativa no centro
         canvas->setCursor(114, 8);
-        if (currentPage == BASE_PAGE_CONTROL) {
-            canvas->setTextColor(UI_YELLOW);
-            canvas->print("[1.COMANDO]");
-        } else if (currentPage == BASE_PAGE_FLEET) {
+        if (currentPage == BASE_PAGE_STATION) {
             canvas->setTextColor(UI_CYAN);
-            canvas->print("[2.FROTA]");
-        } else if (currentPage == BASE_PAGE_NETWORK) {
+            canvas->print("[1.ESTACAO]");
+        } else if (currentPage == BASE_PAGE_WIFI) {
             canvas->setTextColor(UI_GREEN);
-            canvas->print("[3.REDE/IP]");
-        } else if (currentPage == BASE_PAGE_CLOUD) {
-            canvas->setTextColor(UI_CYAN);
-            canvas->print("[4.PORTAL]");
+            canvas->print("[2.WIFI]");
+        } else if (currentPage == BASE_PAGE_ROVER) {
+            canvas->setTextColor(UI_YELLOW);
+            canvas->print("[3.ROVER]");
         } else if (currentPage == BASE_PAGE_JOYSTICK) {
             canvas->setTextColor(UI_YELLOW);
-            canvas->print("[5.TESTE JOY]");
-        } else if (currentPage == BASE_PAGE_MAC) {
-            canvas->setTextColor(UI_GREEN);
-            canvas->print("[6.MAC/QR]");
+            canvas->print("[4.TESTE JOY]");
         }
+
+        // Badge de Estado da Estação Base (STORAGE, WAITING, IDLE, GO)
+        BaseOperationState opState = fleet.getOperationState();
+        uint16_t opColor = UI_DARKGREY;
+        const char* opBadge = "STOR";
+        if (opState == BASE_OP_STORAGE) {
+            opColor = UI_LIGHTGREY;
+            opBadge = "STOR";
+        } else if (opState == BASE_OP_WAITING_ROVERS) {
+            opColor = UI_ORANGE;
+            opBadge = "WAIT";
+        } else if (opState == BASE_OP_IDLE) {
+            opColor = UI_CYAN;
+            opBadge = "IDLE";
+        } else if (opState == BASE_OP_GO) {
+            opColor = UI_GREEN;
+            opBadge = "GO";
+        }
+
+        canvas->fillRect(182, 4, 34, 15, UI_BLACK);
+        canvas->drawRect(182, 4, 34, 15, opColor);
+        canvas->setTextSize(1);
+        canvas->setTextColor(opColor);
+        canvas->setCursor(opState == BASE_OP_GO ? 193 : 185, 8);
+        canvas->print(opBadge);
 
         // Ícones de Estado: SD, WiFi, Cloud
         canvas->fillCircle(224, 12, 4, sdOk ? UI_CYAN : UI_DARKGREY);
         canvas->fillCircle(238, 12, 4, isApMode ? UI_ORANGE : (wifiOk ? UI_GREEN : UI_RED));
         canvas->fillCircle(252, 12, 4, cloudOk ? UI_GREEN : UI_DARKGREY);
 
-        // Pontos indicadores de página (BASE_PAGE_COUNT páginas)
-        for (uint8_t i = 0; i < BASE_PAGE_COUNT; ++i) {
-            int dotX = 266 + i * 9;
+        // Pontos indicadores de página (3 ou 4 páginas dinâmicas)
+        uint8_t totalPages = getPageCount();
+        for (uint8_t i = 0; i < totalPages; ++i) {
+            int dotX = 276 + i * 11;
             if (i == currentPage) {
                 canvas->fillCircle(dotX, 12, 3, UI_YELLOW);
             } else {
@@ -927,101 +984,239 @@ private:
     }
 
     // =========================================================================
-    // PÁGINA 1: COMANDAR ROVER SELECIONADO
+    // 1º ECRÃ: IDENTIFICAÇÃO DA BASE (Nome da estação, Mac-address, Estado)
+    // =========================================================================
+    void renderStationPage(FleetManager &fleet, const char* macStr = nullptr) {
+        int cardY = 26;
+        int cardH = 122;
+        String mac = (macStr && strlen(macStr) > 0) ? String(macStr) : getDeviceMacAddress();
+
+        // --- Painel Esquerdo: QR Code do MAC (x=4..114, w=110, h=122) ---
+        canvas->fillRect(4, cardY, 110, cardH, UI_PANEL_BG);
+        canvas->drawRect(4, cardY, 110, cardH, UI_CARD_BG);
+        drawQrCode(canvas, mac.c_str(), 8, cardY + 5, 102, 102);
+
+        canvas->setTextSize(1);
+        canvas->setTextColor(UI_LIGHTGREY);
+        canvas->setCursor(24, cardY + 110);
+        canvas->print("QR MAC ID");
+
+        // --- Painel Direito: Nome da Estação, MAC e Estado (x=118..316, w=198, h=122) ---
+        int rx = 118;
+        int rw = 198;
+        canvas->fillRect(rx, cardY, rw, cardH, UI_PANEL_BG);
+        canvas->drawRect(rx, cardY, rw, cardH, UI_CARD_BG);
+
+        // 1. Nome da Estação
+        canvas->setTextSize(1);
+        canvas->setTextColor(UI_LIGHTGREY);
+        canvas->setCursor(rx + 8, cardY + 6);
+        canvas->print("NOME DA ESTACAO:");
+
+        canvas->setTextSize(2);
+        canvas->setTextColor(UI_YELLOW);
+        canvas->setCursor(rx + 8, cardY + 16);
+        canvas->printf("%.14s", BASE_STATION_ID);
+
+        canvas->drawFastHLine(rx + 6, cardY + 34, rw - 12, UI_CARD_BG);
+
+        // 2. MAC-Address
+        canvas->setTextSize(1);
+        canvas->setTextColor(UI_LIGHTGREY);
+        canvas->setCursor(rx + 8, cardY + 38);
+        canvas->print("MAC-ADDRESS:");
+
+        canvas->setTextSize(2);
+        canvas->setTextColor(UI_CYAN);
+        canvas->setCursor(rx + 8, cardY + 48);
+        canvas->printf("%s", mac.c_str());
+
+        canvas->drawFastHLine(rx + 6, cardY + 66, rw - 12, UI_CARD_BG);
+
+        // 3. Estado de Operação
+        canvas->setTextSize(1);
+        canvas->setTextColor(UI_LIGHTGREY);
+        canvas->setCursor(rx + 8, cardY + 70);
+        canvas->print("ESTADO:");
+
+        BaseOperationState opState = fleet.getOperationState();
+        uint16_t bgCol = 0x2124;
+        uint16_t borderCol = UI_LIGHTGREY;
+        uint16_t textCol = UI_WHITE;
+        const char* stateTitle = "STORAGE";
+        const char* stateDesc = "Not in use";
+
+        if (opState == BASE_OP_STORAGE) {
+            bgCol = 0x2124;
+            borderCol = UI_LIGHTGREY;
+            textCol = UI_WHITE;
+            stateTitle = "STORAGE";
+            stateDesc = "Not in use";
+        } else if (opState == BASE_OP_WAITING_ROVERS) {
+            bgCol = 0x4200;
+            borderCol = UI_ORANGE;
+            textCol = UI_ORANGE;
+            stateTitle = "WAITING";
+            stateDesc = "Connected & waiting";
+        } else if (opState == BASE_OP_IDLE) {
+            bgCol = 0x0A24;
+            borderCol = UI_CYAN;
+            textCol = UI_CYAN;
+            stateTitle = "IDLE";
+            stateDesc = "Rover list ready";
+        } else if (opState == BASE_OP_GO) {
+            bgCol = 0x0320;
+            borderCol = UI_GREEN;
+            textCol = UI_GREEN;
+            stateTitle = "GO";
+            stateDesc = "In mission";
+        }
+
+        int bw = rw - 16;
+        int bh = 38;
+        int by = cardY + 80;
+        canvas->fillRect(rx + 8, by, bw, bh, bgCol);
+        canvas->drawRect(rx + 8, by, bw, bh, borderCol);
+
+        canvas->setTextSize(2);
+        canvas->setTextColor(textCol);
+        canvas->setCursor(rx + 14, by + 4);
+        canvas->print(stateTitle);
+
+        canvas->setTextSize(1);
+        canvas->setTextColor(UI_WHITE);
+        canvas->setCursor(rx + 14, by + 23);
+        canvas->print(stateDesc);
+
+        // Rodapé de Navegação
+        canvas->fillRect(0, 150, SCREEN_W, 22, UI_NAVY);
+        canvas->setTextColor(UI_LIGHTGREY);
+        canvas->setTextSize(1);
+        canvas->setCursor(8, 156);
+        canvas->print("BOOT: Prox Ecra | JOY CLIQUE: Mudar Estado");
+    }
+
+    // =========================================================================
+    // 3º ECRÃ: COMANDAR ROVER SELECIONADO
     // =========================================================================
     void renderControlPage(FleetManager &fleet, int8_t throttle, int8_t rudder, uint8_t navMode) {
         int cardY = 26;
         int cardH = 122;
         FleetRover *selected = fleet.getSelectedRover();
 
+        // Se nenhum rover estiver selecionado, exibe ecrã vazio
+        if (!selected) {
+            canvas->fillRect(4, cardY, 312, cardH, UI_PANEL_BG);
+            canvas->drawRect(4, cardY, 312, cardH, UI_CARD_BG);
+
+            canvas->fillRect(5, cardY + 1, 310, 22, UI_NAVY);
+            canvas->setTextSize(1);
+            canvas->setTextColor(UI_YELLOW);
+            canvas->setCursor(14, cardY + 8);
+            canvas->print("3. ROVER SELECIONADO");
+
+            canvas->drawFastHLine(4, cardY + 23, 312, UI_CARD_BG);
+
+            canvas->setTextSize(2);
+            canvas->setTextColor(UI_LIGHTGREY);
+            canvas->setCursor(24, cardY + 45);
+            canvas->print("NENHUM ROVER");
+
+            canvas->setTextSize(1);
+            canvas->setTextColor(UI_CYAN);
+            canvas->setCursor(24, cardY + 74);
+            canvas->print("A selecao e efetuada apenas pelo Website:");
+            canvas->setTextColor(UI_WHITE);
+            canvas->setCursor(24, cardY + 90);
+            canvas->print("Aceda a /mission ou /control no browser.");
+
+            // Rodapé
+            canvas->fillRect(0, 150, SCREEN_W, 22, UI_NAVY);
+            canvas->setTextColor(UI_LIGHTGREY);
+            canvas->setTextSize(1);
+            canvas->setCursor(8, 156);
+            canvas->print("BOOT: Prox Ecra | Selecao unicamente via Web");
+            return;
+        }
+
         // --- Card Esquerdo: Telemetria do Rover Selecionado (w=154, h=122) ---
         canvas->fillRect(4, cardY, 154, cardH, UI_PANEL_BG);
         canvas->drawRect(4, cardY, 154, cardH, UI_CARD_BG);
 
-        if (selected) {
-            // Rover ID e Badge de Online
-            canvas->setTextSize(2);
-            canvas->setTextColor(UI_YELLOW);
-            canvas->setCursor(8, cardY + 5);
-            canvas->print(selected->code);
+        // Rover ID e Badge de Online
+        canvas->setTextSize(2);
+        canvas->setTextColor(UI_YELLOW);
+        canvas->setCursor(8, cardY + 5);
+        canvas->print(selected->code);
 
-            canvas->setTextSize(1);
-            if (selected->is_online) {
-                canvas->setTextColor(UI_GREEN);
-                canvas->setCursor(102, cardY + 5);
-                canvas->print("ONLINE");
-                canvas->setTextColor(UI_LIGHTGREY);
-                canvas->setCursor(102, cardY + 15);
-                canvas->printf("%ddBm", selected->rssi);
-            } else {
-                canvas->setTextColor(UI_RED);
-                canvas->setCursor(102, cardY + 8);
-                canvas->print("OFFLINE");
-            }
-
-            canvas->drawFastHLine(8, cardY + 24, 146, UI_CARD_BG);
-
-            // Coordenadas GPS
+        canvas->setTextSize(1);
+        if (selected->is_online) {
+            canvas->setTextColor(UI_GREEN);
+            canvas->setCursor(102, cardY + 5);
+            canvas->print("ONLINE");
             canvas->setTextColor(UI_LIGHTGREY);
-            canvas->setCursor(8, cardY + 28);
-            canvas->print("GPS:");
-            canvas->setTextColor(UI_WHITE);
-            canvas->setCursor(34, cardY + 28);
-            if (selected->lat != 0.0 || selected->lng != 0.0) {
-                canvas->printf("%.4f, %.4f", selected->lat, selected->lng);
-            } else {
-                canvas->print("Sem Fix GPS");
-            }
-
-            // Velocidade e Rumo
-            canvas->setTextColor(UI_LIGHTGREY);
-            canvas->setCursor(8, cardY + 41);
-            canvas->print("VEL:");
-            canvas->setTextColor(UI_CYAN);
-            canvas->setCursor(34, cardY + 41);
-            canvas->printf("%.1f kn | %.0f deg", selected->speed_knots, selected->heading_deg);
-
-            // Bateria LiPo
-            canvas->setTextColor(UI_LIGHTGREY);
-            canvas->setCursor(8, cardY + 54);
-            canvas->print("BAT:");
-            uint16_t bCol = (selected->battery_pct < 25) ? UI_RED : ((selected->battery_pct < 50) ? UI_YELLOW : UI_GREEN);
-            canvas->setTextColor(bCol);
-            canvas->setCursor(34, cardY + 54);
-            canvas->printf("%u%% (%.1fV)", selected->battery_pct, selected->battery_voltage);
-
-            // Estado do Motor
-            canvas->setTextColor(UI_LIGHTGREY);
-            canvas->setCursor(8, cardY + 67);
-            canvas->print("MOT:");
-            canvas->setTextColor(UI_YELLOW);
-            canvas->setCursor(34, cardY + 67);
-            canvas->print(get_motor_status_str(selected->motor_status));
-
-            // Âncora e Profundidade
-            canvas->setTextColor(UI_LIGHTGREY);
-            canvas->setCursor(8, cardY + 80);
-            canvas->print("ANC:");
-            canvas->setTextColor(UI_CYAN);
-            canvas->setCursor(34, cardY + 80);
-            canvas->printf("%s (%.1fm)", get_anchor_status_str(selected->anchor_status), selected->anchor_depth_m);
-
-            // Modo de Navegação Ativo
-            canvas->setTextColor(UI_LIGHTGREY);
-            canvas->setCursor(8, cardY + 95);
-            canvas->print("MOD:");
-            canvas->setTextColor(navMode == 0 ? UI_GREEN : UI_CYAN);
-            canvas->setCursor(34, cardY + 95);
-            canvas->printf("[%s]", navMode == 0 ? "MANUAL" : "HOLD STATION");
-
+            canvas->setCursor(102, cardY + 15);
+            canvas->printf("%ddBm", selected->rssi);
         } else {
-            canvas->setTextColor(UI_LIGHTGREY);
-            canvas->setTextSize(1);
-            canvas->setCursor(24, cardY + 50);
-            canvas->print("Sem Rover");
-            canvas->setCursor(24, cardY + 65);
-            canvas->print("Selecionado");
+            canvas->setTextColor(UI_RED);
+            canvas->setCursor(102, cardY + 8);
+            canvas->print("OFFLINE");
         }
+
+        canvas->drawFastHLine(8, cardY + 24, 146, UI_CARD_BG);
+
+        // Coordenadas GPS
+        canvas->setTextColor(UI_LIGHTGREY);
+        canvas->setCursor(8, cardY + 28);
+        canvas->print("GPS:");
+        canvas->setTextColor(UI_WHITE);
+        canvas->setCursor(34, cardY + 28);
+        if (selected->lat != 0.0 || selected->lng != 0.0) {
+            canvas->printf("%.4f, %.4f", selected->lat, selected->lng);
+        } else {
+            canvas->print("Sem Fix GPS");
+        }
+
+        // Velocidade e Rumo
+        canvas->setTextColor(UI_LIGHTGREY);
+        canvas->setCursor(8, cardY + 41);
+        canvas->print("VEL:");
+        canvas->setTextColor(UI_CYAN);
+        canvas->setCursor(34, cardY + 41);
+        canvas->printf("%.1f kn | %.0f deg", selected->speed_knots, selected->heading_deg);
+
+        // Bateria LiPo
+        canvas->setTextColor(UI_LIGHTGREY);
+        canvas->setCursor(8, cardY + 54);
+        canvas->print("BAT:");
+        uint16_t bCol = (selected->battery_pct < 25) ? UI_RED : ((selected->battery_pct < 50) ? UI_YELLOW : UI_GREEN);
+        canvas->setTextColor(bCol);
+        canvas->setCursor(34, cardY + 54);
+        canvas->printf("%u%% (%.1fV)", selected->battery_pct, selected->battery_voltage);
+
+        // Estado do Motor
+        canvas->setTextColor(UI_LIGHTGREY);
+        canvas->setCursor(8, cardY + 67);
+        canvas->print("MOT:");
+        canvas->setTextColor(UI_YELLOW);
+        canvas->setCursor(34, cardY + 67);
+        canvas->print(get_motor_status_str(selected->motor_status));
+
+        // Âncora e Profundidade
+        canvas->setTextColor(UI_LIGHTGREY);
+        canvas->setCursor(8, cardY + 80);
+        canvas->print("ANC:");
+        canvas->setTextColor(UI_CYAN);
+        canvas->setCursor(34, cardY + 80);
+        canvas->printf("%s (%.1fm)", get_anchor_status_str(selected->anchor_status), selected->anchor_depth_m);
+
+        // Modo de Navegação Ativo
+        canvas->setTextColor(UI_LIGHTGREY);
+        canvas->setCursor(8, cardY + 95);
+        canvas->print("MOD:");
+        canvas->setTextColor(navMode == 0 ? UI_GREEN : UI_CYAN);
+        canvas->setCursor(34, cardY + 95);
+        canvas->printf("[%s]", navMode == 0 ? "MANUAL" : "HOLD STATION");
 
         // --- Card Direito: Painel de Controlo / Joystick Inputs (w=154, h=122) ---
         canvas->fillRect(162, cardY, 154, cardH, UI_PANEL_BG);
@@ -1080,6 +1275,142 @@ private:
     }
 
     // =========================================================================
+    // PÁGINA 3: GESTÃO DE MISSÃO, REGATA E BOIAS
+    // =========================================================================
+    void renderMissionPage(FleetManager &fleet) {
+        int cardY = 26;
+        int cardH = 122;
+
+        // Card Principal
+        canvas->fillRect(4, cardY, 312, cardH, UI_PANEL_BG);
+        canvas->drawRect(4, cardY, 312, cardH, UI_CARD_BG);
+
+        // Linha 1: Nome da Missão & Badge Grande de Estado
+        BaseOperationState opState = fleet.getOperationState();
+        uint16_t opColor = UI_DARKGREY;
+        if (opState == BASE_OP_STORAGE) opColor = UI_LIGHTGREY;
+        else if (opState == BASE_OP_WAITING_ROVERS) opColor = UI_ORANGE;
+        else if (opState == BASE_OP_IDLE) opColor = UI_CYAN;
+        else if (opState == BASE_OP_GO) opColor = UI_GREEN;
+
+        canvas->setTextSize(1);
+        canvas->setTextColor(UI_LIGHTGREY);
+        canvas->setCursor(12, cardY + 6);
+        canvas->print("MISSAO:");
+
+        canvas->setTextSize(1);
+        canvas->setTextColor(UI_WHITE);
+        canvas->setCursor(62, cardY + 6);
+        const char* mName = fleet.getMissionName();
+        if (strlen(mName) > 0) {
+            canvas->printf("%.18s", mName);
+        } else {
+            canvas->printf("ID: %.18s", fleet.getRaceId());
+        }
+
+        // Badge Grande Estado no canto superior direito
+        canvas->fillRect(196, cardY + 3, 114, 16, UI_NAVY);
+        canvas->drawRect(196, cardY + 3, 114, 16, opColor);
+        canvas->setTextColor(opColor);
+        canvas->setCursor(202, cardY + 7);
+        canvas->printf("EST: %.10s", fleet.getOperationStateStr());
+
+        canvas->drawFastHLine(8, cardY + 22, 304, UI_CARD_BG);
+
+        // Tabela de Boias da Missão
+        const auto &rovers = fleet.getRovers();
+        uint8_t countInMission = 0;
+        for (const auto &r : rovers) {
+            if (strlen(r.role) > 0 || r.target_lat != 0.0) countInMission++;
+        }
+
+        if (countInMission == 0) {
+            // Estado sem rovers configurados
+            canvas->setTextSize(1);
+            canvas->setTextColor(UI_YELLOW);
+            canvas->setCursor(16, cardY + 32);
+            canvas->print("Sem boias atribuidas a missao!");
+            
+            canvas->setTextColor(UI_LIGHTGREY);
+            canvas->setCursor(16, cardY + 48);
+            canvas->print("1. Aceda via Web: http://[IP]/mission");
+            canvas->setCursor(16, cardY + 64);
+            canvas->print("2. Ou configure via Portal Cloud API");
+            canvas->setCursor(16, cardY + 80);
+            canvas->print("3. Clique JOY para mudar Estado Operacao");
+
+            canvas->setTextColor(UI_CYAN);
+            canvas->setCursor(16, cardY + 102);
+            canvas->printf("Estado atual: %s (%s)", fleet.getOperationStateStr(), fleet.getOperationStateDesc());
+        } else {
+            // Grelha de Boias (mostra até 6 boias em 2 colunas de 3 linhas)
+            uint8_t drawn = 0;
+            for (size_t i = 0; i < rovers.size() && drawn < 6; ++i) {
+                const auto &r = rovers[i];
+                if (strlen(r.role) == 0 && r.target_lat == 0.0) continue;
+
+                int col = drawn % 2;
+                int row = drawn / 2;
+                int bx = 10 + col * 152;
+                int by = cardY + 26 + row * 28;
+                int bw = 146;
+                int bh = 26;
+
+                canvas->fillRect(bx, by, bw, bh, UI_NAVY);
+                canvas->drawRect(bx, by, bw, bh, UI_CARD_BG);
+
+                // Ponto de estado online
+                canvas->fillCircle(bx + 6, by + 13, 3, r.is_online ? UI_GREEN : UI_RED);
+
+                // Papel (Role)
+                canvas->setTextSize(1);
+                canvas->setTextColor(UI_YELLOW);
+                canvas->setCursor(bx + 14, by + 4);
+                if (strlen(r.role) > 0) {
+                    canvas->printf("%.10s", r.role);
+                } else {
+                    canvas->printf("Boia %u", r.id);
+                }
+
+                // Nome ou código
+                canvas->setTextColor(UI_WHITE);
+                canvas->setCursor(bx + 80, by + 4);
+                if (strlen(r.name) > 0) {
+                    canvas->printf("%.9s", r.name);
+                } else {
+                    canvas->printf("%s", r.code);
+                }
+
+                // Coordenadas ou status
+                canvas->setTextColor(UI_LIGHTGREY);
+                canvas->setCursor(bx + 14, by + 15);
+                if (r.target_lat != 0.0 || r.target_lng != 0.0) {
+                    canvas->printf("%.4f, %.4f", r.target_lat, r.target_lng);
+                } else if (r.is_online) {
+                    canvas->printf("Bat:%u%% %ddBm", r.battery_pct, r.rssi);
+                } else {
+                    canvas->print("Aguardando ligacao...");
+                }
+
+                drawn++;
+            }
+
+            // Resumo no fundo do card
+            canvas->setTextSize(1);
+            canvas->setTextColor(UI_LIGHTGREY);
+            canvas->setCursor(12, cardY + 110);
+            canvas->printf("Total Boias: %u | Modo: %s", countInMission, fleet.getOperationStateStr());
+        }
+
+        // Rodapé de Navegação
+        canvas->fillRect(0, 150, SCREEN_W, 22, UI_NAVY);
+        canvas->setTextColor(UI_LIGHTGREY);
+        canvas->setTextSize(1);
+        canvas->setCursor(8, 156);
+        canvas->print("BOOT: Prox Ecra | JOY CLIQUE: Mudar Estado");
+    }
+
+    // =========================================================================
     // PÁGINA 2: LISTA DE ROVERS DA FROTA (GRID 2x4)
     // =========================================================================
     void renderFleetPage(FleetManager &fleet) {
@@ -1101,41 +1432,57 @@ private:
             canvas->fillRect(x, y, w, h, isSel ? UI_NAVY : UI_PANEL_BG);
             canvas->drawRect(x, y, w, h, isSel ? UI_YELLOW : UI_CARD_BG);
 
-            // Nome do Rover
-            canvas->setTextSize(1);
-            canvas->setTextColor(isSel ? UI_YELLOW : UI_WHITE);
-            canvas->setCursor(x + 4, y + 4);
-            canvas->printf("RVR-%02d", r.id);
-
             // Ponto indicador de estado Online / Offline
-            int dotX = x + 62;
+            int dotX = x + 64;
             int dotY = y + 7;
             canvas->fillCircle(dotX, dotY, 3, r.is_online ? UI_GREEN : UI_RED);
 
-            // Bateria LiPo
-            canvas->setCursor(x + 4, y + 18);
+            // Linha 1: Papel na regata (largada CR, boia 1, etc.) ou ID
+            canvas->setTextSize(1);
+            canvas->setCursor(x + 4, y + 4);
+            if (strlen(r.role) > 0) {
+                canvas->setTextColor(isSel ? UI_YELLOW : UI_CYAN);
+                canvas->printf("%.9s", r.role);
+            } else {
+                canvas->setTextColor(isSel ? UI_YELLOW : UI_WHITE);
+                canvas->printf("RVR-%02d", r.id);
+            }
+
+            // Linha 2: Nome do Rover
+            canvas->setCursor(x + 4, y + 16);
+            canvas->setTextColor(UI_WHITE);
+            if (strlen(r.name) > 0) {
+                canvas->printf("%.10s", r.name);
+            } else {
+                canvas->printf("%s", r.code);
+            }
+
+            // Linha 3: Bateria LiPo & Velocidade
+            canvas->setCursor(x + 4, y + 28);
             if (r.is_online) {
                 uint16_t bCol = (r.battery_pct < 25) ? UI_RED : ((r.battery_pct < 50) ? UI_YELLOW : UI_GREEN);
                 canvas->setTextColor(bCol);
-                canvas->printf("BAT: %u%%", r.battery_pct);
+                canvas->printf("B:%u%%", r.battery_pct);
+                canvas->setTextColor(UI_CYAN);
+                canvas->printf(" %.1fkn", r.speed_knots);
             } else {
                 canvas->setTextColor(UI_DARKGREY);
                 canvas->print("BAT: --");
             }
 
-            // Velocidade e RSSI
-            canvas->setCursor(x + 4, y + 30);
+            // Linha 4: Profundidade da Âncora (Encoder) ou RSSI
+            canvas->setCursor(x + 4, y + 42);
             if (r.is_online) {
-                canvas->setTextColor(UI_CYAN);
-                canvas->printf("%.1fkn", r.speed_knots);
-                canvas->setTextColor(UI_LIGHTGREY);
-                canvas->setCursor(x + 4, y + 42);
-                canvas->printf("%ddBm", r.rssi);
+                if (r.anchor_depth_m > 0.05f) {
+                    canvas->setTextColor(UI_YELLOW);
+                    canvas->printf("ANC:%.1fm", r.anchor_depth_m);
+                } else {
+                    canvas->setTextColor(UI_LIGHTGREY);
+                    canvas->printf("%ddBm", r.rssi);
+                }
             } else {
                 canvas->setTextColor(UI_DARKGREY);
                 canvas->print("OFFLINE");
-                canvas->setCursor(x + 4, y + 42);
-                canvas->print("-- dBm");
             }
 
             // Realce duplo de seleção
@@ -1160,4 +1507,5 @@ private:
     uint8_t _bootLogCount;
     uint8_t _bootProgress;
     uint8_t _brightness;
+    bool _joyScreenEnabled;
 };

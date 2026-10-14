@@ -2544,7 +2544,7 @@
 		)
 		(uuid "6cb3476c-e7f9-4981-8ca9-96253258876c")
 	)
-	(text "Hardware SPI (GP2/3/4/5) + DIO0 IRQ (GP12)"
+	(text "Hardware SPI (GP2/3/4/5) + DIO0 IRQ (GP23)"
 		(exclude_from_sim no)
 		(at 154.94 27.94 0)
 		(effects
@@ -3788,7 +3788,7 @@
 		)
 		(uuid "383e7db0-4e6b-40ca-81ad-dc8153f4a545")
 	)
-	(label "IO12_LORA_DIO0"
+	(label "IO12_USB_DM"
 		(at 127 63.5 0)
 		(effects
 			(font
@@ -4078,7 +4078,7 @@
 		)
 		(uuid "94d3cbdd-b6a7-4b49-8dae-09021f5d5a9a")
 	)
-	(label "IO23_SPARE"
+	(label "IO23_LORA_DIO0"
 		(at 127 66.04 0)
 		(effects
 			(font
@@ -4268,7 +4268,7 @@
 		)
 		(uuid "cac1d665-2267-4bf6-94ec-9ebd5035d111")
 	)
-	(label "IO12_LORA_DIO0"
+	(label "IO23_LORA_DIO0"
 		(at 226.06 45.72 0)
 		(effects
 			(font

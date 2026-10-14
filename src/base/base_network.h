@@ -82,6 +82,11 @@ private:
         doc["station_id"] = mac;
         doc["mac_address"] = mac;
         doc["station_name"] = BASE_STATION_ID;
+        doc["operation_state"] = fleetManager.getOperationStateStr();
+        doc["operation_state_id"] = static_cast<uint8_t>(fleetManager.getOperationState());
+        doc["race_id"] = fleetManager.getRaceId();
+        doc["mission_name"] = fleetManager.getMissionName();
+
         JsonArray roversArray = doc["rovers"].to<JsonArray>();
 
         // Only send active/online rovers
@@ -89,7 +94,15 @@ private:
             if (!r.is_online) continue;
 
             JsonObject rObj = roversArray.add<JsonObject>();
+            rObj["rover_id"] = r.id;
             rObj["rover_code"] = r.code;
+            rObj["name"] = r.name;
+            rObj["mac_address"] = r.mac;
+            rObj["role"] = r.role;
+            if (r.target_lat != 0.0 || r.target_lng != 0.0) {
+                rObj["target_lat"] = serialized(String(r.target_lat, 6));
+                rObj["target_lng"] = serialized(String(r.target_lng, 6));
+            }
             rObj["lat"] = serialized(String(r.lat, 6));
             rObj["lng"] = serialized(String(r.lng, 6));
             rObj["speed"] = serialized(String(r.speed_knots, 2));
@@ -112,10 +125,11 @@ private:
             syncSuccess = true;
             successCount++;
             String responsePayload = https.getString();
+            Serial.printf("[CLOUD] Resposta Portal: %s\n", responsePayload.c_str());
             parseCloudResponse(responsePayload);
             if (successCount % 5 == 1) {
-                Serial.printf("[CLOUD] Sync #%u OK (HTTP %d | Station: %s)\n", 
-                              successCount, httpResponseCode, mac.c_str());
+                Serial.printf("[CLOUD] Sync #%u OK (HTTP %d | Station: %s | State: %s)\n", 
+                              successCount, httpResponseCode, mac.c_str(), fleetManager.getOperationStateStr());
             }
         } else {
             syncSuccess = false;
@@ -135,6 +149,66 @@ private:
             return;
         }
 
+        // 1. Processar Estado de Operação da Estação se fornecido
+        const char *opState = nullptr;
+
+        // Verificar respDoc["station"]
+        if (respDoc["station"].is<JsonObject>()) {
+            JsonObject st = respDoc["station"].as<JsonObject>();
+            if (st["operation_state"].is<const char*>()) opState = st["operation_state"].as<const char*>();
+            else if (st["state"].is<const char*>()) opState = st["state"].as<const char*>();
+            else if (st["op_state"].is<const char*>()) opState = st["op_state"].as<const char*>();
+            else if (st["status"].is<const char*>() && strcmp(st["status"].as<const char*>(), "ok") != 0 && strcmp(st["status"].as<const char*>(), "success") != 0) {
+                opState = st["status"].as<const char*>();
+            }
+        }
+
+        // Verificar respDoc["mission"]
+        if (!opState && respDoc["mission"].is<JsonObject>()) {
+            JsonObject ms = respDoc["mission"].as<JsonObject>();
+            if (ms["operation_state"].is<const char*>()) opState = ms["operation_state"].as<const char*>();
+            else if (ms["state"].is<const char*>()) opState = ms["state"].as<const char*>();
+            else if (ms["op_state"].is<const char*>()) opState = ms["op_state"].as<const char*>();
+        }
+
+        // Verificar raiz respDoc
+        if (!opState) {
+            if (respDoc["operation_state"].is<const char*>()) opState = respDoc["operation_state"].as<const char*>();
+            else if (respDoc["state"].is<const char*>()) opState = respDoc["state"].as<const char*>();
+            else if (respDoc["op_state"].is<const char*>()) opState = respDoc["op_state"].as<const char*>();
+        }
+
+        // Verificar se veio como ID numérico inteiro (0: STORAGE, 1: WAITING, 2: IDLE, 3: GO)
+        int opStateInt = -1;
+        if (!opState) {
+            if (respDoc["station"].is<JsonObject>() && respDoc["station"]["operation_state_id"].is<int>()) {
+                opStateInt = respDoc["station"]["operation_state_id"].as<int>();
+            } else if (respDoc["station"].is<JsonObject>() && respDoc["station"]["operation_state"].is<int>()) {
+                opStateInt = respDoc["station"]["operation_state"].as<int>();
+            } else if (respDoc["mission"].is<JsonObject>() && respDoc["mission"]["operation_state_id"].is<int>()) {
+                opStateInt = respDoc["mission"]["operation_state_id"].as<int>();
+            } else if (respDoc["mission"].is<JsonObject>() && respDoc["mission"]["operation_state"].is<int>()) {
+                opStateInt = respDoc["mission"]["operation_state"].as<int>();
+            } else if (respDoc["operation_state_id"].is<int>()) {
+                opStateInt = respDoc["operation_state_id"].as<int>();
+            } else if (respDoc["operation_state"].is<int>()) {
+                opStateInt = respDoc["operation_state"].as<int>();
+            }
+        }
+
+        if (opStateInt >= 0 && opStateInt <= 3) {
+            fleetManager.setOperationState(static_cast<BaseOperationState>(opStateInt));
+        }
+
+        // 2. Processar Lista de Rovers e Missão de Regata se fornecida
+        if (respDoc["mission"].is<JsonObject>()) {
+            JsonObject mObj = respDoc["mission"].as<JsonObject>();
+            fleetManager.updateFromPortalMission(mObj, opState);
+        } else if (opState) {
+            fleetManager.setOperationStateFromStr(opState);
+        }
+
+        // 3. Processar comandos pendentes
         bool hasCommand = respDoc["has_command"] | false;
         if (!hasCommand) {
             // No command pending
@@ -164,7 +238,7 @@ private:
         double targetLat = c["target_lat"] | 0.0;
         double targetLng = c["target_lng"] | 0.0;
 
-        uint8_t roverId = fleetManager.resolveRoverCodeToId(roverCode);
+        uint8_t roverId = c["rover_id"] | fleetManager.resolveRoverCodeToId(roverCode);
         uint8_t action = ACTION_NONE;
 
         if (strcmp(actionStr, "HOLD_STATION") == 0) {

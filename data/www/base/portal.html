@@ -13,7 +13,8 @@
       <i class="fa-solid fa-tower-broadcast"></i> WindDragons <span>Base Station</span>
     </a>
     <nav class="nav-links">
-      <a href="/portal" class="nav-item active"><i class="fa-solid fa-cloud"></i> Portal Cloud</a>
+      <a href="/mission" class="nav-item "><i class="fa-solid fa-flag-checkered"></i> Missão</a>
+<a href="/portal" class="nav-item active"><i class="fa-solid fa-cloud"></i> Portal Cloud</a>
 <a href="/wifi" class="nav-item "><i class="fa-solid fa-wifi"></i> WiFi Base</a>
 <a href="/gps" class="nav-item "><i class="fa-solid fa-location-dot"></i> GPS Frota</a>
 <a href="/battery" class="nav-item "><i class="fa-solid fa-battery-three-quarters"></i> Bateria Frota</a>
@@ -22,6 +23,9 @@
 
     </nav>
     <div style="display:flex;align-items:center;gap:10px;">
+      <span id="navOpStateBadge" class="badge" style="background:#64748b;color:#fff;font-weight:700;">
+        <i class="fa-solid fa-flag"></i> <span id="navOpStateText">STORAGE</span>
+      </span>
       <span id="navStationBadge" class="badge" style="background:rgba(2,132,199,0.2);color:#38bdf8;border:1px solid rgba(56,189,248,0.3);font-family:monospace;">
         <i class="fa-solid fa-fingerprint"></i> <span id="navStationId">ID Base</span>
       </span>
@@ -93,27 +97,36 @@
 
 <div class="card">
   <div class="card-title">
-    <span><i class="fa-solid fa-ship"></i> Telemetria da Frota Enviada para o Portal</span>
-    <span id="activeRoversCount" class="badge" style="background:rgba(255,255,255,0.1);color:var(--text);">0 Rovers Ativos</span>
+    <span><i class="fa-solid fa-ship"></i> Rovers da Missão (Enviados pelo Portal)</span>
+    <span id="activeRoversCount" class="badge" style="background:rgba(255,255,255,0.06);color:var(--muted);">0 Rovers do Portal</span>
   </div>
   <p style="color:var(--muted);font-size:0.875rem;margin-bottom:12px;">
-    Rovers que se encontram ativos/online e cujos dados (posição GPS, velocidade, bateria, âncora) estão a ser reportados em direto à cloud:
+    Rovers e bóias atribuídos a esta Estação Base através da plataforma Portal Cloud:
   </p>
   <div style="overflow-x:auto;">
     <table>
       <thead>
         <tr>
           <th>Código</th>
+          <th>Nome</th>
+          <th>Função (Role)</th>
+          <th>Endereço MAC</th>
           <th>Estado</th>
           <th>Coordenadas (GPS)</th>
-          <th>Velocidade</th>
           <th>Bateria</th>
-          <th>Motor / Âncora</th>
           <th>Sinal LoRa</th>
         </tr>
       </thead>
       <tbody id="cloudFleetTable">
-        <tr><td colspan="7" style="text-align:center;color:var(--muted);">A carregar telemetria...</td></tr>
+        <tr>
+          <td colspan="8" style="text-align:center;color:var(--muted);padding:32px 16px;">
+            <i class="fa-solid fa-inbox" style="font-size:2rem;display:block;margin-bottom:8px;opacity:0.4;"></i>
+            <strong style="color:var(--text);font-size:0.95rem;">Nenhum rover enviado pelo Portal ainda.</strong><br>
+            <span style="font-size:0.82rem;color:var(--muted);display:inline-block;margin-top:4px;">
+              A lista será apresentada automaticamente assim que o portal responder com os rovers atribuídos à missão.
+            </span>
+          </td>
+        </tr>
       </tbody>
     </table>
   </div>
@@ -185,24 +198,51 @@ function refreshData() {
         lastSyncTimeMs = c.last_sync_ms || 0;
       }
 
-      // 3. Tabela da Frota
-      if (data.rovers && data.rovers.length) {
+      // 3. Tabela da Frota do Portal
+      const portalRoversReceived = !!data.portal_rovers_received;
+      const roversList = (portalRoversReceived && data.rovers) ? data.rovers : [];
+      const tbl = document.getElementById('cloudFleetTable');
+      const badge = document.getElementById('activeRoversCount');
+
+      if (!portalRoversReceived || !roversList.length) {
+        if (tbl) {
+          tbl.innerHTML = `<tr>
+            <td colspan="8" style="text-align:center;color:var(--muted);padding:32px 16px;">
+              <i class="fa-solid fa-inbox" style="font-size:2rem;display:block;margin-bottom:8px;opacity:0.4;"></i>
+              <strong style="color:var(--text);font-size:0.95rem;">Nenhum rover enviado pelo Portal ainda.</strong><br>
+              <span style="font-size:0.82rem;color:var(--muted);display:inline-block;margin-top:4px;">
+                A lista será apresentada automaticamente assim que o portal responder com os rovers atribuídos à missão.
+              </span>
+            </td>
+          </tr>`;
+        }
+        if (badge) {
+          badge.innerText = '0 Rovers do Portal';
+          badge.style.background = 'rgba(255,255,255,0.06)';
+          badge.style.color = 'var(--muted)';
+        }
+      } else {
         let activeCount = 0;
         let rows = '';
-        data.rovers.forEach(rov => {
+        roversList.forEach(rov => {
           if (rov.is_online) activeCount++;
           rows += `<tr>
-            <td><strong>${rov.code}</strong></td>
+            <td><strong>${rov.code || ('ROVER-' + (rov.id < 10 ? '0' : '') + rov.id)}</strong></td>
+            <td>${rov.name || '--'}</td>
+            <td><span class="badge" style="background:rgba(59,130,246,0.15);color:var(--primary);">${rov.role || '--'}</span></td>
+            <td style="font-family:monospace;font-size:0.85rem;color:var(--muted);">${rov.mac || rov.mac_address || '--'}</td>
             <td><span class="badge" style="background:${rov.is_online ? '#065f46' : '#7f1d1d'};color:${rov.is_online ? '#6ee7b7' : '#fca5a5'};">${rov.is_online ? 'ONLINE' : 'OFFLINE'}</span></td>
             <td>${(rov.lat || 0).toFixed(4)}, ${(rov.lng || 0).toFixed(4)}</td>
-            <td>${(rov.speed_knots || 0).toFixed(1)} kn</td>
-            <td><strong style="color:${rov.battery_pct < 25 ? 'var(--red)' : 'var(--green)'};">${rov.battery_pct || 0}%</strong> (${(rov.battery_voltage || 0).toFixed(1)}V)</td>
-            <td>Motor: ${rov.motor_status !== undefined ? rov.motor_status : 0} | Âncora: ${rov.anchor_status !== undefined ? rov.anchor_status : 0}</td>
+            <td><strong style="color:${(rov.battery_pct || 0) < 25 ? 'var(--red)' : 'var(--green)'};">${rov.battery_pct || 0}%</strong> (${(rov.battery_voltage || 0).toFixed(1)}V)</td>
             <td>${rov.rssi || 0} dBm</td>
           </tr>`;
         });
-        document.getElementById('cloudFleetTable').innerHTML = rows;
-        document.getElementById('activeRoversCount').innerText = `${activeCount} / ${data.rovers.length} Rovers Ativos`;
+        if (tbl) tbl.innerHTML = rows;
+        if (badge) {
+          badge.innerText = `${activeCount} / ${roversList.length} Rovers Ativos`;
+          badge.style.background = 'rgba(16,185,129,0.15)';
+          badge.style.color = 'var(--green)';
+        }
       }
     })
     .catch(() => {});

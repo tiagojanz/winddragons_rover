@@ -19,6 +19,8 @@
 #define ROVER_ID 1
 #endif
 
+#include "soft_spi_hal.h"
+
 // Peripherals
 GPSTracker gps;
 ActuatorController actuators;
@@ -36,9 +38,9 @@ extern uint32_t lastControlReceivedTime;
 RoverWebServer webServer(wifiConfig, gps, battery, actuators, currentMotorStatus, lastControlReceivedTime, roverConfig, sdCard, &roverDisplay);
 
 #if ENABLE_LORA
-// Dedicated SPI bus for LoRa SX1278 on header pins (avoids display conflict)
-SPIClass loraSPI(FSPI);
-Module loraModule(PIN_LORA_NSS, PIN_LORA_DIO0, PIN_LORA_RST, RADIOLIB_NC, loraSPI);
+// Dedicated SoftSpiHal isolates LoRa completely from hardware FSPI (LCD & MicroSD)
+SoftSpiHal loraHal(PIN_LORA_SCK, PIN_LORA_MISO, PIN_LORA_MOSI);
+Module loraModule(&loraHal, PIN_LORA_NSS, PIN_LORA_DIO0, PIN_LORA_RST, RADIOLIB_NC);
 SX1278 radio(&loraModule);
 #endif
 
@@ -491,8 +493,13 @@ void setup() {
                           roverConfig.getRoverId(), roverConfig.getScreenBrightness());
 
 #if ENABLE_LORA
+    Serial.printf("[ROVER] LoRa Pinos: SCK=IO%d, MOSI=IO%d, MISO=IO%d, NSS=IO%d, DIO0=IO%d\n",
+                  PIN_LORA_SCK, PIN_LORA_MOSI, PIN_LORA_MISO, PIN_LORA_NSS, PIN_LORA_DIO0);
+    loraHal.spiBegin();
+    uint8_t chipVersion = loraHal.readReg(0x42, PIN_LORA_NSS);
+    Serial.printf("[ROVER] Leitura RegVersion (0x42): 0x%02X (Esperado: 0x12 para SX1278)\n", chipVersion);
+
     Serial.print("[ROVER] Initializing LoRa SX1278 (433MHz)... ");
-    loraSPI.begin(PIN_LORA_SCK, PIN_LORA_MISO, PIN_LORA_MOSI, PIN_LORA_NSS);
     int state = radio.begin(LORA_FREQUENCY, LORA_BANDWIDTH, LORA_SPREAD_FACTOR, 
                             LORA_CODING_RATE, LORA_SYNC_WORD, LORA_OUTPUT_POWER, 
                             LORA_PREAMBLE_LEN);
@@ -505,7 +512,6 @@ void setup() {
     } else {
         Serial.printf("FAILED! (code: %d)\n", state);
         loraReady = false;
-        loraSPI.end();
         setRgbColor(50, 0, 0); // Red
         roverDisplay.bootLogf(UI_RED, 78, "[LORA] Falha SX1278 (%d)", state);
     }

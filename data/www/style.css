@@ -533,3 +533,10 @@ input:focus, select:focus, textarea:focus {
 .fa-list:before { content: '\f03a'; }
 .fa-copy:before { content: '\f0c5'; }
 .fa-filter:before { content: '\f0b0'; }
+.fa-flag-checkered:before { content: '\f11e'; }
+.fa-flag:before { content: '\f024'; }
+.fa-sailboat:before { content: '\f445'; }
+.fa-rocket:before { content: '\f135'; }
+.fa-box-archive:before { content: '\f187'; }
+.fa-hourglass-half:before { content: '\f252'; }
+.fa-satellite-dish:before { content: '\f7c0'; }

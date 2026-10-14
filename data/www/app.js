@@ -52,6 +52,21 @@ function pollGlobalStatus() {
       if (roverSpan && data.rover_id) {
         roverSpan.innerText = 'Rover-' + data.rover_id;
       }
+      const opBadge = document.getElementById('navOpStateBadge');
+      const opText = document.getElementById('navOpStateText');
+      if (opText && data.operation_state) {
+        opText.innerText = data.operation_state;
+        const colors = {
+          'STORAGE': '#64748b',
+          'WAITING_ROVERS': '#f59e0b',
+          'WAITING ROVERS': '#f59e0b',
+          'IDLE': '#06b6d4',
+          'GO': '#10b981'
+        };
+        if (opBadge) {
+          opBadge.style.background = colors[data.operation_state] || '#64748b';
+        }
+      }
     })
     .catch(() => {});
 }

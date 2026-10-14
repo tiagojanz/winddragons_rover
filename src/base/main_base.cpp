@@ -13,6 +13,8 @@
 #include "wifi_config_manager.h"
 #include "base_web_server.h"
 
+#include "soft_spi_hal.h"
+
 // System components
 FleetManager      fleet;
 BaseJoystick      joystick;
@@ -24,9 +26,9 @@ BaseWebServer     webServer(wifiConfig, fleet, &sdCard, &network);
 Adafruit_NeoPixel rgbLed(1, PIN_RGB_LED, NEO_GRB + NEO_KHZ800);
 
 #if ENABLE_LORA
-// Dedicated SPI bus for LoRa SX1278 on header pins (avoids display conflict)
-SPIClass loraSPI(FSPI);
-Module loraModule(PIN_LORA_NSS, PIN_LORA_DIO0, PIN_LORA_RST, RADIOLIB_NC, loraSPI);
+// Dedicated SoftSpiHal isolates LoRa completely from hardware FSPI (LCD & MicroSD)
+SoftSpiHal loraHal(PIN_LORA_SCK, PIN_LORA_MISO, PIN_LORA_MOSI);
+Module loraModule(&loraHal, PIN_LORA_NSS, PIN_LORA_DIO0, PIN_LORA_RST, RADIOLIB_NC);
 SX1278 radio(&loraModule);
 bool loraReady = false;
 #endif
@@ -51,9 +53,8 @@ const char* const MENU_ITEMS[] = {
     "3. LANCAR ANCORA",
     "4. RECOLHER ANCORA",
     "5. PARAR MOTORES",
-    "6. PROXIMO ROVER",
-    "7. INFO REDE / IP",
-    "8. TESTE JOYSTICK"
+    "6. ESTADO BASE",
+    "7. TESTE JOYSTICK"
 };
 const uint8_t MENU_COUNT = sizeof(MENU_ITEMS) / sizeof(MENU_ITEMS[0]);
 uint8_t menuSelectedIndex = 0;
@@ -121,6 +122,10 @@ void setup() {
         display.bootLogf(UI_YELLOW, 35, "[SD  ] Sem cartao presente");
     }
 
+    // 3.1 Inicializar Frota & Missão (SD / NVS)
+    fleet.begin(&sdCard);
+    display.bootLogf(UI_GREEN, 48, "[FROTA] %u rovers | %s", (uint32_t)fleet.getRovers().size(), fleet.getOperationStateBadge());
+
     // 4. Initialize Joystick
     joystick.begin();
     Serial.println("[BASE] Joystick inputs initialized");
@@ -128,21 +133,38 @@ void setup() {
 
 #if ENABLE_LORA
     // 5. Initialize LoRa
-    Serial.print("[BASE] Initializing LoRa SX1278 (433MHz)... ");
-    loraSPI.begin(PIN_LORA_SCK, PIN_LORA_MISO, PIN_LORA_MOSI, PIN_LORA_NSS);
-    int state = radio.begin(LORA_FREQUENCY, LORA_BANDWIDTH, LORA_SPREAD_FACTOR,
-                            LORA_CODING_RATE, LORA_SYNC_WORD, LORA_OUTPUT_POWER,
-                            LORA_PREAMBLE_LEN);
-    if (state == RADIOLIB_ERR_NONE) {
-        Serial.println("OK!");
-        loraReady = true;
-        setRgbColor(0, 30, 0); // Green
-        radio.startReceive();
-        display.bootLogf(UI_GREEN, 70, "[LORA] SX1278 433MHz OK");
-    } else {
-        Serial.printf("FAILED! (code: %d)\n", state);
-        loraReady = false;
-        loraSPI.end();
+    Serial.printf("[BASE] LoRa Pinos: SCK=IO%d, MOSI=IO%d, MISO=IO%d, NSS=IO%d, DIO0=IO%d\n",
+                  PIN_LORA_SCK, PIN_LORA_MOSI, PIN_LORA_MISO, PIN_LORA_NSS, PIN_LORA_DIO0);
+    loraHal.spiBegin();
+
+    int state = RADIOLIB_ERR_CHIP_NOT_FOUND;
+    for (int attempt = 1; attempt <= 10; attempt++) {
+        uint8_t chipVersion = loraHal.readReg(0x42, PIN_LORA_NSS);
+        uint8_t regOpMode   = loraHal.readReg(0x01, PIN_LORA_NSS);
+        Serial.printf("[BASE] Tentativa #%d - RegVersion (0x42): 0x%02X | OpMode: 0x%02X\n", 
+                      attempt, chipVersion, regOpMode);
+        
+        if (chipVersion == 0x12) {
+            Serial.print("[BASE] SX1278 pronto! A inicializar RadioLib (433MHz)... ");
+            state = radio.begin(LORA_FREQUENCY, LORA_BANDWIDTH, LORA_SPREAD_FACTOR,
+                                LORA_CODING_RATE, LORA_SYNC_WORD, LORA_OUTPUT_POWER,
+                                LORA_PREAMBLE_LEN);
+            if (state == RADIOLIB_ERR_NONE) {
+                Serial.println("OK!");
+                loraReady = true;
+                setRgbColor(0, 30, 0); // Green
+                radio.startReceive();
+                display.bootLogf(UI_GREEN, 70, "[LORA] SX1278 433MHz OK");
+                break;
+            } else {
+                Serial.printf("RadioLib erro (%d)\n", state);
+            }
+        }
+        delay(500);
+    }
+
+    if (!loraReady) {
+        Serial.printf("[BASE] Initializing LoRa SX1278... FAILED! (code: %d)\n", state);
         setRgbColor(50, 0, 0); // Red
         display.bootLogf(UI_RED, 70, "[LORA] Falha SX1278 (%d)", state);
     }
@@ -150,9 +172,6 @@ void setup() {
     Serial.println("[BASE] LoRa em repouso (barramento SPI dedicado ao Display ST7789 e MicroSD)");
     display.bootLogf(UI_LIGHTGREY, 70, "[LORA] SX1278 em repouso");
 #endif
-
-    sdCard.prepareBus();
-    digitalWrite(PIN_SD_CS, HIGH);
 
     // 6. Initialize Network (WiFi + AP Fallback + Web Server)
     Serial.println("[BASE] A inicializar gestor WiFi...");
@@ -177,6 +196,7 @@ void setup() {
     }
 
     // 7. Iniciar Servidor HTTP Web
+    webServer.setLoraReadyPtr(&loraReady);
     webServer.begin();
     display.bootLogf(UI_GREEN, 95, "[HTTP] Servidor Web OK");
 
@@ -184,23 +204,30 @@ void setup() {
     network.begin();
     display.bootLogf(UI_CYAN, 98, "[SYNC] Sincronizacao Cloud");
 
+    // Carregar configuração do ecrã LCD (Teste Joystick e Brilho)
+    Preferences dispPrefs;
+    if (dispPrefs.begin("base_display", true)) {
+        bool joyScr = dispPrefs.getBool("joy_scr", false);
+        display.setJoystickScreenEnabled(joyScr);
+        uint8_t bright = dispPrefs.getUChar("brightness", display.getBrightness());
+        display.setBrightness(bright);
+        dispPrefs.end();
+    }
+    webServer.setDisplay(&display);
+
     // Finalizar ecrã de arranque
     display.endBootScreen(1200);
 
-    // Ecrã a indicar o modo de rede no arranque (igual ao Rover)
-    display.setPage(BASE_PAGE_NETWORK);
-    display.update(fleet, network.isConnected(), network.isSyncSuccess(),
-                   0, 0, currentNavMode, sdCard.isReady(),
-                   wifiConfig.isAPMode(), wifiConfig.getIPAddress().c_str(),
-                   wifiConfig.getSSID().c_str(), wifiConfig.getRSSI(),
-                   wifiConfig.getAPStationCount(), wifiConfig.getAPPassword().c_str(),
-                   true);
-    delay(2000);
-    display.setPage(BASE_PAGE_CONTROL);
+    // Arrancar no 1º Ecrã (Identificação da Estação, MAC e Estado)
+    display.setPage(BASE_PAGE_STATION);
 
-    // Configure BOOT button interrupt for runtime page cycling (Control -> Fleet -> Network)
+    // Configure BOOT button interrupt for runtime page cycling (Station -> WiFi -> Rover -> [Joy])
     pinMode(PIN_BTN_BOOT, INPUT_PULLUP);
     attachInterrupt(digitalPinToInterrupt(PIN_BTN_BOOT), isrBootButton, FALLING);
+#ifdef PIN_BTN_SW1
+    pinMode(PIN_BTN_SW1, INPUT_PULLUP);
+    attachInterrupt(digitalPinToInterrupt(PIN_BTN_SW1), isrBootButton, FALLING);
+#endif
     flagPageChange = false; // ensure clean start on Page 0
 }
 
@@ -236,7 +263,16 @@ void transmitControlOrCommand() {
         return;
     }
 
+    // Em modo STORAGE, não emite controlo contínuo de joystick para os rovers (poupança de energia e canal rádio)
+    if (fleet.getOperationState() == BASE_OP_STORAGE && !webServer.isWebControlActive()) {
+        return;
+    }
+
     // Priority 2: Transmit manual joystick control to selected active rover
+    if (!fleet.hasSelectedRover()) {
+        return; // Nenhum rover selecionado -> Não transmite comandos contínuos
+    }
+
     PacketManualControl packet;
     memset(&packet, 0, sizeof(packet));
 
@@ -245,7 +281,7 @@ void transmitControlOrCommand() {
     packet.target_rover_id = fleet.getSelectedRoverId();
 
     // In menu browsing or non-control pages, zero throttle & rudder to prevent boat movement
-    if (currentScreen == SCREEN_MENU || display.getCurrentPage() != BASE_PAGE_CONTROL) {
+    if (currentScreen == SCREEN_MENU || display.getCurrentPage() != BASE_PAGE_ROVER) {
         packet.throttle = 0;
         packet.rudder   = 0;
         packet.anchor_jog = 0;
@@ -301,8 +337,50 @@ void handleInputsAndMenu(uint32_t now) {
     if (currentScreen == SCREEN_PAGES) {
         BaseScreenPage page = display.getCurrentPage();
 
-        if (page == BASE_PAGE_CONTROL) {
-            // Long Press (>700ms) or physical MODE button: Open Action Menu
+        if (page == BASE_PAGE_STATION) {
+            // 1º Ecrã: Nome da Estação, MAC, Estado
+            // Clique curto no joystick: avança o estado da operação (STORAGE -> WAITING -> IDLE -> GO)
+            if (joystick.wasShortClicked()) {
+                BaseOperationState cur = fleet.getOperationState();
+                BaseOperationState nxt = static_cast<BaseOperationState>((cur + 1) % 4);
+                fleet.setOperationState(nxt);
+                Serial.printf("[BASE] Estado de operacao alterado para: %s\n", fleet.getOperationStateStr());
+            }
+            // Long Press (>700ms) ou botão MODE: Abre Menu de Controlo
+            else if (joystick.wasLongClicked() || btnModePressed) {
+                currentScreen = SCREEN_MENU;
+                menuSelectedIndex = 0;
+                lastMenuActivityMs = now;
+                menuFeedback = nullptr;
+                Serial.println("[BASE] Abriu Menu de Controlo");
+            }
+        }
+        else if (page == BASE_PAGE_WIFI) {
+            // 2º Ecrã: Conectividade WiFi
+            // Long Press (>700ms): Abre Menu
+            if (joystick.wasLongClicked()) {
+                currentScreen = SCREEN_MENU;
+                menuSelectedIndex = 0;
+                lastMenuActivityMs = now;
+                menuFeedback = nullptr;
+            }
+            // Botão MODE ou clique curto: Avança para o 3º ecrã (Rover)
+            else if (btnModePressed || joystick.wasShortClicked()) {
+                display.setPage(BASE_PAGE_ROVER);
+            }
+        }
+        else if (page == BASE_PAGE_ROVER) {
+            // 3º Ecrã: Rover Selecionado (Comando e Telemetria)
+            // Nota: A seleção do rover é efetuada exclusivamente através do Website.
+            if (fleet.hasSelectedRover()) {
+                // Clique curto no joystick: Alterna modo MANUAL vs HOLD STATION
+                if (joystick.wasShortClicked()) {
+                    currentNavMode = (currentNavMode == 0) ? 1 : 0;
+                    Serial.printf("[BASE] Modo alterado para: %s\n", (currentNavMode == 1) ? "HOLD STATION" : "MANUAL");
+                }
+            }
+
+            // Long Press (>700ms) ou botão MODE: Abre Menu de Controlo
             if (joystick.wasLongClicked() || btnModePressed) {
                 currentScreen = SCREEN_MENU;
                 menuSelectedIndex = 0;
@@ -311,63 +389,11 @@ void handleInputsAndMenu(uint32_t now) {
                 Serial.println("[BASE] Abriu Menu de Controlo");
             }
         }
-        else if (page == BASE_PAGE_FLEET) {
-            // Navegar entre rovers da frota com o joystick
-            int8_t step = joystick.getMenuNavStep();
-            if (step != 0) {
-                fleet.selectNextRover();
-                Serial.printf("[BASE] Frota: Rover alterado para %s\n", fleet.getSelectedRover()->code);
-            }
-
-            if (btnModePressed) {
-                display.setPage(BASE_PAGE_CONTROL);
-                Serial.printf("[BASE] Rover %s selecionado para comando!\n", fleet.getSelectedRover()->code);
-            }
-            else if (joystick.wasLongClicked()) {
-                currentScreen = SCREEN_MENU;
-                menuSelectedIndex = 0;
-                lastMenuActivityMs = now;
-                menuFeedback = nullptr;
-            }
-        }
-        else if (page == BASE_PAGE_NETWORK) {
-            // Botão MODE: Voltar à página de comando
-            if (btnModePressed) {
-                display.setPage(BASE_PAGE_CONTROL);
-            }
-            else if (joystick.wasLongClicked()) {
-                currentScreen = SCREEN_MENU;
-                menuSelectedIndex = 0;
-                lastMenuActivityMs = now;
-                menuFeedback = nullptr;
-            }
-        }
-        else if (page == BASE_PAGE_CLOUD) {
-            if (btnModePressed) {
-                display.setPage(BASE_PAGE_CONTROL);
-            }
-            else if (joystick.wasLongClicked()) {
-                currentScreen = SCREEN_MENU;
-                menuSelectedIndex = 0;
-                lastMenuActivityMs = now;
-                menuFeedback = nullptr;
-            }
-        }
         else if (page == BASE_PAGE_JOYSTICK) {
-            // No ecrã de teste do joystick, premir o botão físico MODE avança de página
-            if (btnModePressed) {
-                display.nextPage();
-            }
-        }
-        else if (page == BASE_PAGE_MAC) {
-            if (btnModePressed || joystick.wasShortClicked()) {
-                display.setPage(BASE_PAGE_CONTROL);
-            }
-            else if (joystick.wasLongClicked()) {
-                currentScreen = SCREEN_MENU;
-                menuSelectedIndex = 0;
-                lastMenuActivityMs = now;
-                menuFeedback = nullptr;
+            // 4º Ecrã (Opcional): Teste do Joystick
+            // Botão MODE ou clique longo: Volta ao 1º Ecrã (Estação)
+            if (btnModePressed || joystick.wasLongClicked()) {
+                display.setPage(BASE_PAGE_STATION);
             }
         }
     } 
@@ -392,28 +418,39 @@ void handleInputsAndMenu(uint32_t now) {
                     menuFeedback = "HOLD STATION OK";
                     break;
                 case 2: // LANCAR ANCORA
-                    fleet.queueCommand(fleet.getSelectedRoverId(), ++localCmdId, ACTION_DROP_ANCHOR, 500);
-                    menuFeedback = "ANCORA A DESCER";
+                    if (!fleet.hasSelectedRover()) {
+                        menuFeedback = "SEM ROVER ATIVO";
+                    } else {
+                        fleet.queueCommand(fleet.getSelectedRoverId(), ++localCmdId, ACTION_DROP_ANCHOR, 500);
+                        menuFeedback = "ANCORA A DESCER";
+                    }
                     break;
                 case 3: // RECOLHER ANCORA
-                    fleet.queueCommand(fleet.getSelectedRoverId(), ++localCmdId, ACTION_RETRIEVE_ANCHOR);
-                    menuFeedback = "A RECOLHER...";
+                    if (!fleet.hasSelectedRover()) {
+                        menuFeedback = "SEM ROVER ATIVO";
+                    } else {
+                        fleet.queueCommand(fleet.getSelectedRoverId(), ++localCmdId, ACTION_RETRIEVE_ANCHOR);
+                        menuFeedback = "A RECOLHER...";
+                    }
                     break;
                 case 4: // PARAR MOTORES
-                    fleet.queueCommand(fleet.getSelectedRoverId(), ++localCmdId, ACTION_STOP);
-                    currentNavMode = 0;
-                    menuFeedback = "MOTORES PARADOS";
+                    if (!fleet.hasSelectedRover()) {
+                        menuFeedback = "SEM ROVER ATIVO";
+                    } else {
+                        fleet.queueCommand(fleet.getSelectedRoverId(), ++localCmdId, ACTION_STOP);
+                        currentNavMode = 0;
+                        menuFeedback = "MOTORES PARADOS";
+                    }
                     break;
-                case 5: // PROXIMO ROVER
-                    fleet.selectNextRover();
-                    display.setPage(BASE_PAGE_CONTROL);
-                    menuFeedback = "ROVER ALTERADO";
+                case 5: // ALTERNAR ESTADO BASE (STORAGE -> WAITING -> IDLE -> GO)
+                    {
+                        BaseOperationState cur = fleet.getOperationState();
+                        BaseOperationState nxt = static_cast<BaseOperationState>((cur + 1) % 4);
+                        fleet.setOperationState(nxt);
+                        menuFeedback = fleet.getOperationStateStr();
+                    }
                     break;
-                case 6: // INFO REDE / IP
-                    display.setPage(BASE_PAGE_NETWORK);
-                    currentScreen = SCREEN_PAGES;
-                    break;
-                case 7: // TESTE JOYSTICK
+                case 6: // TESTE JOYSTICK
                     display.setPage(BASE_PAGE_JOYSTICK);
                     currentScreen = SCREEN_PAGES;
                     break;
@@ -444,6 +481,18 @@ void handleInputsAndMenu(uint32_t now) {
 void loop() {
     uint32_t now = millis();
 
+    // 0. Polling debounce para o botão BOOT (GPIO 9 e GPIO 18) como garantia extra
+    static bool lastBootRaw = HIGH;
+    bool currentBootRaw = (digitalRead(PIN_BTN_BOOT) == LOW);
+#ifdef PIN_BTN_SW1
+    if (digitalRead(PIN_BTN_SW1) == LOW) currentBootRaw = true;
+#endif
+    if (currentBootRaw && lastBootRaw == HIGH && (now - lastBtnPressTime > 250)) {
+        lastBtnPressTime = now;
+        flagPageChange = true;
+    }
+    lastBootRaw = currentBootRaw ? LOW : HIGH;
+
     // 1. Screen Navigation Button (Instant Hardware Interrupt on BOOT / GPIO 9)
     bool forceDisplay = false;
     static uint32_t joyHoldStartMs = 0;
@@ -455,7 +504,7 @@ void loop() {
             if (joyHoldStartMs == 0) {
                 joyHoldStartMs = now;
             } else if (now - joyHoldStartMs >= 1000) {
-                display.nextPage();
+                display.setPage(BASE_PAGE_STATION);
                 forceDisplay = true;
                 joyHoldStartMs = 0;
                 flagPageChange = false;
@@ -479,7 +528,7 @@ void loop() {
                 display.nextPage();
             }
             forceDisplay = true;
-            Serial.printf("[BASE] Ecrã alterado para página %d (0:CONTROL, 1:FLEET, 2:NETWORK, 3:CLOUD, 4:JOYSTICK, 5:MAC)\n", display.getCurrentPage());
+            Serial.printf("[BASE] Ecrã alterado para página %d (0:ESTAÇÃO, 1:WIFI, 2:ROVER, 3:TESTE JOYSTICK)\n", display.getCurrentPage());
         }
     }
 
@@ -521,5 +570,21 @@ void loop() {
                        joystick.isBootPressed(), joystick.isModePressed(),
                        joystick.isAnchorUpPressed(), joystick.isAnchorDownPressed(),
                        joystick.getJoyClickCount());
+    }
+
+    // 9. Atualizar LED NeoPixel de acordo com o estado operacional da Base
+    static BaseOperationState lastOpLedState = (BaseOperationState)255;
+    BaseOperationState curOp = fleet.getOperationState();
+    if (curOp != lastOpLedState) {
+        lastOpLedState = curOp;
+        if (curOp == BASE_OP_STORAGE) {
+            setRgbColor(8, 0, 16);  // Roxo / Standby
+        } else if (curOp == BASE_OP_WAITING_ROVERS) {
+            setRgbColor(30, 15, 0); // Laranja / À espera de lista
+        } else if (curOp == BASE_OP_IDLE) {
+            setRgbColor(0, 20, 25); // Ciano / Lista pronta
+        } else if (curOp == BASE_OP_GO) {
+            setRgbColor(0, 35, 0);  // Verde / Em missão
+        }
     }
 }

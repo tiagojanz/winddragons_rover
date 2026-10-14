@@ -11,6 +11,8 @@
 #include "base_network.h"
 #include "qrcode_helper.h"
 #include <esp_mac.h>
+#include <Preferences.h>
+#include "base_display.h"
 
 class BaseWebServer {
 public:
@@ -18,7 +20,8 @@ public:
         : _server(80), _wifi(wifiMgr), _fleet(fleet), _sd(sdCard), _network(network),
           _webControlActive(false), _webThrottle(0), _webRudder(0), 
           _webAnchorJog(0), _lastWebControlTime(0), _nextCmdId(2000),
-          _isBusy(false), _uploadSuccess(false), _uploadCurrentPath("") {}
+          _isBusy(false), _uploadSuccess(false), _uploadCurrentPath(""),
+          _display(nullptr) {}
 
     String getMacAddress() {
         String mac = WiFi.macAddress();
@@ -52,6 +55,8 @@ public:
     }
 
     void setSD(SDCardManager *sd) { _sd = sd; }
+    void setDisplay(BaseDisplay *display) { _display = display; }
+    void setLoraReadyPtr(bool *ready) { _loraReady = ready; }
     bool isBusy() const { return _isBusy; }
     bool isWebControlActive() const { return _webControlActive; }
     int8_t getWebThrottle() const { return _webThrottle; }
@@ -64,6 +69,8 @@ private:
     FleetManager &_fleet;
     SDCardManager *_sd;
     BaseNetwork *_network;
+    BaseDisplay *_display;
+    bool *_loraReady = nullptr;
 
     bool _webControlActive;
     int8_t _webThrottle;
@@ -161,8 +168,17 @@ private:
                 if (tryServeSdFile("/www/wifi.html")) return;
                 handleWifiPage();
             } else {
-                if (tryServeSdFile("/www/index.html") || tryServeSdFile("/www/gps.html")) return;
-                handleGpsPage(); // Na rede WiFi, a pagina principal e o GPS/Telemetria da Frota
+                if (tryServeSdFile("/www/mission.html") || tryServeSdFile("/www/index.html")) return;
+                handleMissionPage(); // Na Base Station, a página principal de operação é a Missão & Regata
+            }
+        });
+        _server.on("/index.html", [this]() {
+            if (_wifi.isAPMode()) {
+                if (tryServeSdFile("/www/wifi.html")) return;
+                handleWifiPage();
+            } else {
+                if (tryServeSdFile("/www/mission.html") || tryServeSdFile("/www/index.html")) return;
+                handleMissionPage();
             }
         });
 
@@ -181,11 +197,11 @@ private:
             handleWifiPage();
         });
         _server.on("/config", [this]() {
-            if (tryServeSdFile("/www/wifi.html")) return;
+            if (tryServeSdFile("/www/config.html") || tryServeSdFile("/www/wifi.html")) return;
             handleWifiPage();
         });
         _server.on("/settings", [this]() {
-            if (tryServeSdFile("/www/wifi.html")) return;
+            if (tryServeSdFile("/www/config.html") || tryServeSdFile("/www/wifi.html")) return;
             handleWifiPage();
         });
         _server.on("/gps", [this]() { 
@@ -203,6 +219,16 @@ private:
             if (tryServeSdFile("/www/control.html")) return;
             handleControlPage(); 
         });
+        _server.on("/mission", [this]() {
+            if (_wifi.isAPMode()) { _server.sendHeader("Location", "/wifi"); _server.send(302, "text/plain", ""); return; }
+            if (tryServeSdFile("/www/mission.html")) return;
+            handleMissionPage();
+        });
+        _server.on("/regata", [this]() {
+            if (_wifi.isAPMode()) { _server.sendHeader("Location", "/wifi"); _server.send(302, "text/plain", ""); return; }
+            if (tryServeSdFile("/www/mission.html")) return;
+            handleMissionPage();
+        });
         _server.on("/sd", [this]() {
             if (tryServeSdFile("/www/sd.html")) return;
             handleSdPage();
@@ -217,6 +243,17 @@ private:
         _server.on("/api/wifi/connect", [this]() { handleApiWifiConnect(); });
         _server.on("/api/wifi/reconnect", [this]() { handleApiWifiReconnect(); });
         
+        // Gestão de Missão e Lista de Rovers
+        _server.on("/api/mission", HTTP_GET, [this]() { handleApiMission(); });
+        _server.on("/api/mission/state", HTTP_POST, [this]() { handleApiMissionState(); });
+        _server.on("/api/mission/rovers", HTTP_POST, [this]() { handleApiMissionRovers(); });
+        _server.on("/api/mission/clear", HTTP_POST, [this]() { handleApiMissionClear(); });
+
+        // Configuração do Ecrã LCD da Base
+        _server.on("/api/display", HTTP_GET, [this]() { handleApiDisplayGet(); });
+        _server.on("/api/display", HTTP_POST, [this]() { handleApiDisplayPost(); });
+        _server.on("/api/display/brightness", [this]() { handleApiDisplayBrightness(); });
+
         // Controle de atuadores e comandos
         _server.on("/api/control/actuator", [this]() { handleApiActuator(); });
         _server.on("/api/control/action", [this]() { handleApiAction(); });
@@ -338,7 +375,9 @@ private:
         html += "<div class='nav-links'>";
         if (_wifi.isAPMode()) {
             html += "<a href='/wifi' class='nav-item active'>Configuração WiFi (Modo AP)</a>";
+            html += "<a href='/mission' class='nav-item " + String(activeTab == "mission" ? "active" : "") + "'>🏁 Missão</a>";
         } else {
+            html += "<a href='/mission' class='nav-item " + String(activeTab == "mission" ? "active" : "") + "'>🏁 Missão</a>";
             html += "<a href='/portal' class='nav-item " + String(activeTab == "portal" ? "active" : "") + "'>☁️ Portal</a>";
             html += "<a href='/wifi' class='nav-item " + String(activeTab == "wifi" ? "active" : "") + "'>📡 WiFi</a>";
             html += "<a href='/gps' class='nav-item " + String(activeTab == "gps" ? "active" : "") + "'>📍 GPS Frota</a>";
@@ -348,6 +387,12 @@ private:
         }
         html += "</div>";
         html += "<div style='display:flex;align-items:center;gap:8px;'>";
+        String opColor = "#64748b";
+        if (_fleet.getOperationState() == BASE_OP_WAITING_ROVERS) opColor = "#f59e0b";
+        else if (_fleet.getOperationState() == BASE_OP_IDLE) opColor = "#06b6d4";
+        else if (_fleet.getOperationState() == BASE_OP_GO) opColor = "#10b981";
+        html += "<span class='badge' style='background:" + opColor + ";color:#fff;' title='" + String(_fleet.getOperationStateDesc()) + "'>● " + String(_fleet.getOperationStateStr()) + "</span>";
+
         if (_wifi.isAPMode()) {
             html += "<span class='badge badge-ap'>MODO AP: " + _wifi.getSSID() + "</span>";
         } else {
@@ -457,8 +502,58 @@ private:
         html += "<div id='scanResults' style='margin-top:16px;'></div>";
         html += "</div>";
 
+        // Card: Brilho do Ecrã LCD (Display LCD ST7789)
+        uint8_t curBright = _display ? _display->getBrightness() : 85;
+        html += "<div class='card'>";
+        html += "<div class='card-title'><span><i class='fa-solid fa-sun'></i> Brilho do Ecrã (Display LCD ST7789)</span><span id='brightValBadge' class='badge' style='background:#1e293b;color:var(--primary);font-size:0.9rem;font-weight:700;'>" + String(curBright) + "%</span></div>";
+        html += "<p style='color:var(--muted);font-size:0.875rem;margin-bottom:16px;'>Ajuste o brilho da retroiluminação por PWM (LEDC GPIO 22). Ao mover o cursor, o ecrã atualiza em tempo real.</p>";
+        html += "<div style='background:rgba(0,0,0,0.25);padding:18px;border-radius:12px;border:1px solid var(--card-border);'>";
+        html += "<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;'>";
+        html += "<span style='font-size:0.85rem;color:var(--muted);'><i class='fa-solid fa-moon'></i> 5% Mínimo</span>";
+        html += "<span id='brightDisplayVal' style='font-size:1.8rem;font-weight:700;color:var(--primary);'>" + String(curBright) + "%</span>";
+        html += "<span style='font-size:0.85rem;color:var(--muted);'><i class='fa-solid fa-sun'></i> 100% Máximo</span>";
+        html += "</div>";
+        html += "<input type='range' id='cfg_bright' min='5' max='100' step='1' value='" + String(curBright) + "' class='slider' oninput='onBrightSlide(this.value)' onchange='onBrightChange(this.value)'>";
+        html += "<div style='display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;'>";
+        html += "<button type='button' onclick='setPreset(25)' class='btn btn-secondary' style='padding:6px 12px;font-size:0.8rem;'><i class='fa-solid fa-moon'></i> 25% (Poupança)</button>";
+        html += "<button type='button' onclick='setPreset(50)' class='btn btn-secondary' style='padding:6px 12px;font-size:0.8rem;'><i class='fa-solid fa-cloud-sun'></i> 50% (Normal)</button>";
+        html += "<button type='button' onclick='setPreset(75)' class='btn btn-secondary' style='padding:6px 12px;font-size:0.8rem;'><i class='fa-solid fa-sun'></i> 75% (Dia)</button>";
+        html += "<button type='button' onclick='setPreset(100)' class='btn btn-secondary' style='padding:6px 12px;font-size:0.8rem;'><i class='fa-solid fa-bolt'></i> 100% (Sol Máximo)</button>";
+        html += "</div></div></div>";
+
+        // Card 4: Configuração dos Ecrãs LCD da Base Station
+        html += "<div class='card'>";
+        html += "<div class='card-title'><span><i class='fa-solid fa-tv'></i> Páginas do Ecrã LCD (Base Station)</span><span class='badge' style='background:#1e3a8a;color:#93c5fd;'>ST7789 320x172</span></div>";
+        html += "<p style='color:var(--muted);font-size:0.875rem;margin-bottom:14px;'>";
+        html += "O ecrã da Estação Base possui 3 ecrãs principais essenciais: <strong>1. Estação (ID, MAC, Estado)</strong>, <strong>2. Conectividade WiFi</strong> e <strong>3. Rover Selecionado</strong>.";
+        html += "</p>";
+        html += "<div class='form-group' style='display:flex;align-items:center;gap:12px;padding:12px;background:rgba(255,255,255,0.03);border:1px solid var(--card-border);border-radius:8px;'>";
+        html += "<input type='checkbox' id='joyScreenCheck' onchange='toggleJoyScreen(this.checked)' style='width:20px;height:20px;cursor:pointer;'>";
+        html += "<label for='joyScreenCheck' style='cursor:pointer;font-size:0.95rem;font-weight:600;'>";
+        html += "Ativar 4º Ecrã: Teste do Joystick";
+        html += "<div style='font-size:0.75rem;font-weight:normal;color:var(--muted);margin-top:2px;'>";
+        html += "Adiciona a mira analógica 2D e diagnóstico dos eixos ADC ao carrossel de navegação do ecrã físico.";
+        html += "</div></label></div></div>";
+
         // Script interativo
         html += "<script>";
+        html += "let slideTimer=null;";
+        html += "function onBrightSlide(v){";
+        html += "  const elVal=document.getElementById('brightDisplayVal');if(elVal)elVal.innerText=v+'%';";
+        html += "  const elBadge=document.getElementById('brightValBadge');if(elBadge)elBadge.innerText=v+'%';";
+        html += "  if(slideTimer)clearTimeout(slideTimer);";
+        html += "  slideTimer=setTimeout(()=>{fetch('/api/display/brightness?val='+v,{method:'POST'}).catch(()=>{});},60);";
+        html += "}";
+        html += "function onBrightChange(v){fetch('/api/display/brightness?val='+v,{method:'POST'}).catch(()=>{});}";
+        html += "function setPreset(v){const el=document.getElementById('cfg_bright');if(el)el.value=v;onBrightSlide(v);onBrightChange(v);}";
+        html += "fetch('/api/display').then(r=>r.json()).then(d=>{";
+        html += "  const c=document.getElementById('joyScreenCheck');if(c)c.checked=!!d.joy_screen;";
+        html += "  const b=d.screen_brightness||d.brightness||85;";
+        html += "  const el=document.getElementById('cfg_bright');if(el)el.value=b;";
+        html += "  const elVal=document.getElementById('brightDisplayVal');if(elVal)elVal.innerText=b+'%';";
+        html += "  const elBadge=document.getElementById('brightValBadge');if(elBadge)elBadge.innerText=b+'%';";
+        html += "}).catch(()=>{});";
+        html += "function toggleJoyScreen(enabled){fetch('/api/display',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({joy_screen:enabled})}).then(r=>r.json()).then(res=>{alert(res.joy_screen?'4º Ecrã (Teste Joystick) ativado no LCD!':'4º Ecrã desativado. LCD em modo simplificado de 3 ecrãs.');}).catch(e=>{alert('Erro ao guardar configuração do ecrã');});}";
         html += "function saveWifi(e){e.preventDefault();const s=document.getElementById('ssid').value;const p=document.getElementById('pass').value;const d=document.getElementById('is_default').checked;";
         html += "fetch('/api/wifi/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:s,password:p,is_default:d})})";
         html += ".then(r=>r.json()).then(res=>{alert(res.msg);location.reload();});}";
@@ -523,6 +618,40 @@ private:
         html += "</div></div>";
         html += "</div>";
 
+        // Tabela de Rovers do Portal
+        html += "<div class='card'>";
+        html += "<div class='card-title'><span>Rovers da Missão (Enviados pelo Portal)</span>";
+        bool hasRovers = _fleet.hasReceivedRoversFromPortal() && !_fleet.getRovers().empty();
+        if (hasRovers) {
+            html += "<span class='badge' style='background:rgba(16,185,129,0.15);color:var(--green);'>" + String(_fleet.getRovers().size()) + " Rovers</span>";
+        } else {
+            html += "<span class='badge' style='background:rgba(255,255,255,0.06);color:var(--muted);'>0 Rovers</span>";
+        }
+        html += "</div>";
+
+        if (!hasRovers) {
+            html += "<div style='text-align:center;color:var(--muted);padding:28px 16px;'>";
+            html += "<p style='margin:0;font-size:1rem;color:var(--text);'><strong>Nenhum rover enviado pelo Portal ainda.</strong></p>";
+            html += "<p style='margin:6px 0 0 0;font-size:0.85rem;color:var(--muted);'>A lista será apresentada automaticamente assim que o portal responder com os rovers atribuídos à missão.</p>";
+            html += "</div>";
+        } else {
+            html += "<div style='overflow-x:auto;'><table><thead><tr>";
+            html += "<th>Código</th><th>Nome</th><th>Função (Role)</th><th>MAC</th><th>Estado</th><th>Bateria</th>";
+            html += "</tr></thead><tbody>";
+            for (const auto &rov : _fleet.getRovers()) {
+                html += "<tr>";
+                html += "<td><strong>" + String(rov.code) + "</strong></td>";
+                html += "<td>" + String(rov.name) + "</td>";
+                html += "<td><span class='badge' style='background:rgba(59,130,246,0.15);color:var(--primary);'>" + String(rov.role) + "</span></td>";
+                html += "<td style='font-family:monospace;font-size:0.85rem;'>" + String(rov.mac) + "</td>";
+                html += "<td><span class='badge' style='background:" + String(rov.is_online ? "#065f46" : "#7f1d1d") + ";color:" + String(rov.is_online ? "#6ee7b7" : "#fca5a5") + ";'>" + String(rov.is_online ? "ONLINE" : "OFFLINE") + "</span></td>";
+                html += "<td>" + String(rov.battery_pct) + "%</td>";
+                html += "</tr>";
+            }
+            html += "</tbody></table></div>";
+        }
+        html += "</div>";
+
         html += getHtmlFooter();
         _server.send(200, "text/html", html);
     }
@@ -576,7 +705,7 @@ private:
         html += "document.getElementById('speedVal').innerText=sel.speed_knots.toFixed(1)+' kn';";
         html += "document.getElementById('headingVal').innerText=sel.heading_deg.toFixed(0)+'°';";
         html += "document.getElementById('rssiVal').innerText=sel.rssi+' dBm';";
-        html += "const st=document.getElementById('fixStatus');st.innerText=sel.is_online?'ONLINE':'OFFLINE';st.style.color=sel.is_online?'var(--green)':'var(--red)';";
+        html += "const st=document.getElementById('fixStatus');if(sel.is_online){st.innerText='ONLINE';st.style.color='var(--green)';}else if(data.lora_ready){st.innerText='RÁDIO OK (ESCUTA)';st.style.color='var(--primary)';}else if(data.lora_enabled){st.innerText='FALHA RÁDIO';st.style.color='var(--red)';}else{st.innerText='REPOUSO';st.style.color='var(--muted)';}";
         html += "document.getElementById('mapsLink').href='https://www.google.com/maps?q='+sel.lat+','+sel.lng;";
         html += "document.getElementById('osmLink').href='https://www.openstreetmap.org/?mlat='+sel.lat+'&mlon='+sel.lng+'#map=17/'+sel.lat+'/'+sel.lng;";
         html += "});},1500);";
@@ -601,6 +730,7 @@ private:
         html += "<div class='card-title'>";
         html += "<span>🔋 Telemetria de Bateria LiPo 4S</span>";
         html += "<select onchange='changeRover(this.value)' style='width:auto;display:inline-block;padding:4px 10px;'>";
+        html += "<option value='0' " + String(!r ? "selected" : "") + ">-- Nenhum Rover Selecionado --</option>";
         for (const auto &rov : _fleet.getRovers()) {
             html += "<option value='" + String(rov.id) + "' " + String((r && r->id == rov.id) ? "selected" : "") + ">" + String(rov.code) + "</option>";
         }
@@ -651,6 +781,174 @@ private:
     }
 
     // -------------------------------------------------------------
+    // PÁGINA: GESTÃO DE MISSÃO, REGATA & ESTADO DE OPERAÇÃO
+    // -------------------------------------------------------------
+    void handleMissionPage() {
+        String html = getHtmlHeader("Gestão de Missão & Regata", "mission");
+
+        BaseOperationState currentState = _fleet.getOperationState();
+
+        // 1. Card de Estado de Operação da Estação Base
+        html += "<div class='card'>";
+        html += "<div class='card-title'><span>🚩 Estado de Operação da Estação Base</span>";
+        String curBadgeColor = "#64748b";
+        if (currentState == BASE_OP_WAITING_ROVERS) curBadgeColor = "#f59e0b";
+        else if (currentState == BASE_OP_IDLE) curBadgeColor = "#06b6d4";
+        else if (currentState == BASE_OP_GO) curBadgeColor = "#10b981";
+        html += "<span class='badge' id='badgeState' style='background:" + curBadgeColor + ";color:#fff;font-size:0.85rem;padding:6px 14px;'>";
+        html += String(_fleet.getOperationStateStr()) + " - " + String(_fleet.getOperationStateDesc()) + "</span>";
+        html += "</div>";
+
+        html += "<div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-top:14px;'>";
+
+        // Botão Storage
+        html += "<button onclick=\"setState('STORAGE')\" id='btnStateSTORAGE' class='btn' style='display:flex;flex-direction:column;align-items:flex-start;padding:14px;background:" + String(currentState == BASE_OP_STORAGE ? "#475569;border:2px solid #94a3b8;" : "rgba(255,255,255,0.05);") + "color:#fff;'>";
+        html += "<span style='font-size:1.05rem;font-weight:700;'>📦 Storage</span>";
+        html += "<span style='font-size:0.75rem;color:var(--muted);margin-top:4px;'>Not in use (Standby)</span>";
+        html += "</button>";
+
+        // Botão Waiting Rover List
+        html += "<button onclick=\"setState('WAITING_ROVERS')\" id='btnStateWAITING_ROVERS' class='btn' style='display:flex;flex-direction:column;align-items:flex-start;padding:14px;background:" + String(currentState == BASE_OP_WAITING_ROVERS ? "#b45309;border:2px solid #f59e0b;" : "rgba(255,255,255,0.05);") + "color:#fff;'>";
+        html += "<span style='font-size:1.05rem;font-weight:700;'>⏳ Waiting Rover List</span>";
+        html += "<span style='font-size:0.75rem;color:var(--muted);margin-top:4px;'>Connected and waiting</span>";
+        html += "</button>";
+
+        // Botão Idle
+        html += "<button onclick=\"setState('IDLE')\" id='btnStateIDLE' class='btn' style='display:flex;flex-direction:column;align-items:flex-start;padding:14px;background:" + String(currentState == BASE_OP_IDLE ? "#0e7490;border:2px solid #06b6d4;" : "rgba(255,255,255,0.05);") + "color:#fff;'>";
+        html += "<span style='font-size:1.05rem;font-weight:700;'>⚓ Idle</span>";
+        html += "<span style='font-size:0.75rem;color:var(--muted);margin-top:4px;'>Rover list ready</span>";
+        html += "</button>";
+
+        // Botão Go
+        html += "<button onclick=\"setState('GO')\" id='btnStateGO' class='btn' style='display:flex;flex-direction:column;align-items:flex-start;padding:14px;background:" + String(currentState == BASE_OP_GO ? "#047857;border:2px solid #10b981;" : "rgba(255,255,255,0.05);") + "color:#fff;'>";
+        html += "<span style='font-size:1.05rem;font-weight:700;'>🚀 Go</span>";
+        html += "<span style='font-size:0.75rem;color:var(--muted);margin-top:4px;'>In mission (Ativo)</span>";
+        html += "</button>";
+
+        html += "</div></div>";
+
+        // 2. Card de Informação da Regata / Prova
+        html += "<div class='card'>";
+        html += "<div class='card-title'>⛵ Dados do Percurso / Regata</div>";
+        html += "<div class='grid-2'>";
+        html += "<div class='form-group'><label class='stat-label'>ID da Regata / Prova</label>";
+        html += "<input type='text' id='raceIdInput' value='" + String(_fleet.getRaceId()) + "' placeholder='ex: REGATA-TEJO-2026-R1'></div>";
+        html += "<div class='form-group'><label class='stat-label'>Nome da Missão / Prova</label>";
+        html += "<input type='text' id='missionNameInput' value='" + String(_fleet.getMissionName()) + "' placeholder='ex: Trofeu de Outono - Prova 1'></div>";
+        html += "</div></div>";
+
+        // 3. Card de Bóias / Rovers da Missão
+        html += "<div class='card'>";
+        html += "<div class='card-title'><span>🛰️ Lista de Bóias da Missão (Persistente no MicroSD)</span>";
+        html += "<span style='font-size:0.8rem;color:var(--muted);font-weight:normal;'>/config/rovers.json</span></div>";
+
+        html += "<div style='overflow-x:auto;'>";
+        html += "<table id='roversTable'>";
+        html += "<thead><tr>";
+        html += "<th>ID</th><th>Nome</th><th>MAC Address</th><th>Papel / Role</th><th>Coord. Alvo (Lat, Lng)</th><th>Status LoRa</th><th>Ações</th>";
+        html += "</tr></thead><tbody id='roversTbody'>";
+
+        for (const auto &r : _fleet.getRovers()) {
+            html += "<tr id='rRow_" + String(r.id) + "'>";
+            html += "<td><strong>" + String(r.id) + "</strong></td>";
+            html += "<td><input type='text' class='r-name' value='" + String(r.name) + "' style='width:120px;padding:6px;'></td>";
+            html += "<td><input type='text' class='r-mac' value='" + String(r.mac) + "' style='width:140px;font-family:monospace;padding:6px;'></td>";
+            html += "<td><select class='r-role' style='width:120px;padding:6px;'>";
+            const char* roles[] = {"largada CR", "largada", "boia 1", "boia 2", "boia 3", "boia 4", "chegada CR", "chegada"};
+            for (const char* ro : roles) {
+                String sel = (strcmp(r.role, ro) == 0) ? "selected" : "";
+                html += "<option value='" + String(ro) + "' " + sel + ">" + String(ro) + "</option>";
+            }
+            html += "</select></td>";
+            html += "<td><div style='display:flex;gap:4px;'><input type='number' step='0.000001' class='r-lat' value='" + String(r.target_lat, 6) + "' placeholder='Lat' style='width:90px;padding:6px;'><input type='number' step='0.000001' class='r-lng' value='" + String(r.target_lng, 6) + "' placeholder='Lng' style='width:90px;padding:6px;'></div></td>";
+            html += "<td>";
+            if (r.is_online) {
+                html += "<span class='badge' style='background:#064e3b;color:#a7f3d0;'>ONLINE (" + String(r.battery_pct) + "%)</span>";
+                if (r.anchor_depth_m > 0.05f) {
+                    html += "<div style='font-size:0.75rem;color:var(--yellow);margin-top:2px;'>Âncora: " + String(r.anchor_depth_m, 2) + "m</div>";
+                }
+            } else {
+                html += "<span class='badge' style='background:#7f1d1d;color:#fecaca;'>OFFLINE</span>";
+            }
+            html += "</td>";
+            bool isSelected = (_fleet.getSelectedRoverId() == r.id);
+            html += "<td><div style='display:flex;gap:4px;'>";
+            if (isSelected) {
+                html += "<button onclick='changeRover(0)' class='btn' style='background:#059669;color:#fff;padding:4px 8px;font-size:0.75rem;' title='Clique para desmarcar'>★ Ativo no LCD</button>";
+            } else {
+                html += "<button onclick='changeRover(" + String(r.id) + ")' class='btn btn-primary' style='padding:4px 8px;font-size:0.75rem;'>Selecionar</button>";
+            }
+            html += "<button onclick='deleteRow(" + String(r.id) + ")' class='btn btn-danger' style='padding:4px 8px;font-size:0.75rem;'>🗑️</button>";
+            html += "</div></td>";
+            html += "</tr>";
+        }
+
+        html += "</tbody></table></div>";
+
+        // Botões de ação da tabela
+        html += "<div style='display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;'>";
+        html += "<button onclick='addRow()' class='btn btn-secondary'>➕ Adicionar Bóia</button>";
+        html += "<button onclick='saveRovers()' class='btn btn-primary' style='padding:10px 24px;'>💾 Guardar Lista no MicroSD</button>";
+        html += "<button onclick='clearRovers()' class='btn btn-danger' style='background:#78350f;'>🔄 Repor Pré-definições</button>";
+        html += "</div>";
+
+        html += "</div>";
+
+        // Scripts da Página de Missão
+        html += "<script>";
+        html += "function setState(st){";
+        html += "fetch('/api/mission/state',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:st})})";
+        html += ".then(r=>r.json()).then(res=>{if(res.status==='ok'){location.reload();}});";
+        html += "}";
+
+        html += "function deleteRow(id){const row=document.getElementById('rRow_'+id);if(row)row.remove();}";
+        html += "function changeRover(id){fetch('/api/select_rover',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rover_id:parseInt(id)})}).then(()=>location.reload());}";
+
+        html += "function addRow(){";
+        html += "const tbody=document.getElementById('roversTbody');";
+        html += "const id=tbody.children.length+1;";
+        html += "const tr=document.createElement('tr');tr.id='rRow_'+id;";
+        html += "tr.innerHTML=`<td><strong>${id}</strong></td>`+";
+        html += "`<td><input type='text' class='r-name' value='WD-Boia-${id}' style='width:120px;padding:6px;'></td>`+";
+        html += "`<td><input type='text' class='r-mac' value='00:00:00:00:00:0${id}' style='width:140px;font-family:monospace;padding:6px;'></td>`+";
+        html += "`<td><select class='r-role' style='width:120px;padding:6px;'>`+";
+        html += "`<option value='largada CR'>largada CR</option><option value='largada'>largada</option>`+";
+        html += "`<option value='boia 1'>boia 1</option><option value='boia 2'>boia 2</option>`+";
+        html += "`<option value='boia 3'>boia 3</option><option value='chegada CR'>chegada CR</option><option value='chegada'>chegada</option>`+";
+        html += "`</select></td>`+";
+        html += "`<td><div style='display:flex;gap:4px;'><input type='number' step='0.000001' class='r-lat' value='0.000000' style='width:90px;padding:6px;'><input type='number' step='0.000001' class='r-lng' value='0.000000' style='width:90px;padding:6px;'></div></td>`+";
+        html += "`<td><span class='badge' style='background:#334155;color:#94a3b8;'>NOVO</span></td>`+";
+        html += "`<td><button onclick='deleteRow(${id})' class='btn btn-danger' style='padding:4px 8px;font-size:0.75rem;'>🗑️</button></td>`;";
+        html += "tbody.appendChild(tr);";
+        html += "}";
+
+        html += "function saveRovers(){";
+        html += "const raceId=document.getElementById('raceIdInput').value;";
+        html += "const missionName=document.getElementById('missionNameInput').value;";
+        html += "const rows=document.querySelectorAll('#roversTbody tr');";
+        html += "const rovers=[];";
+        html += "rows.forEach((r,idx)=>{";
+        html += "const name=r.querySelector('.r-name').value;";
+        html += "const mac=r.querySelector('.r-mac').value;";
+        html += "const role=r.querySelector('.r-role').value;";
+        html += "const lat=parseFloat(r.querySelector('.r-lat').value)||0.0;";
+        html += "const lng=parseFloat(r.querySelector('.r-lng').value)||0.0;";
+        html += "rovers.push({id:idx+1,name:name,mac_address:mac,role:role,lat:lat,lng:lng});";
+        html += "});";
+        html += "fetch('/api/mission/rovers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({race_id:raceId,mission_name:missionName,rovers:rovers})})";
+        html += ".then(r=>r.json()).then(res=>{alert('Lista de '+res.rover_count+' boias guardada no MicroSD com sucesso!');location.reload();});";
+        html += "}";
+
+        html += "function clearRovers(){if(confirm('Tem a certeza que deseja repor a lista de boias?')){";
+        html += "fetch('/api/mission/clear',{method:'POST'}).then(r=>r.json()).then(res=>{location.reload();});";
+        html += "}}";
+
+        html += "</script>";
+        html += getHtmlFooter();
+        _server.send(200, "text/html", html);
+    }
+
+    // -------------------------------------------------------------
     // PÁGINA 4: COMANDAR A BOIA (SERVOS, MOTOR, ÂNCORA, ETC.)
     // -------------------------------------------------------------
     void handleControlPage() {
@@ -661,6 +959,7 @@ private:
         html += "<div class='card-title'>";
         html += "<span>🎮 Centro de Comando Remoto</span>";
         html += "<select id='targetRoverSelect' onchange='changeRover(this.value)' style='width:auto;display:inline-block;padding:4px 10px;'>";
+        html += "<option value='0' " + String(!r ? "selected" : "") + ">-- Nenhum Rover Selecionado --</option>";
         for (const auto &rov : _fleet.getRovers()) {
             html += "<option value='" + String(rov.id) + "' " + String((r && r->id == rov.id) ? "selected" : "") + ">" + String(rov.code) + "</option>";
         }
@@ -750,12 +1049,25 @@ private:
         doc["station_id"] = mac;
         doc["mac_address"] = mac;
         doc["station_name"] = BASE_STATION_ID;
+        doc["operation_state"] = _fleet.getOperationStateStr();
+        doc["operation_state_id"] = static_cast<uint8_t>(_fleet.getOperationState());
+        doc["operation_state_desc"] = _fleet.getOperationStateDesc();
+        doc["race_id"] = _fleet.getRaceId();
+        doc["mission_name"] = _fleet.getMissionName();
 
         doc["wifi"]["mac"] = mac;
         doc["wifi"]["ap"] = _wifi.isAPMode();
         doc["wifi"]["ssid"] = _wifi.getSSID();
         doc["wifi"]["ip"] = _wifi.getIPAddress();
         doc["wifi"]["rssi"] = _wifi.getRSSI();
+        doc["selected_rover_id"] = _fleet.getSelectedRoverId();
+        doc["portal_rovers_received"] = _fleet.hasReceivedRoversFromPortal();
+        doc["screen_brightness"] = _display ? _display->getBrightness() : 85;
+        doc["display"]["brightness"] = _display ? _display->getBrightness() : 85;
+        doc["display"]["screen_brightness"] = _display ? _display->getBrightness() : 85;
+        doc["display"]["joy_screen"] = _display ? _display->isJoystickScreenEnabled() : false;
+        doc["lora_ready"] = _loraReady ? *_loraReady : false;
+        doc["lora_enabled"] = (bool)ENABLE_LORA;
 
         if (_network) {
             JsonObject cObj = doc["cloud"].to<JsonObject>();
@@ -773,6 +1085,11 @@ private:
             JsonObject sObj = doc["selected"].to<JsonObject>();
             sObj["id"] = sel->id;
             sObj["code"] = sel->code;
+            sObj["name"] = sel->name;
+            sObj["mac"] = sel->mac;
+            sObj["role"] = sel->role;
+            sObj["target_lat"] = sel->target_lat;
+            sObj["target_lng"] = sel->target_lng;
             sObj["lat"] = sel->lat;
             sObj["lng"] = sel->lng;
             sObj["speed_knots"] = sel->speed_knots;
@@ -791,6 +1108,11 @@ private:
             JsonObject rObj = roversArr.add<JsonObject>();
             rObj["id"] = r.id;
             rObj["code"] = r.code;
+            rObj["name"] = r.name;
+            rObj["mac"] = r.mac;
+            rObj["role"] = r.role;
+            rObj["target_lat"] = r.target_lat;
+            rObj["target_lng"] = r.target_lng;
             rObj["lat"] = r.lat;
             rObj["lng"] = r.lng;
             rObj["speed_knots"] = r.speed_knots;
@@ -807,6 +1129,252 @@ private:
         String res;
         serializeJson(doc, res);
         _server.send(200, "application/json", res);
+    }
+
+    void handleApiMission() {
+        JsonDocument doc;
+        doc["status"] = "ok";
+        doc["operation_state"] = _fleet.getOperationStateStr();
+        doc["operation_state_id"] = static_cast<uint8_t>(_fleet.getOperationState());
+        doc["operation_state_desc"] = _fleet.getOperationStateDesc();
+        doc["race_id"] = _fleet.getRaceId();
+        doc["mission_name"] = _fleet.getMissionName();
+        doc["selected_rover_id"] = _fleet.getSelectedRoverId();
+        doc["portal_rovers_received"] = _fleet.hasReceivedRoversFromPortal();
+
+        JsonArray roversArr = doc["rovers"].to<JsonArray>();
+        for (const auto &r : _fleet.getRovers()) {
+            JsonObject rObj = roversArr.add<JsonObject>();
+            rObj["id"] = r.id;
+            rObj["code"] = r.code;
+            rObj["name"] = r.name;
+            rObj["mac"] = r.mac;
+            rObj["mac_address"] = r.mac;
+            rObj["role"] = r.role;
+            rObj["target_lat"] = r.target_lat;
+            rObj["target_lng"] = r.target_lng;
+            rObj["lat"] = r.lat;
+            rObj["lng"] = r.lng;
+            rObj["speed_knots"] = r.speed_knots;
+            rObj["heading_deg"] = r.heading_deg;
+            rObj["battery_pct"] = r.battery_pct;
+            rObj["battery_voltage"] = r.battery_voltage;
+            rObj["motor_status"] = get_motor_status_str(r.motor_status);
+            rObj["anchor_status"] = get_anchor_status_str(r.anchor_status);
+            rObj["anchor_depth_m"] = r.anchor_depth_m;
+            rObj["rssi"] = r.rssi;
+            rObj["is_online"] = r.is_online;
+        }
+
+        String res;
+        serializeJson(doc, res);
+        _server.send(200, "application/json", res);
+    }
+
+    void handleApiMissionState() {
+        if (!_server.hasArg("plain")) {
+            _server.send(400, "application/json", "{\"status\":\"error\",\"message\":\"Sem payload JSON\"}");
+            return;
+        }
+        JsonDocument doc;
+        DeserializationError err = deserializeJson(doc, _server.arg("plain"));
+        if (err || !doc["state"].is<const char*>()) {
+            _server.send(400, "application/json", "{\"status\":\"error\",\"message\":\"Campo 'state' invalido\"}");
+            return;
+        }
+        const char *stateStr = doc["state"].as<const char*>();
+        _fleet.setOperationStateFromStr(stateStr, true);
+
+        JsonDocument resp;
+        resp["status"] = "ok";
+        resp["operation_state"] = _fleet.getOperationStateStr();
+        resp["operation_state_desc"] = _fleet.getOperationStateDesc();
+        String out;
+        serializeJson(resp, out);
+        _server.send(200, "application/json", out);
+    }
+
+    void handleApiMissionRovers() {
+        if (!_server.hasArg("plain")) {
+            _server.send(400, "application/json", "{\"status\":\"error\",\"message\":\"Sem payload JSON\"}");
+            return;
+        }
+        JsonDocument doc;
+        DeserializationError err = deserializeJson(doc, _server.arg("plain"));
+        if (err) {
+            _server.send(400, "application/json", "{\"status\":\"error\",\"message\":\"JSON invalido\"}");
+            return;
+        }
+
+        const char *raceId = doc["race_id"] | "";
+        const char *missionName = doc["mission_name"] | "";
+        if (strlen(raceId) > 0 || strlen(missionName) > 0) {
+            _fleet.setMissionInfo(raceId, missionName, false);
+        }
+
+        if (doc["rovers"].is<JsonArray>()) {
+            JsonArray arr = doc["rovers"].as<JsonArray>();
+            std::vector<FleetRover> newList;
+            for (JsonObject rObj : arr) {
+                FleetRover r;
+                memset(&r, 0, sizeof(r));
+                r.id = rObj["id"] | (newList.size() + 1);
+                snprintf(r.code, sizeof(r.code), "ROVER-%02d", r.id);
+                strncpy(r.name, rObj["name"] | "", sizeof(r.name) - 1);
+                strncpy(r.mac, rObj["mac_address"] | (rObj["mac"] | ""), sizeof(r.mac) - 1);
+                strncpy(r.role, rObj["role"] | "", sizeof(r.role) - 1);
+                r.target_lat = rObj["lat"] | (rObj["target_lat"] | 0.0);
+                r.target_lng = rObj["lng"] | (rObj["target_lng"] | 0.0);
+                r.battery_voltage = 12.0f;
+                r.is_online = false;
+
+                FleetRover *prev = _fleet.getRoverById(r.id);
+                if (prev) {
+                    r.lat = prev->lat;
+                    r.lng = prev->lng;
+                    r.speed_knots = prev->speed_knots;
+                    r.heading_deg = prev->heading_deg;
+                    r.battery_pct = prev->battery_pct;
+                    r.battery_voltage = prev->battery_voltage;
+                    r.motor_status = prev->motor_status;
+                    r.anchor_status = prev->anchor_status;
+                    r.anchor_depth_m = prev->anchor_depth_m;
+                    r.rssi = prev->rssi;
+                    r.last_seen_ms = prev->last_seen_ms;
+                    r.is_online = prev->is_online;
+                }
+                newList.push_back(r);
+            }
+
+            if (!newList.empty()) {
+                _fleet.getRoversMutable() = newList;
+                if (_fleet.getOperationState() == BASE_OP_WAITING_ROVERS) {
+                    _fleet.setOperationState(BASE_OP_IDLE, false);
+                }
+            }
+        }
+
+        if (doc["operation_state"].is<const char*>()) {
+            _fleet.setOperationStateFromStr(doc["operation_state"].as<const char*>(), false);
+        }
+
+        _fleet.saveMissionConfig();
+
+        JsonDocument resp;
+        resp["status"] = "ok";
+        resp["rover_count"] = _fleet.getRovers().size();
+        resp["operation_state"] = _fleet.getOperationStateStr();
+        String out;
+        serializeJson(resp, out);
+        _server.send(200, "application/json", out);
+    }
+
+    void handleApiMissionClear() {
+        _fleet.clearRovers();
+        _fleet.setOperationState(BASE_OP_WAITING_ROVERS, true);
+        _server.send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Missao reiniciada e lista em espera\"}");
+    }
+
+    void handleApiDisplayGet() {
+        bool joyScr = _display ? _display->isJoystickScreenEnabled() : false;
+        uint8_t bright = _display ? _display->getBrightness() : 85;
+        Preferences prefs;
+        if (prefs.begin("base_display", true)) {
+            joyScr = prefs.getBool("joy_scr", joyScr);
+            bright = prefs.getUChar("brightness", bright);
+            prefs.end();
+        }
+        JsonDocument doc;
+        doc["joy_screen"] = joyScr;
+        doc["page_count"] = joyScr ? 4 : 3;
+        doc["screen_brightness"] = bright;
+        doc["brightness"] = bright;
+        String out;
+        serializeJson(doc, out);
+        _server.send(200, "application/json", out);
+    }
+
+    void handleApiDisplayPost() {
+        if (!_server.hasArg("plain")) {
+            _server.send(400, "application/json", "{\"status\":\"error\",\"msg\":\"Sem payload\"}");
+            return;
+        }
+        JsonDocument doc;
+        DeserializationError err = deserializeJson(doc, _server.arg("plain"));
+        if (err) {
+            _server.send(400, "application/json", "{\"status\":\"error\",\"msg\":\"JSON invalido\"}");
+            return;
+        }
+        bool joyScr = _display ? _display->isJoystickScreenEnabled() : false;
+        uint8_t bright = _display ? _display->getBrightness() : 85;
+        bool hasJoy = false;
+        bool hasBright = false;
+
+        Preferences prefs;
+        if (prefs.begin("base_display", false)) {
+            if (!doc["joy_screen"].isNull()) {
+                joyScr = doc["joy_screen"].as<bool>();
+                prefs.putBool("joy_scr", joyScr);
+                hasJoy = true;
+            }
+            if (!doc["screen_brightness"].isNull() || !doc["brightness"].isNull()) {
+                bright = doc["screen_brightness"] | doc["brightness"] | bright;
+                if (bright > 100) bright = 100;
+                prefs.putUChar("brightness", bright);
+                hasBright = true;
+            }
+            prefs.end();
+        }
+        if (hasJoy && _display) {
+            _display->setJoystickScreenEnabled(joyScr);
+            Serial.printf("[BASE CONFIG] 4º Ecra (Teste Joystick): %s\n", joyScr ? "ATIVADO" : "DESATIVADO");
+        }
+        if (hasBright && _display) {
+            _display->setBrightness(bright);
+            Serial.printf("[BASE CONFIG] Brilho do Ecra: %u%%\n", bright);
+        }
+
+        JsonDocument res;
+        res["status"] = "ok";
+        res["joy_screen"] = joyScr;
+        res["screen_brightness"] = bright;
+        res["brightness"] = bright;
+        String out;
+        serializeJson(res, out);
+        _server.send(200, "application/json", out);
+    }
+
+    void handleApiDisplayBrightness() {
+        uint8_t val = _display ? _display->getBrightness() : 85;
+        if (_server.hasArg("val")) {
+            val = _server.arg("val").toInt();
+        } else if (_server.hasArg("plain")) {
+            JsonDocument doc;
+            DeserializationError err = deserializeJson(doc, _server.arg("plain"));
+            if (!err) {
+                val = doc["screen_brightness"] | doc["brightness"] | val;
+            }
+        }
+        if (val > 100) val = 100;
+
+        if (_display) {
+            _display->saveBrightness(val);
+        } else {
+            Preferences prefs;
+            if (prefs.begin("base_display", false)) {
+                prefs.putUChar("brightness", val);
+                prefs.end();
+            }
+        }
+
+        JsonDocument res;
+        res["success"] = true;
+        res["screen_brightness"] = val;
+        res["brightness"] = val;
+        res["msg"] = "Brilho do ecrã ajustado para " + String(val) + "%";
+        String out;
+        serializeJson(res, out);
+        _server.send(200, "application/json", out);
     }
 
     void handleApiScan() {
@@ -950,20 +1518,15 @@ private:
         }
         JsonDocument doc;
         deserializeJson(doc, _server.arg("plain"));
-        uint8_t rid = doc["rover_id"] | 1;
+        uint8_t rid = doc["rover_id"] | 0;
 
-        // Procurar o indice
-        const auto &rovers = _fleet.getRovers();
-        for (size_t i = 0; i < rovers.size(); ++i) {
-            if (rovers[i].id == rid) {
-                // seleciona ciclando
-                while (_fleet.getSelectedRoverId() != rid) {
-                    _fleet.selectNextRover();
-                }
-                break;
-            }
+        _fleet.selectRoverById(rid);
+        if (rid == 0) {
+            Serial.println("[BASE] Rover desselecionado via Web (Nenhum rover selecionado)");
+        } else {
+            Serial.printf("[BASE] Rover %u selecionado via Web\n", rid);
         }
-        _server.send(200, "application/json", "{\"status\":\"ok\"}");
+        _server.send(200, "application/json", "{\"status\":\"ok\",\"selected_rover_id\":" + String(rid) + "}");
     }
 
     // -------------------------------------------------------------

@@ -132,8 +132,8 @@ def generate_kicad_pcb(path):
         "", "/GND", "/+3V3", "/+5V", "/+5V_SERVO",
         "/IO5_NSS", "/IO4_MISO", "/IO3_MOSI", "/IO2_SCK",
         "/IO1_ADC", "/IO0_ADC", "/JOY_X", "/JOY_Y",
-        "/IO9_BOOT", "/IO18_ACT1_UP", "/IO19_WINCH_MODE", "/IO20_RUDDER_DN", "/IO23_ACT4",
-        "/IO12_LORA_DIO0", "/IO13_BUZ", "/IO16_GPS_RX", "/IO17_GPS_TX",
+        "/IO9_BOOT", "/IO18_ACT1_UP", "/IO19_WINCH_MODE", "/IO20_RUDDER_DN", "/IO23_LORA_DIO0",
+        "/IO12_USB_DM", "/IO13_BUZ", "/IO16_GPS_RX", "/IO17_GPS_TX",
         "/IO15", "/GPS_TX2", "/GPS_RX2", "/NC"
     ]
     net_map = {n: i for i, n in enumerate(all_nets)}
@@ -299,7 +299,7 @@ def generate_kicad_pcb(path):
         (5, 0.0,  5.08, "IO2_SCK", "circle"),
         (6, 2.54, 5.08, "IO3_MOSI", "circle"),
         (7, 0.0,  7.62, "IO4_MISO", "circle"),
-        (8, 2.54, 7.62, "IO12_LORA_DIO0", "circle"),
+        (8, 2.54, 7.62, "IO23_LORA_DIO0", "circle"),
     ]
     lines.append(f'  (footprint "Connector_PinHeader_2.54mm:PinHeader_2x04_P2.54mm_Vertical" (layer "F.Cu") (uuid "{new_uuid()}")')
     lines.append(f'    (at 12.0 16.0)')
@@ -942,7 +942,7 @@ def generate_kicad_sch(path):
     esp_t = ["IO5_NSS", "IO4_MISO", "IO3_MOSI", "IO2_SCK", "IO1_ADC", "IO0_ADC", "+3V3", "GND", "+5V"]
     place_conn_1row("Connector_Generic:Conn_01x09", "J1", "ESP32_T_LANDSCAPE", "Connector_PinHeader_2.54mm:PinHeader_1x09_P2.54mm_Horizontal", 50.80, 66.04, esp_t)
 
-    esp_b = ["IO9_BOOT", "IO18_ACT1_UP", "IO19_WINCH_MODE", "IO20_RUDDER_DN", "IO23_ACT4", "IO12_LORA_DIO0", "IO13_BUZ", "IO16_GPS_RX", "IO17_GPS_TX"]
+    esp_b = ["IO9_BOOT", "IO18_ACT1_UP", "IO19_WINCH_MODE", "IO20_RUDDER_DN", "IO23_LORA_DIO0", "IO12_USB_DM", "IO13_BUZ", "IO16_GPS_RX", "IO17_GPS_TX"]
     place_conn_1row_right("Connector_Generic:Conn_01x09_Right", "J2", "ESP32_B_LANDSCAPE", "Connector_PinHeader_2.54mm:PinHeader_1x09_P2.54mm_Horizontal", 111.76, 66.04, esp_b)
 
     sch_lines.append('	(polyline')
@@ -956,9 +956,9 @@ def generate_kicad_sch(path):
     sch_lines.append(f'	(text "WiFi 6 / BLE 5 / Zigbee" (at 82.55 77.47 0) (effects (font (size 1.2 1.2))) (uuid "{new_uuid()}"))')
 
     # BLOCK 2: SX1278 Ra-02 433MHz LoRa
-    add_block("2. SX1278 433MHz LORA TELEMETRY", "Hardware SPI (GP2/3/4/5) + DIO0 IRQ (GP12)", 152.40, 20.32, 264.16, 81.28)
+    add_block("2. SX1278 433MHz LORA TELEMETRY", "Hardware SPI (GP2/3/4/5) + DIO0 IRQ (GP23)", 152.40, 20.32, 264.16, 81.28)
     lora_odd = ["GND", "NC", "IO2_SCK", "IO4_MISO"]
-    lora_even = ["+3V3", "IO5_NSS", "IO3_MOSI", "IO12_LORA_DIO0"]
+    lora_even = ["+3V3", "IO5_NSS", "IO3_MOSI", "IO23_LORA_DIO0"]
     place_lora_2x4("J3", "SX1278_LORA_2x4", "Connector_PinHeader_2.54mm:PinHeader_2x04_P2.54mm_Vertical", 208.28, 50.80, lora_odd, lora_even)
 
     # BLOCK 3: GNSS / GPS LC29H

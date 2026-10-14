@@ -36,11 +36,11 @@ Ambas as placas usam a mesma pinagem para o módulo **LoRa Ra-02 (SX1278 a 433MH
 | :--- | :--- | :--- |
 | **VCC** | `3.3V` | Nunca ligar a 5V |
 | **GND** | `GND` | Terra comum |
-| **SCK** | `IO2` | Hardware SPI SCLK (Top Header Pino 4) |
-| **MOSI**| `IO3` | Hardware SPI MOSI (Top Header Pino 3) |
-| **MISO**| `IO4` | Hardware SPI MISO (Top Header Pino 2) |
-| **NSS / CS** | `IO5` | CS do LoRa (Top Header Pino 1) |
-| **DIO0**| `IO12`| Interrupção de pacotes (Bottom Header Pino 6) |
+| **SCK** | `IO2` | SPI SCLK (Top Header Pino 4) |
+| **MOSI**| `IO3` | SPI MOSI (Top Header Pino 3) |
+| **MISO**| `IO19`| SPI MISO (Bottom Header Pino 3) — Sem conflito com MicroSD |
+| **NSS / CS** | `IO20` | CS do LoRa (Bottom Header Pino 4) — Sem conflito com MicroSD |
+| **DIO0**| `IO23`| Interrupção de pacotes (Bottom Header Pino 5) — Sem conflito com USB |
 
 ---
 

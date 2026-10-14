@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gestão de Missão & Regata - WindDragons Base Station</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js"></script>
+</head>
+<body>
+  <header class="navbar">
+    <a href="/" class="brand">
+      <i class="fa-solid fa-tower-broadcast"></i> WindDragons <span>Base Station</span>
+    </a>
+    <nav class="nav-links">
+      <a href="/mission" class="nav-item active"><i class="fa-solid fa-flag-checkered"></i> Missão</a>
+<a href="/portal" class="nav-item "><i class="fa-solid fa-cloud"></i> Portal Cloud</a>
+<a href="/wifi" class="nav-item "><i class="fa-solid fa-wifi"></i> WiFi Base</a>
+<a href="/gps" class="nav-item "><i class="fa-solid fa-location-dot"></i> GPS Frota</a>
+<a href="/battery" class="nav-item "><i class="fa-solid fa-battery-three-quarters"></i> Bateria Frota</a>
+<a href="/control" class="nav-item "><i class="fa-solid fa-gamepad"></i> Comandos</a>
+<a href="/sd" class="nav-item "><i class="fa-solid fa-folder"></i> Cartão SD</a>
+
+    </nav>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span id="navOpStateBadge" class="badge" style="background:#64748b;color:#fff;font-weight:700;">
+        <i class="fa-solid fa-flag"></i> <span id="navOpStateText">STORAGE</span>
+      </span>
+      <span id="navStationBadge" class="badge" style="background:rgba(2,132,199,0.2);color:#38bdf8;border:1px solid rgba(56,189,248,0.3);font-family:monospace;">
+        <i class="fa-solid fa-fingerprint"></i> <span id="navStationId">ID Base</span>
+      </span>
+      <span id="navWifiBadge" class="badge badge-sta">
+        <i class="fa-solid fa-wifi"></i> A carregar...
+      </span>
+    </div>
+  </header>
+
+  <main class="container">
+    
+<div class="card">
+  <div class="card-title">
+    <span><i class="fa-solid fa-flag-checkered"></i> Estado de Operação da Estação Base</span>
+    <span id="badgeState" class="badge" style="background:#64748b;color:#fff;font-size:0.85rem;padding:6px 14px;">
+      STORAGE - Not in use
+    </span>
+  </div>
+  <p style="color:var(--muted);font-size:0.875rem;margin-bottom:14px;">
+    Selecione o estado operacional da Estação Base para a missão atual:
+  </p>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;">
+    <button onclick="setState('STORAGE')" id="btnStateSTORAGE" class="btn" style="display:flex;flex-direction:column;align-items:flex-start;padding:14px;background:rgba(255,255,255,0.05);color:#fff;border:1px solid var(--card-border);">
+      <span style="font-size:1.05rem;font-weight:700;"><i class="fa-solid fa-box-archive"></i> Storage</span>
+      <span style="font-size:0.75rem;color:var(--muted);margin-top:4px;">Not in use (Standby)</span>
+    </button>
+
+    <button onclick="setState('WAITING_ROVERS')" id="btnStateWAITING_ROVERS" class="btn" style="display:flex;flex-direction:column;align-items:flex-start;padding:14px;background:rgba(255,255,255,0.05);color:#fff;border:1px solid var(--card-border);">
+      <span style="font-size:1.05rem;font-weight:700;"><i class="fa-solid fa-hourglass-half"></i> Waiting Rover List</span>
+      <span style="font-size:0.75rem;color:var(--muted);margin-top:4px;">Connected and waiting</span>
+    </button>
+
+    <button onclick="setState('IDLE')" id="btnStateIDLE" class="btn" style="display:flex;flex-direction:column;align-items:flex-start;padding:14px;background:rgba(255,255,255,0.05);color:#fff;border:1px solid var(--card-border);">
+      <span style="font-size:1.05rem;font-weight:700;"><i class="fa-solid fa-anchor"></i> Idle</span>
+      <span style="font-size:0.75rem;color:var(--muted);margin-top:4px;">Rover list ready</span>
+    </button>
+
+    <button onclick="setState('GO')" id="btnStateGO" class="btn" style="display:flex;flex-direction:column;align-items:flex-start;padding:14px;background:rgba(255,255,255,0.05);color:#fff;border:1px solid var(--card-border);">
+      <span style="font-size:1.05rem;font-weight:700;"><i class="fa-solid fa-rocket"></i> Go</span>
+      <span style="font-size:0.75rem;color:var(--muted);margin-top:4px;">In mission (Ativo)</span>
+    </button>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">
+    <span><i class="fa-solid fa-sailboat"></i> Dados do Percurso / Regata</span>
+  </div>
+  <div class="grid-2">
+    <div class="form-group">
+      <label class="stat-label">ID da Regata / Prova</label>
+      <input type="text" id="raceIdInput" placeholder="ex: REGATA-TEJO-2026-R1">
+    </div>
+    <div class="form-group">
+      <label class="stat-label">Nome da Missão / Prova</label>
+      <input type="text" id="missionNameInput" placeholder="ex: Troféu de Outono - Prova 1">
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">
+    <span><i class="fa-solid fa-satellite-dish"></i> Lista de Bóias da Missão (Persistente no MicroSD)</span>
+    <span style="font-size:0.8rem;color:var(--muted);font-weight:normal;">/config/rovers.json</span>
+  </div>
+
+  <div style="overflow-x:auto;">
+    <table id="roversTable">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Nome</th>
+          <th>MAC Address</th>
+          <th>Papel / Role</th>
+          <th>Coord. Alvo (Lat, Lng)</th>
+          <th>Status LoRa / Bat / Âncora</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="roversTbody">
+        <tr><td colspan="7" style="text-align:center;color:var(--muted);">A carregar lista de bóias...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;">
+    <button onclick="addRow()" class="btn btn-secondary"><i class="fa-solid fa-plus"></i> Adicionar Bóia</button>
+    <button onclick="saveRovers()" class="btn btn-primary" style="padding:10px 24px;"><i class="fa-solid fa-floppy-disk"></i> Guardar Lista no MicroSD</button>
+    <button onclick="clearRovers()" class="btn btn-danger" style="background:#78350f;"><i class="fa-solid fa-rotate-left"></i> Repor Pré-definições</button>
+  </div>
+</div>
+
+<script>
+let currentRoversData = [];
+const rolesList = ['largada CR', 'largada', 'boia 1', 'boia 2', 'boia 3', 'boia 4', 'chegada CR', 'chegada'];
+
+function updateStateButtons(st) {
+  const badge = document.getElementById('badgeState');
+  const btnIds = ['STORAGE', 'WAITING_ROVERS', 'IDLE', 'GO'];
+  const colors = {
+    'STORAGE': { bg: '#475569', border: '#94a3b8', desc: 'Not in use (Standby)' },
+    'WAITING_ROVERS': { bg: '#b45309', border: '#f59e0b', desc: 'Connected and waiting' },
+    'IDLE': { bg: '#0e7490', border: '#06b6d4', desc: 'Rover list ready' },
+    'GO': { bg: '#047857', border: '#10b981', desc: 'In mission (Ativo)' }
+  };
+  
+  const c = colors[st] || colors['STORAGE'];
+  if (badge) {
+    badge.style.background = c.border;
+    badge.innerText = st + ' - ' + c.desc;
+  }
+
+  btnIds.forEach(id => {
+    const btn = document.getElementById('btnState' + id);
+    if (btn) {
+      if (id === st) {
+        btn.style.background = c.bg;
+        btn.style.border = '2px solid ' + c.border;
+      } else {
+        btn.style.background = 'rgba(255,255,255,0.05)';
+        btn.style.border = '1px solid var(--card-border)';
+      }
+    }
+  });
+}
+
+function setState(st) {
+  fetch('/api/mission/state', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ state: st })
+  })
+  .then(r => r.json())
+  .then(res => {
+    if (res.status === 'ok') {
+      updateStateButtons(res.operation_state);
+      loadMissionData();
+    }
+  });
+}
+
+let currentSelectedRoverId = 0;
+
+function loadMissionData() {
+  fetch('/api/mission')
+    .then(r => r.json())
+    .then(data => {
+      if (data.operation_state) {
+        updateStateButtons(data.operation_state);
+      }
+      if (data.selected_rover_id !== undefined) {
+        currentSelectedRoverId = data.selected_rover_id;
+      }
+      if (data.race_id && document.activeElement !== document.getElementById('raceIdInput')) {
+        document.getElementById('raceIdInput').value = data.race_id;
+      }
+      if (data.mission_name && document.activeElement !== document.getElementById('missionNameInput')) {
+        document.getElementById('missionNameInput').value = data.mission_name;
+      }
+
+      if (data.rovers && Array.isArray(data.rovers)) {
+        renderRoversTable(data.rovers);
+      }
+    })
+    .catch(() => {});
+}
+
+function renderRoversTable(rovers) {
+  currentRoversData = rovers;
+  const tbody = document.getElementById('roversTbody');
+  if (!tbody) return;
+
+  if (tbody.contains(document.activeElement)) return;
+
+  let html = '';
+  rovers.forEach((r, idx) => {
+    const isOnline = r.is_online;
+    const isSelected = (currentSelectedRoverId === r.id);
+    const batCol = (r.battery_pct < 25) ? 'var(--red)' : ((r.battery_pct < 50) ? 'var(--yellow)' : 'var(--green)');
+    
+    let optHtml = '';
+    rolesList.forEach(ro => {
+      const sel = (r.role === ro) ? 'selected' : '';
+      optHtml += `<option value="${ro}" ${sel}>${ro}</option>`;
+    });
+
+    html += `<tr id="rRow_${r.id}">
+      <td><strong>${r.id}</strong></td>
+      <td><input type="text" class="r-name" value="${r.name || ('Rover ' + r.id)}" style="width:120px;padding:6px;"></td>
+      <td><input type="text" class="r-mac" value="${r.mac || r.mac_address || ''}" style="width:140px;font-family:monospace;padding:6px;"></td>
+      <td><select class="r-role" style="width:120px;padding:6px;">${optHtml}</select></td>
+      <td>
+        <div style="display:flex;gap:4px;">
+          <input type="number" step="0.000001" class="r-lat" value="${(r.target_lat || 0).toFixed(6)}" placeholder="Lat" style="width:90px;padding:6px;">
+          <input type="number" step="0.000001" class="r-lng" value="${(r.target_lng || 0).toFixed(6)}" placeholder="Lng" style="width:90px;padding:6px;">
+        </div>
+      </td>
+      <td>
+        <span class="badge" style="background:${isOnline ? '#065f46' : '#7f1d1d'};color:${isOnline ? '#6ee7b7' : '#fca5a5'};">
+          ${isOnline ? 'ONLINE' : 'OFFLINE'}
+        </span>
+        ${isOnline ? `<strong style="color:${batCol};margin-left:4px;">${r.battery_pct}%</strong>` : ''}
+        ${isOnline && r.anchor_depth_m > 0.05 ? `<div style="font-size:0.75rem;color:var(--yellow);margin-top:2px;"><i class="fa-solid fa-anchor"></i> Âncora: ${r.anchor_depth_m.toFixed(2)}m</div>` : ''}
+      </td>
+      <td>
+        <div style="display:flex;gap:4px;">
+          ${isSelected 
+            ? `<button onclick="selectRover(0)" class="btn" style="background:#059669;color:#fff;padding:4px 8px;font-size:0.75rem;" title="Clique para desmarcar"><i class="fa-solid fa-check"></i> Ativo no LCD</button>` 
+            : `<button onclick="selectRover(${r.id})" class="btn btn-primary" style="padding:4px 8px;font-size:0.75rem;">Selecionar</button>`}
+          <button onclick="deleteRow(${r.id})" class="btn btn-danger" style="padding:4px 8px;font-size:0.75rem;" title="Remover Bóia">
+            <i class="fa-solid fa-trash"></i>
+          </button>
+        </div>
+      </td>
+    </tr>`;
+  });
+
+  tbody.innerHTML = html;
+}
+
+function selectRover(id) {
+  fetch('/api/select_rover', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rover_id: parseInt(id) })
+  })
+  .then(r => r.json())
+  .then(() => {
+    loadMissionData();
+  });
+}
+
+function deleteRow(id) {
+  const row = document.getElementById('rRow_' + id);
+  if (row) row.remove();
+}
+
+function addRow() {
+  const tbody = document.getElementById('roversTbody');
+  const id = tbody.children.length + 1;
+  const tr = document.createElement('tr');
+  tr.id = 'rRow_' + id;
+  
+  let optHtml = '';
+  rolesList.forEach((ro, i) => {
+    optHtml += `<option value="${ro}" ${i === 0 ? 'selected' : ''}>${ro}</option>`;
+  });
+
+  tr.innerHTML = `<td><strong>${id}</strong></td>
+    <td><input type="text" class="r-name" value="WD-Boia-${id}" style="width:120px;padding:6px;"></td>
+    <td><input type="text" class="r-mac" value="00:00:00:00:00:0${id}" style="width:140px;font-family:monospace;padding:6px;"></td>
+    <td><select class="r-role" style="width:120px;padding:6px;">${optHtml}</select></td>
+    <td>
+      <div style="display:flex;gap:4px;">
+        <input type="number" step="0.000001" class="r-lat" value="0.000000" style="width:90px;padding:6px;">
+        <input type="number" step="0.000001" class="r-lng" value="0.000000" style="width:90px;padding:6px;">
+      </div>
+    </td>
+    <td><span class="badge" style="background:#334155;color:#94a3b8;">NOVO</span></td>
+    <td>
+      <button onclick="deleteRow(${id})" class="btn btn-danger" style="padding:4px 8px;font-size:0.75rem;">
+        <i class="fa-solid fa-trash"></i>
+      </button>
+    </td>`;
+  tbody.appendChild(tr);
+}
+
+function saveRovers() {
+  const raceId = document.getElementById('raceIdInput').value;
+  const missionName = document.getElementById('missionNameInput').value;
+  const rows = document.querySelectorAll('#roversTbody tr');
+  const rovers = [];
+
+  rows.forEach((r, idx) => {
+    const nameInput = r.querySelector('.r-name');
+    if (!nameInput) return;
+    const name = nameInput.value;
+    const mac = r.querySelector('.r-mac').value;
+    const role = r.querySelector('.r-role').value;
+    const lat = parseFloat(r.querySelector('.r-lat').value) || 0.0;
+    const lng = parseFloat(r.querySelector('.r-lng').value) || 0.0;
+    rovers.push({ id: idx + 1, name: name, mac_address: mac, role: role, lat: lat, lng: lng });
+  });
+
+  fetch('/api/mission/rovers', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ race_id: raceId, mission_name: missionName, rovers: rovers })
+  })
+  .then(r => r.json())
+  .then(res => {
+    alert('Lista de ' + res.rover_count + ' bóias guardada no MicroSD com sucesso!');
+    loadMissionData();
+  })
+  .catch(err => alert('Erro ao gravar: ' + err));
+}
+
+function clearRovers() {
+  if (confirm('Tem a certeza que deseja repor a lista de bóias para os valores padrão?')) {
+    fetch('/api/mission/clear', { method: 'POST' })
+      .then(r => r.json())
+      .then(() => loadMissionData());
+  }
+}
+
+document.addEventListener('DOMContentLoaded', loadMissionData);
+setInterval(loadMissionData, 2000);
+</script>
+
+  </main>
+
+  <footer style="text-align:center;color:var(--muted);font-size:0.75rem;margin-top:24px;">
+    WindDragons Telemetry Base Station &copy; 2026 &bull; MicroSD /www/base/ Frontend
+  </footer>
+</body>
+</html>

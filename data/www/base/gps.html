@@ -13,7 +13,8 @@
       <i class="fa-solid fa-tower-broadcast"></i> WindDragons <span>Base Station</span>
     </a>
     <nav class="nav-links">
-      <a href="/portal" class="nav-item "><i class="fa-solid fa-cloud"></i> Portal Cloud</a>
+      <a href="/mission" class="nav-item "><i class="fa-solid fa-flag-checkered"></i> Missão</a>
+<a href="/portal" class="nav-item "><i class="fa-solid fa-cloud"></i> Portal Cloud</a>
 <a href="/wifi" class="nav-item "><i class="fa-solid fa-wifi"></i> WiFi Base</a>
 <a href="/gps" class="nav-item active"><i class="fa-solid fa-location-dot"></i> GPS Frota</a>
 <a href="/battery" class="nav-item "><i class="fa-solid fa-battery-three-quarters"></i> Bateria Frota</a>
@@ -22,6 +23,9 @@
 
     </nav>
     <div style="display:flex;align-items:center;gap:10px;">
+      <span id="navOpStateBadge" class="badge" style="background:#64748b;color:#fff;font-weight:700;">
+        <i class="fa-solid fa-flag"></i> <span id="navOpStateText">STORAGE</span>
+      </span>
       <span id="navStationBadge" class="badge" style="background:rgba(2,132,199,0.2);color:#38bdf8;border:1px solid rgba(56,189,248,0.3);font-family:monospace;">
         <i class="fa-solid fa-fingerprint"></i> <span id="navStationId">ID Base</span>
       </span>
@@ -130,8 +134,19 @@ function refreshData() {
         document.getElementById('rssiVal').innerText = (sel.rssi || 0) + ' dBm';
         
         const st = document.getElementById('fixStatus');
-        st.innerText = sel.is_online ? 'ONLINE' : 'OFFLINE';
-        st.style.color = sel.is_online ? 'var(--green)' : 'var(--red)';
+        if (sel.is_online) {
+          st.innerText = 'ONLINE';
+          st.style.color = 'var(--green)';
+        } else if (data.lora_ready) {
+          st.innerText = 'RÁDIO OK (ESCUTA)';
+          st.style.color = 'var(--primary)';
+        } else if (data.lora_enabled) {
+          st.innerText = 'FALHA RÁDIO';
+          st.style.color = 'var(--red)';
+        } else {
+          st.innerText = 'REPOUSO';
+          st.style.color = 'var(--muted)';
+        }
 
         document.getElementById('mapsLink').href = 'https://maps.google.com/?q=' + sel.lat + ',' + sel.lng;
         document.getElementById('osmLink').href = 'https://www.openstreetmap.org/?mlat=' + sel.lat + '&mlon=' + sel.lng + '#map=17/' + sel.lat + '/' + sel.lng;

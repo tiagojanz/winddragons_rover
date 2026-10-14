@@ -13,7 +13,8 @@
       <i class="fa-solid fa-tower-broadcast"></i> WindDragons <span>Base Station</span>
     </a>
     <nav class="nav-links">
-      <a href="/portal" class="nav-item "><i class="fa-solid fa-cloud"></i> Portal Cloud</a>
+      <a href="/mission" class="nav-item "><i class="fa-solid fa-flag-checkered"></i> Missão</a>
+<a href="/portal" class="nav-item "><i class="fa-solid fa-cloud"></i> Portal Cloud</a>
 <a href="/wifi" class="nav-item active"><i class="fa-solid fa-wifi"></i> WiFi Base</a>
 <a href="/gps" class="nav-item "><i class="fa-solid fa-location-dot"></i> GPS Frota</a>
 <a href="/battery" class="nav-item "><i class="fa-solid fa-battery-three-quarters"></i> Bateria Frota</a>
@@ -22,6 +23,9 @@
 
     </nav>
     <div style="display:flex;align-items:center;gap:10px;">
+      <span id="navOpStateBadge" class="badge" style="background:#64748b;color:#fff;font-weight:700;">
+        <i class="fa-solid fa-flag"></i> <span id="navOpStateText">STORAGE</span>
+      </span>
       <span id="navStationBadge" class="badge" style="background:rgba(2,132,199,0.2);color:#38bdf8;border:1px solid rgba(56,189,248,0.3);font-family:monospace;">
         <i class="fa-solid fa-fingerprint"></i> <span id="navStationId">ID Base</span>
       </span>
@@ -212,6 +216,98 @@ document.addEventListener('DOMContentLoaded', () => {
   loadSavedNetworks();
   scanNetworks();
 });
+</script>
+
+<div class="card">
+  <div class="card-title">
+    <span><i class="fa-solid fa-sun"></i> Brilho do Ecrã (Display LCD ST7789)</span>
+    <span id="brightValBadge" class="badge" style="background:#1e293b;color:var(--primary);font-size:0.9rem;font-weight:700;">85%</span>
+  </div>
+  <p style="color:var(--muted);font-size:0.875rem;margin-bottom:16px;">
+    Ajuste o brilho da retroiluminação por PWM (LEDC GPIO 22). Ao mover o cursor, o ecrã atualiza em tempo real.
+  </p>
+
+  <div style="background:rgba(0,0,0,0.25);padding:18px;border-radius:12px;border:1px solid var(--card-border);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <span style="font-size:0.85rem;color:var(--muted);"><i class="fa-solid fa-moon"></i> 5% Mínimo</span>
+      <span id="brightDisplayVal" style="font-size:1.8rem;font-weight:700;color:var(--primary);">85%</span>
+      <span style="font-size:0.85rem;color:var(--muted);"><i class="fa-solid fa-sun"></i> 100% Máximo</span>
+    </div>
+    <input type="range" id="cfg_bright" min="5" max="100" step="1" value="85" class="slider" oninput="onBrightSlide(this.value)" onchange="onBrightChange(this.value)">
+
+    <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;">
+      <button type="button" onclick="setPreset(25)" class="btn btn-secondary" style="padding:6px 12px;font-size:0.8rem;"><i class="fa-solid fa-moon"></i> 25% (Poupança)</button>
+      <button type="button" onclick="setPreset(50)" class="btn btn-secondary" style="padding:6px 12px;font-size:0.8rem;"><i class="fa-solid fa-cloud-sun"></i> 50% (Normal)</button>
+      <button type="button" onclick="setPreset(75)" class="btn btn-secondary" style="padding:6px 12px;font-size:0.8rem;"><i class="fa-solid fa-sun"></i> 75% (Dia)</button>
+      <button type="button" onclick="setPreset(100)" class="btn btn-secondary" style="padding:6px 12px;font-size:0.8rem;"><i class="fa-solid fa-bolt"></i> 100% (Sol Máximo)</button>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">
+    <span><i class="fa-solid fa-tv"></i> Configuração do Ecrã LCD (Base Station)</span>
+    <span class="badge" style="background:#1e3a8a;color:#93c5fd;">ST7789 320x172</span>
+  </div>
+  <p style="color:var(--muted);font-size:0.875rem;margin-bottom:14px;">
+    O ecrã da Estação Base possui 3 ecrãs principais essenciais: <strong>1. Estação (ID, MAC, Estado)</strong>, <strong>2. Conectividade WiFi</strong> e <strong>3. Rover Selecionado</strong>.
+  </p>
+  <div class="form-group" style="display:flex;align-items:center;gap:12px;padding:12px;background:rgba(255,255,255,0.03);border:1px solid var(--card-border);border-radius:8px;">
+    <input type="checkbox" id="joyScreenCheck" onchange="toggleJoyScreen(this.checked)" style="width:20px;height:20px;cursor:pointer;">
+    <label for="joyScreenCheck" style="cursor:pointer;font-size:0.95rem;font-weight:600;">
+      Ativar 4º Ecrã: Teste do Joystick
+      <div style="font-size:0.75rem;font-weight:normal;color:var(--muted);margin-top:2px;">
+        Adiciona a mira analógica 2D e diagnóstico dos eixos ADC ao carrossel de navegação do ecrã físico.
+      </div>
+    </label>
+  </div>
+</div>
+<script>
+let slideTimer = null;
+function onBrightSlide(v) {
+  const elVal = document.getElementById('brightDisplayVal');
+  if (elVal) elVal.innerText = v + '%';
+  const elBadge = document.getElementById('brightValBadge');
+  if (elBadge) elBadge.innerText = v + '%';
+  if (slideTimer) clearTimeout(slideTimer);
+  slideTimer = setTimeout(() => {
+    fetch('/api/display/brightness?val=' + v, { method: 'POST' }).catch(() => {});
+  }, 60);
+}
+function onBrightChange(v) {
+  fetch('/api/display/brightness?val=' + v, { method: 'POST' }).catch(() => {});
+}
+function setPreset(v) {
+  const el = document.getElementById('cfg_bright');
+  if (el) el.value = v;
+  onBrightSlide(v);
+  onBrightChange(v);
+}
+fetch('/api/display').then(r=>r.json()).then(d=>{
+  const c = document.getElementById('joyScreenCheck');
+  if (c) c.checked = !!d.joy_screen;
+  const b = d.screen_brightness || d.brightness || 85;
+  const el = document.getElementById('cfg_bright');
+  if (el) el.value = b;
+  const elVal = document.getElementById('brightDisplayVal');
+  if (elVal) elVal.innerText = b + '%';
+  const elBadge = document.getElementById('brightValBadge');
+  if (elBadge) elBadge.innerText = b + '%';
+}).catch(()=>{});
+function toggleJoyScreen(enabled){
+  fetch('/api/display',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({joy_screen:enabled})
+  })
+  .then(r=>r.json())
+  .then(res=>{
+    alert(res.joy_screen ? '4º Ecrã (Teste Joystick) ativado no LCD!' : '4º Ecrã desativado. LCD em modo simplificado de 3 ecrãs.');
+  })
+  .catch(e=>{
+    alert('Erro ao guardar configuração do ecrã');
+  });
+}
 </script>
 
   </main>

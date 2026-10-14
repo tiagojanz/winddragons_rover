@@ -554,6 +554,13 @@ input:focus, select:focus, textarea:focus {
 .fa-list:before { content: '\\f03a'; }
 .fa-copy:before { content: '\\f0c5'; }
 .fa-filter:before { content: '\\f0b0'; }
+.fa-flag-checkered:before { content: '\\f11e'; }
+.fa-flag:before { content: '\\f024'; }
+.fa-sailboat:before { content: '\\f445'; }
+.fa-rocket:before { content: '\\f135'; }
+.fa-box-archive:before { content: '\\f187'; }
+.fa-hourglass-half:before { content: '\\f252'; }
+.fa-satellite-dish:before { content: '\\f7c0'; }
 """
 
 # ----------------------------------------------------------------------
@@ -612,6 +619,21 @@ function pollGlobalStatus() {
       const roverSpan = document.getElementById('navRoverId');
       if (roverSpan && data.rover_id) {
         roverSpan.innerText = 'Rover-' + data.rover_id;
+      }
+      const opBadge = document.getElementById('navOpStateBadge');
+      const opText = document.getElementById('navOpStateText');
+      if (opText && data.operation_state) {
+        opText.innerText = data.operation_state;
+        const colors = {
+          'STORAGE': '#64748b',
+          'WAITING_ROVERS': '#f59e0b',
+          'WAITING ROVERS': '#f59e0b',
+          'IDLE': '#06b6d4',
+          'GO': '#10b981'
+        };
+        if (opBadge) {
+          opBadge.style.background = colors[data.operation_state] || '#64748b';
+        }
       }
     })
     .catch(() => {});
@@ -675,6 +697,7 @@ def generate_html_page(title, active_tab, body_content):
 
 def generate_base_html_page(title, active_tab, body_content):
     tabs = [
+        ("mission", "/mission", "fa-flag-checkered", "Missão"),
         ("portal", "/portal", "fa-cloud", "Portal Cloud"),
         ("wifi", "/wifi", "fa-wifi", "WiFi Base"),
         ("gps", "/gps", "fa-location-dot", "GPS Frota"),
@@ -705,6 +728,9 @@ def generate_base_html_page(title, active_tab, body_content):
       {nav_links}
     </nav>
     <div style="display:flex;align-items:center;gap:10px;">
+      <span id="navOpStateBadge" class="badge" style="background:#64748b;color:#fff;font-weight:700;">
+        <i class="fa-solid fa-flag"></i> <span id="navOpStateText">STORAGE</span>
+      </span>
       <span id="navStationBadge" class="badge" style="background:rgba(2,132,199,0.2);color:#38bdf8;border:1px solid rgba(56,189,248,0.3);font-family:monospace;">
         <i class="fa-solid fa-fingerprint"></i> <span id="navStationId">ID Base</span>
       </span>
@@ -2001,8 +2027,19 @@ function refreshData() {
         document.getElementById('rssiVal').innerText = (sel.rssi || 0) + ' dBm';
         
         const st = document.getElementById('fixStatus');
-        st.innerText = sel.is_online ? 'ONLINE' : 'OFFLINE';
-        st.style.color = sel.is_online ? 'var(--green)' : 'var(--red)';
+        if (sel.is_online) {
+          st.innerText = 'ONLINE';
+          st.style.color = 'var(--green)';
+        } else if (data.lora_ready) {
+          st.innerText = 'RÁDIO OK (ESCUTA)';
+          st.style.color = 'var(--primary)';
+        } else if (data.lora_enabled) {
+          st.innerText = 'FALHA RÁDIO';
+          st.style.color = 'var(--red)';
+        } else {
+          st.innerText = 'REPOUSO';
+          st.style.color = 'var(--muted)';
+        }
 
         document.getElementById('mapsLink').href = 'https://maps.google.com/?q=' + sel.lat + ',' + sel.lng;
         document.getElementById('osmLink').href = 'https://www.openstreetmap.org/?mlat=' + sel.lat + '&mlon=' + sel.lng + '#map=17/' + sel.lat + '/' + sel.lng;
@@ -2329,12 +2366,407 @@ BASE_WIFI_CARD = """
 </div>
 """
 
+BASE_LCD_CARD = """
+<div class="card">
+  <div class="card-title">
+    <span><i class="fa-solid fa-sun"></i> Brilho do Ecrã (Display LCD ST7789)</span>
+    <span id="brightValBadge" class="badge" style="background:#1e293b;color:var(--primary);font-size:0.9rem;font-weight:700;">85%</span>
+  </div>
+  <p style="color:var(--muted);font-size:0.875rem;margin-bottom:16px;">
+    Ajuste o brilho da retroiluminação por PWM (LEDC GPIO 22). Ao mover o cursor, o ecrã atualiza em tempo real.
+  </p>
+
+  <div style="background:rgba(0,0,0,0.25);padding:18px;border-radius:12px;border:1px solid var(--card-border);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <span style="font-size:0.85rem;color:var(--muted);"><i class="fa-solid fa-moon"></i> 5% Mínimo</span>
+      <span id="brightDisplayVal" style="font-size:1.8rem;font-weight:700;color:var(--primary);">85%</span>
+      <span style="font-size:0.85rem;color:var(--muted);"><i class="fa-solid fa-sun"></i> 100% Máximo</span>
+    </div>
+    <input type="range" id="cfg_bright" min="5" max="100" step="1" value="85" class="slider" oninput="onBrightSlide(this.value)" onchange="onBrightChange(this.value)">
+
+    <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;">
+      <button type="button" onclick="setPreset(25)" class="btn btn-secondary" style="padding:6px 12px;font-size:0.8rem;"><i class="fa-solid fa-moon"></i> 25% (Poupança)</button>
+      <button type="button" onclick="setPreset(50)" class="btn btn-secondary" style="padding:6px 12px;font-size:0.8rem;"><i class="fa-solid fa-cloud-sun"></i> 50% (Normal)</button>
+      <button type="button" onclick="setPreset(75)" class="btn btn-secondary" style="padding:6px 12px;font-size:0.8rem;"><i class="fa-solid fa-sun"></i> 75% (Dia)</button>
+      <button type="button" onclick="setPreset(100)" class="btn btn-secondary" style="padding:6px 12px;font-size:0.8rem;"><i class="fa-solid fa-bolt"></i> 100% (Sol Máximo)</button>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">
+    <span><i class="fa-solid fa-tv"></i> Configuração do Ecrã LCD (Base Station)</span>
+    <span class="badge" style="background:#1e3a8a;color:#93c5fd;">ST7789 320x172</span>
+  </div>
+  <p style="color:var(--muted);font-size:0.875rem;margin-bottom:14px;">
+    O ecrã da Estação Base possui 3 ecrãs principais essenciais: <strong>1. Estação (ID, MAC, Estado)</strong>, <strong>2. Conectividade WiFi</strong> e <strong>3. Rover Selecionado</strong>.
+  </p>
+  <div class="form-group" style="display:flex;align-items:center;gap:12px;padding:12px;background:rgba(255,255,255,0.03);border:1px solid var(--card-border);border-radius:8px;">
+    <input type="checkbox" id="joyScreenCheck" onchange="toggleJoyScreen(this.checked)" style="width:20px;height:20px;cursor:pointer;">
+    <label for="joyScreenCheck" style="cursor:pointer;font-size:0.95rem;font-weight:600;">
+      Ativar 4º Ecrã: Teste do Joystick
+      <div style="font-size:0.75rem;font-weight:normal;color:var(--muted);margin-top:2px;">
+        Adiciona a mira analógica 2D e diagnóstico dos eixos ADC ao carrossel de navegação do ecrã físico.
+      </div>
+    </label>
+  </div>
+</div>
+<script>
+let slideTimer = null;
+function onBrightSlide(v) {
+  const elVal = document.getElementById('brightDisplayVal');
+  if (elVal) elVal.innerText = v + '%';
+  const elBadge = document.getElementById('brightValBadge');
+  if (elBadge) elBadge.innerText = v + '%';
+  if (slideTimer) clearTimeout(slideTimer);
+  slideTimer = setTimeout(() => {
+    fetch('/api/display/brightness?val=' + v, { method: 'POST' }).catch(() => {});
+  }, 60);
+}
+function onBrightChange(v) {
+  fetch('/api/display/brightness?val=' + v, { method: 'POST' }).catch(() => {});
+}
+function setPreset(v) {
+  const el = document.getElementById('cfg_bright');
+  if (el) el.value = v;
+  onBrightSlide(v);
+  onBrightChange(v);
+}
+fetch('/api/display').then(r=>r.json()).then(d=>{
+  const c = document.getElementById('joyScreenCheck');
+  if (c) c.checked = !!d.joy_screen;
+  const b = d.screen_brightness || d.brightness || 85;
+  const el = document.getElementById('cfg_bright');
+  if (el) el.value = b;
+  const elVal = document.getElementById('brightDisplayVal');
+  if (elVal) elVal.innerText = b + '%';
+  const elBadge = document.getElementById('brightValBadge');
+  if (elBadge) elBadge.innerText = b + '%';
+}).catch(()=>{});
+function toggleJoyScreen(enabled){
+  fetch('/api/display',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({joy_screen:enabled})
+  })
+  .then(r=>r.json())
+  .then(res=>{
+    alert(res.joy_screen ? '4º Ecrã (Teste Joystick) ativado no LCD!' : '4º Ecrã desativado. LCD em modo simplificado de 3 ecrãs.');
+  })
+  .catch(e=>{
+    alert('Erro ao guardar configuração do ecrã');
+  });
+}
+</script>
+"""
+
 BASE_WIFI_CONTENT = BASE_WIFI_CARD + WIFI_CONTENT.replace(
     "Ligue o Rover ao router Wi-Fi do cais ou centro de comando para telemetria em tempo real e acesso local direto.",
     "Ligue a Base Station ao router Wi-Fi local para permitir controlo via browser e telemetria da frota em tempo real."
-).replace("Redes Guardadas no Rover", "Redes Guardadas na Base Station")
+).replace("Redes Guardadas no Rover", "Redes Guardadas na Base Station") + BASE_LCD_CARD
 
 BASE_SD_CONTENT = SD_CONTENT.replace("Explorador do Cartão MicroSD", "Explorador MicroSD - Base Station").replace("Cartão MicroSD - Rover", "Cartão MicroSD - Base Station").replace("let currentDir = '/';", "let currentDir = '/www/base';")
+
+BASE_MISSION_CONTENT = """
+<div class="card">
+  <div class="card-title">
+    <span><i class="fa-solid fa-flag-checkered"></i> Estado de Operação da Estação Base</span>
+    <span id="badgeState" class="badge" style="background:#64748b;color:#fff;font-size:0.85rem;padding:6px 14px;">
+      STORAGE - Not in use
+    </span>
+  </div>
+  <p style="color:var(--muted);font-size:0.875rem;margin-bottom:14px;">
+    Selecione o estado operacional da Estação Base para a missão atual:
+  </p>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;">
+    <button onclick="setState('STORAGE')" id="btnStateSTORAGE" class="btn" style="display:flex;flex-direction:column;align-items:flex-start;padding:14px;background:rgba(255,255,255,0.05);color:#fff;border:1px solid var(--card-border);">
+      <span style="font-size:1.05rem;font-weight:700;"><i class="fa-solid fa-box-archive"></i> Storage</span>
+      <span style="font-size:0.75rem;color:var(--muted);margin-top:4px;">Not in use (Standby)</span>
+    </button>
+
+    <button onclick="setState('WAITING_ROVERS')" id="btnStateWAITING_ROVERS" class="btn" style="display:flex;flex-direction:column;align-items:flex-start;padding:14px;background:rgba(255,255,255,0.05);color:#fff;border:1px solid var(--card-border);">
+      <span style="font-size:1.05rem;font-weight:700;"><i class="fa-solid fa-hourglass-half"></i> Waiting Rover List</span>
+      <span style="font-size:0.75rem;color:var(--muted);margin-top:4px;">Connected and waiting</span>
+    </button>
+
+    <button onclick="setState('IDLE')" id="btnStateIDLE" class="btn" style="display:flex;flex-direction:column;align-items:flex-start;padding:14px;background:rgba(255,255,255,0.05);color:#fff;border:1px solid var(--card-border);">
+      <span style="font-size:1.05rem;font-weight:700;"><i class="fa-solid fa-anchor"></i> Idle</span>
+      <span style="font-size:0.75rem;color:var(--muted);margin-top:4px;">Rover list ready</span>
+    </button>
+
+    <button onclick="setState('GO')" id="btnStateGO" class="btn" style="display:flex;flex-direction:column;align-items:flex-start;padding:14px;background:rgba(255,255,255,0.05);color:#fff;border:1px solid var(--card-border);">
+      <span style="font-size:1.05rem;font-weight:700;"><i class="fa-solid fa-rocket"></i> Go</span>
+      <span style="font-size:0.75rem;color:var(--muted);margin-top:4px;">In mission (Ativo)</span>
+    </button>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">
+    <span><i class="fa-solid fa-sailboat"></i> Dados do Percurso / Regata</span>
+  </div>
+  <div class="grid-2">
+    <div class="form-group">
+      <label class="stat-label">ID da Regata / Prova</label>
+      <input type="text" id="raceIdInput" placeholder="ex: REGATA-TEJO-2026-R1">
+    </div>
+    <div class="form-group">
+      <label class="stat-label">Nome da Missão / Prova</label>
+      <input type="text" id="missionNameInput" placeholder="ex: Troféu de Outono - Prova 1">
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">
+    <span><i class="fa-solid fa-satellite-dish"></i> Lista de Bóias da Missão (Persistente no MicroSD)</span>
+    <span style="font-size:0.8rem;color:var(--muted);font-weight:normal;">/config/rovers.json</span>
+  </div>
+
+  <div style="overflow-x:auto;">
+    <table id="roversTable">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Nome</th>
+          <th>MAC Address</th>
+          <th>Papel / Role</th>
+          <th>Coord. Alvo (Lat, Lng)</th>
+          <th>Status LoRa / Bat / Âncora</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="roversTbody">
+        <tr><td colspan="7" style="text-align:center;color:var(--muted);">A carregar lista de bóias...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;">
+    <button onclick="addRow()" class="btn btn-secondary"><i class="fa-solid fa-plus"></i> Adicionar Bóia</button>
+    <button onclick="saveRovers()" class="btn btn-primary" style="padding:10px 24px;"><i class="fa-solid fa-floppy-disk"></i> Guardar Lista no MicroSD</button>
+    <button onclick="clearRovers()" class="btn btn-danger" style="background:#78350f;"><i class="fa-solid fa-rotate-left"></i> Repor Pré-definições</button>
+  </div>
+</div>
+
+<script>
+let currentRoversData = [];
+const rolesList = ['largada CR', 'largada', 'boia 1', 'boia 2', 'boia 3', 'boia 4', 'chegada CR', 'chegada'];
+
+function updateStateButtons(st) {
+  const badge = document.getElementById('badgeState');
+  const btnIds = ['STORAGE', 'WAITING_ROVERS', 'IDLE', 'GO'];
+  const colors = {
+    'STORAGE': { bg: '#475569', border: '#94a3b8', desc: 'Not in use (Standby)' },
+    'WAITING_ROVERS': { bg: '#b45309', border: '#f59e0b', desc: 'Connected and waiting' },
+    'IDLE': { bg: '#0e7490', border: '#06b6d4', desc: 'Rover list ready' },
+    'GO': { bg: '#047857', border: '#10b981', desc: 'In mission (Ativo)' }
+  };
+  
+  const c = colors[st] || colors['STORAGE'];
+  if (badge) {
+    badge.style.background = c.border;
+    badge.innerText = st + ' - ' + c.desc;
+  }
+
+  btnIds.forEach(id => {
+    const btn = document.getElementById('btnState' + id);
+    if (btn) {
+      if (id === st) {
+        btn.style.background = c.bg;
+        btn.style.border = '2px solid ' + c.border;
+      } else {
+        btn.style.background = 'rgba(255,255,255,0.05)';
+        btn.style.border = '1px solid var(--card-border)';
+      }
+    }
+  });
+}
+
+function setState(st) {
+  fetch('/api/mission/state', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ state: st })
+  })
+  .then(r => r.json())
+  .then(res => {
+    if (res.status === 'ok') {
+      updateStateButtons(res.operation_state);
+      loadMissionData();
+    }
+  });
+}
+
+let currentSelectedRoverId = 0;
+
+function loadMissionData() {
+  fetch('/api/mission')
+    .then(r => r.json())
+    .then(data => {
+      if (data.operation_state) {
+        updateStateButtons(data.operation_state);
+      }
+      if (data.selected_rover_id !== undefined) {
+        currentSelectedRoverId = data.selected_rover_id;
+      }
+      if (data.race_id && document.activeElement !== document.getElementById('raceIdInput')) {
+        document.getElementById('raceIdInput').value = data.race_id;
+      }
+      if (data.mission_name && document.activeElement !== document.getElementById('missionNameInput')) {
+        document.getElementById('missionNameInput').value = data.mission_name;
+      }
+
+      if (data.rovers && Array.isArray(data.rovers)) {
+        renderRoversTable(data.rovers);
+      }
+    })
+    .catch(() => {});
+}
+
+function renderRoversTable(rovers) {
+  currentRoversData = rovers;
+  const tbody = document.getElementById('roversTbody');
+  if (!tbody) return;
+
+  if (tbody.contains(document.activeElement)) return;
+
+  let html = '';
+  rovers.forEach((r, idx) => {
+    const isOnline = r.is_online;
+    const isSelected = (currentSelectedRoverId === r.id);
+    const batCol = (r.battery_pct < 25) ? 'var(--red)' : ((r.battery_pct < 50) ? 'var(--yellow)' : 'var(--green)');
+    
+    let optHtml = '';
+    rolesList.forEach(ro => {
+      const sel = (r.role === ro) ? 'selected' : '';
+      optHtml += `<option value="${ro}" ${sel}>${ro}</option>`;
+    });
+
+    html += `<tr id="rRow_${r.id}">
+      <td><strong>${r.id}</strong></td>
+      <td><input type="text" class="r-name" value="${r.name || ('Rover ' + r.id)}" style="width:120px;padding:6px;"></td>
+      <td><input type="text" class="r-mac" value="${r.mac || r.mac_address || ''}" style="width:140px;font-family:monospace;padding:6px;"></td>
+      <td><select class="r-role" style="width:120px;padding:6px;">${optHtml}</select></td>
+      <td>
+        <div style="display:flex;gap:4px;">
+          <input type="number" step="0.000001" class="r-lat" value="${(r.target_lat || 0).toFixed(6)}" placeholder="Lat" style="width:90px;padding:6px;">
+          <input type="number" step="0.000001" class="r-lng" value="${(r.target_lng || 0).toFixed(6)}" placeholder="Lng" style="width:90px;padding:6px;">
+        </div>
+      </td>
+      <td>
+        <span class="badge" style="background:${isOnline ? '#065f46' : '#7f1d1d'};color:${isOnline ? '#6ee7b7' : '#fca5a5'};">
+          ${isOnline ? 'ONLINE' : 'OFFLINE'}
+        </span>
+        ${isOnline ? `<strong style="color:${batCol};margin-left:4px;">${r.battery_pct}%</strong>` : ''}
+        ${isOnline && r.anchor_depth_m > 0.05 ? `<div style="font-size:0.75rem;color:var(--yellow);margin-top:2px;"><i class="fa-solid fa-anchor"></i> Âncora: ${r.anchor_depth_m.toFixed(2)}m</div>` : ''}
+      </td>
+      <td>
+        <div style="display:flex;gap:4px;">
+          ${isSelected 
+            ? `<button onclick="selectRover(0)" class="btn" style="background:#059669;color:#fff;padding:4px 8px;font-size:0.75rem;" title="Clique para desmarcar"><i class="fa-solid fa-check"></i> Ativo no LCD</button>` 
+            : `<button onclick="selectRover(${r.id})" class="btn btn-primary" style="padding:4px 8px;font-size:0.75rem;">Selecionar</button>`}
+          <button onclick="deleteRow(${r.id})" class="btn btn-danger" style="padding:4px 8px;font-size:0.75rem;" title="Remover Bóia">
+            <i class="fa-solid fa-trash"></i>
+          </button>
+        </div>
+      </td>
+    </tr>`;
+  });
+
+  tbody.innerHTML = html;
+}
+
+function selectRover(id) {
+  fetch('/api/select_rover', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rover_id: parseInt(id) })
+  })
+  .then(r => r.json())
+  .then(() => {
+    loadMissionData();
+  });
+}
+
+function deleteRow(id) {
+  const row = document.getElementById('rRow_' + id);
+  if (row) row.remove();
+}
+
+function addRow() {
+  const tbody = document.getElementById('roversTbody');
+  const id = tbody.children.length + 1;
+  const tr = document.createElement('tr');
+  tr.id = 'rRow_' + id;
+  
+  let optHtml = '';
+  rolesList.forEach((ro, i) => {
+    optHtml += `<option value="${ro}" ${i === 0 ? 'selected' : ''}>${ro}</option>`;
+  });
+
+  tr.innerHTML = `<td><strong>${id}</strong></td>
+    <td><input type="text" class="r-name" value="WD-Boia-${id}" style="width:120px;padding:6px;"></td>
+    <td><input type="text" class="r-mac" value="00:00:00:00:00:0${id}" style="width:140px;font-family:monospace;padding:6px;"></td>
+    <td><select class="r-role" style="width:120px;padding:6px;">${optHtml}</select></td>
+    <td>
+      <div style="display:flex;gap:4px;">
+        <input type="number" step="0.000001" class="r-lat" value="0.000000" style="width:90px;padding:6px;">
+        <input type="number" step="0.000001" class="r-lng" value="0.000000" style="width:90px;padding:6px;">
+      </div>
+    </td>
+    <td><span class="badge" style="background:#334155;color:#94a3b8;">NOVO</span></td>
+    <td>
+      <button onclick="deleteRow(${id})" class="btn btn-danger" style="padding:4px 8px;font-size:0.75rem;">
+        <i class="fa-solid fa-trash"></i>
+      </button>
+    </td>`;
+  tbody.appendChild(tr);
+}
+
+function saveRovers() {
+  const raceId = document.getElementById('raceIdInput').value;
+  const missionName = document.getElementById('missionNameInput').value;
+  const rows = document.querySelectorAll('#roversTbody tr');
+  const rovers = [];
+
+  rows.forEach((r, idx) => {
+    const nameInput = r.querySelector('.r-name');
+    if (!nameInput) return;
+    const name = nameInput.value;
+    const mac = r.querySelector('.r-mac').value;
+    const role = r.querySelector('.r-role').value;
+    const lat = parseFloat(r.querySelector('.r-lat').value) || 0.0;
+    const lng = parseFloat(r.querySelector('.r-lng').value) || 0.0;
+    rovers.push({ id: idx + 1, name: name, mac_address: mac, role: role, lat: lat, lng: lng });
+  });
+
+  fetch('/api/mission/rovers', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ race_id: raceId, mission_name: missionName, rovers: rovers })
+  })
+  .then(r => r.json())
+  .then(res => {
+    alert('Lista de ' + res.rover_count + ' bóias guardada no MicroSD com sucesso!');
+    loadMissionData();
+  })
+  .catch(err => alert('Erro ao gravar: ' + err));
+}
+
+function clearRovers() {
+  if (confirm('Tem a certeza que deseja repor a lista de bóias para os valores padrão?')) {
+    fetch('/api/mission/clear', { method: 'POST' })
+      .then(r => r.json())
+      .then(() => loadMissionData());
+  }
+}
+
+document.addEventListener('DOMContentLoaded', loadMissionData);
+setInterval(loadMissionData, 2000);
+</script>
+"""
 
 BASE_PORTAL_CONTENT = """
 <div class="card">
@@ -2397,27 +2829,36 @@ BASE_PORTAL_CONTENT = """
 
 <div class="card">
   <div class="card-title">
-    <span><i class="fa-solid fa-ship"></i> Telemetria da Frota Enviada para o Portal</span>
-    <span id="activeRoversCount" class="badge" style="background:rgba(255,255,255,0.1);color:var(--text);">0 Rovers Ativos</span>
+    <span><i class="fa-solid fa-ship"></i> Rovers da Missão (Enviados pelo Portal)</span>
+    <span id="activeRoversCount" class="badge" style="background:rgba(255,255,255,0.06);color:var(--muted);">0 Rovers do Portal</span>
   </div>
   <p style="color:var(--muted);font-size:0.875rem;margin-bottom:12px;">
-    Rovers que se encontram ativos/online e cujos dados (posição GPS, velocidade, bateria, âncora) estão a ser reportados em direto à cloud:
+    Rovers e bóias atribuídos a esta Estação Base através da plataforma Portal Cloud:
   </p>
   <div style="overflow-x:auto;">
     <table>
       <thead>
         <tr>
           <th>Código</th>
+          <th>Nome</th>
+          <th>Função (Role)</th>
+          <th>Endereço MAC</th>
           <th>Estado</th>
           <th>Coordenadas (GPS)</th>
-          <th>Velocidade</th>
           <th>Bateria</th>
-          <th>Motor / Âncora</th>
           <th>Sinal LoRa</th>
         </tr>
       </thead>
       <tbody id="cloudFleetTable">
-        <tr><td colspan="7" style="text-align:center;color:var(--muted);">A carregar telemetria...</td></tr>
+        <tr>
+          <td colspan="8" style="text-align:center;color:var(--muted);padding:32px 16px;">
+            <i class="fa-solid fa-inbox" style="font-size:2rem;display:block;margin-bottom:8px;opacity:0.4;"></i>
+            <strong style="color:var(--text);font-size:0.95rem;">Nenhum rover enviado pelo Portal ainda.</strong><br>
+            <span style="font-size:0.82rem;color:var(--muted);display:inline-block;margin-top:4px;">
+              A lista será apresentada automaticamente assim que o portal responder com os rovers atribuídos à missão.
+            </span>
+          </td>
+        </tr>
       </tbody>
     </table>
   </div>
@@ -2489,24 +2930,51 @@ function refreshData() {
         lastSyncTimeMs = c.last_sync_ms || 0;
       }
 
-      // 3. Tabela da Frota
-      if (data.rovers && data.rovers.length) {
+      // 3. Tabela da Frota do Portal
+      const portalRoversReceived = !!data.portal_rovers_received;
+      const roversList = (portalRoversReceived && data.rovers) ? data.rovers : [];
+      const tbl = document.getElementById('cloudFleetTable');
+      const badge = document.getElementById('activeRoversCount');
+
+      if (!portalRoversReceived || !roversList.length) {
+        if (tbl) {
+          tbl.innerHTML = `<tr>
+            <td colspan="8" style="text-align:center;color:var(--muted);padding:32px 16px;">
+              <i class="fa-solid fa-inbox" style="font-size:2rem;display:block;margin-bottom:8px;opacity:0.4;"></i>
+              <strong style="color:var(--text);font-size:0.95rem;">Nenhum rover enviado pelo Portal ainda.</strong><br>
+              <span style="font-size:0.82rem;color:var(--muted);display:inline-block;margin-top:4px;">
+                A lista será apresentada automaticamente assim que o portal responder com os rovers atribuídos à missão.
+              </span>
+            </td>
+          </tr>`;
+        }
+        if (badge) {
+          badge.innerText = '0 Rovers do Portal';
+          badge.style.background = 'rgba(255,255,255,0.06)';
+          badge.style.color = 'var(--muted)';
+        }
+      } else {
         let activeCount = 0;
         let rows = '';
-        data.rovers.forEach(rov => {
+        roversList.forEach(rov => {
           if (rov.is_online) activeCount++;
           rows += `<tr>
-            <td><strong>${rov.code}</strong></td>
+            <td><strong>${rov.code || ('ROVER-' + (rov.id < 10 ? '0' : '') + rov.id)}</strong></td>
+            <td>${rov.name || '--'}</td>
+            <td><span class="badge" style="background:rgba(59,130,246,0.15);color:var(--primary);">${rov.role || '--'}</span></td>
+            <td style="font-family:monospace;font-size:0.85rem;color:var(--muted);">${rov.mac || rov.mac_address || '--'}</td>
             <td><span class="badge" style="background:${rov.is_online ? '#065f46' : '#7f1d1d'};color:${rov.is_online ? '#6ee7b7' : '#fca5a5'};">${rov.is_online ? 'ONLINE' : 'OFFLINE'}</span></td>
             <td>${(rov.lat || 0).toFixed(4)}, ${(rov.lng || 0).toFixed(4)}</td>
-            <td>${(rov.speed_knots || 0).toFixed(1)} kn</td>
-            <td><strong style="color:${rov.battery_pct < 25 ? 'var(--red)' : 'var(--green)'};">${rov.battery_pct || 0}%</strong> (${(rov.battery_voltage || 0).toFixed(1)}V)</td>
-            <td>Motor: ${rov.motor_status !== undefined ? rov.motor_status : 0} | Âncora: ${rov.anchor_status !== undefined ? rov.anchor_status : 0}</td>
+            <td><strong style="color:${(rov.battery_pct || 0) < 25 ? 'var(--red)' : 'var(--green)'};">${rov.battery_pct || 0}%</strong> (${(rov.battery_voltage || 0).toFixed(1)}V)</td>
             <td>${rov.rssi || 0} dBm</td>
           </tr>`;
         });
-        document.getElementById('cloudFleetTable').innerHTML = rows;
-        document.getElementById('activeRoversCount').innerText = `${activeCount} / ${data.rovers.length} Rovers Ativos`;
+        if (tbl) tbl.innerHTML = rows;
+        if (badge) {
+          badge.innerText = `${activeCount} / ${roversList.length} Rovers Ativos`;
+          badge.style.background = 'rgba(16,185,129,0.15)';
+          badge.style.color = 'var(--green)';
+        }
       }
     })
     .catch(() => {});
@@ -2574,6 +3042,7 @@ def main():
     print(f"  [+] 7 páginas geradas em {ROVER_DIR} e espelhadas em {WWW_DIR}")
 
     # 3. Páginas especializadas da Base Station
+    mission_base = generate_base_html_page("Gestão de Missão & Regata", "mission", BASE_MISSION_CONTENT)
     portal_base = generate_base_html_page("Estado da Ligação ao Portal", "portal", BASE_PORTAL_CONTENT)
     gps_base = generate_base_html_page("Telemetria GPS da Frota", "gps", BASE_GPS_CONTENT)
     bat_base = generate_base_html_page("Monitor de Bateria da Frota", "battery", BASE_BATTERY_CONTENT)
@@ -2582,19 +3051,25 @@ def main():
     sd_base = generate_base_html_page("Explorador MicroSD da Base", "sd", BASE_SD_CONTENT)
 
     base_files = [
-        ("index.html", gps_base),
+        ("index.html", mission_base),
+        ("mission.html", mission_base),
         ("portal.html", portal_base),
         ("gps.html", gps_base),
         ("battery.html", bat_base),
         ("control.html", ctrl_base),
         ("wifi.html", wifi_base),
+        ("config.html", wifi_base),
         ("sd.html", sd_base)
     ]
 
     for fname, content in base_files:
         with open(BASE_DIR / fname, "w", encoding="utf-8") as f:
             f.write(content.strip() + "\n")
-    print(f"  [+] 7 páginas especializadas geradas em {BASE_DIR}")
+        # Mantém cópia de compatibilidade em /www/ se for mission.html
+        if fname == "mission.html":
+            with open(WWW_DIR / fname, "w", encoding="utf-8") as f:
+                f.write(content.strip() + "\n")
+    print(f"  [+] 8 páginas especializadas geradas em {BASE_DIR}")
 
     print("\n[OK] Todas as páginas web do Rover e da Base Station foram geradas com sucesso!")
 
