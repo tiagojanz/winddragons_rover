@@ -1829,21 +1829,37 @@ private:
         if (doc["throttle"].is<int>()) {
             int8_t thr = constrain(doc["throttle"].as<int>(), -100, 100);
             _actuators.setThrottle(thr);
+            if (_commandQueueCb) {
+                char buf[32];
+                snprintf(buf, sizeof(buf), "CMD:MOTOR:%d", thr);
+                _commandQueueCb(buf);
+            }
         }
 
         if (doc["rudder"].is<int>()) {
             int8_t rud = constrain(doc["rudder"].as<int>(), -100, 100);
             _actuators.setRudder(rud);
+            if (_commandQueueCb) {
+                char buf[32];
+                snprintf(buf, sizeof(buf), "CMD:LEME:%d", rud);
+                _commandQueueCb(buf);
+            }
         }
 
         if (doc["winchUs"].is<int>()) {
             int wUs = doc["winchUs"].as<int>();
             if (wUs <= 0) {
                 _actuators.stopWinch();
+                if (_commandQueueCb) _commandQueueCb("CMD:WINCH:0");
             } else if (doc["set_neutral"].as<bool>() || doc["save_neutral"].as<bool>()) {
                 _actuators.setWinchNeutral(wUs);
             } else {
                 _actuators.setWinchMicroseconds(wUs);
+                if (_commandQueueCb) {
+                    char buf[32];
+                    snprintf(buf, sizeof(buf), "CMD:WINCH:%d", wUs);
+                    _commandQueueCb(buf);
+                }
             }
         }
 
@@ -1890,11 +1906,17 @@ private:
 
         if (pulse == 0) {
             _actuators.stopWinch();
+            if (_commandQueueCb) _commandQueueCb("CMD:WINCH:0");
         } else if (pulse >= 800 && pulse <= 2200) {
             if (setNeutral) {
                 _actuators.setWinchNeutral(pulse);
             } else {
                 _actuators.setWinchMicroseconds(pulse);
+                if (_commandQueueCb) {
+                    char buf[32];
+                    snprintf(buf, sizeof(buf), "CMD:WINCH:%d", pulse);
+                    _commandQueueCb(buf);
+                }
             }
         }
 
@@ -1929,30 +1951,37 @@ private:
             case 2: // Emergency Stop
                 _actuators.emergencyStop();
                 _motorStatus = MOTOR_IDLE;
+                if (_commandQueueCb) _commandQueueCb("CMD:EMERGENCY_STOP");
                 msg = "PARAGEM DE EMERGÊNCIA ACIONADA!";
                 break;
             case 3: // Drop Anchor
                 _actuators.commandDropAnchor(200); // 2 metros
+                if (_commandQueueCb) _commandQueueCb("CMD:DROP_ANCHOR");
                 msg = "Comando Lançar Âncora enviado (2.0m)";
                 break;
             case 4: // Raise / Winch Hoist
                 _actuators.jogWinch(1);
+                if (_commandQueueCb) _commandQueueCb("CMD:WINCH:1800");
                 msg = "Guincho a ENROLAR (1800µs contínuo até Parar)";
                 break;
             case 5: // Stop Winch
                 _actuators.stopWinch();
-                msg = "Guincho parado (1500µs)";
+                if (_commandQueueCb) _commandQueueCb("CMD:WINCH:1500");
+                msg = "Guincho travado no Ponto Morto (1500µs Hold)";
                 break;
             case 14: // Winch Lower / Reverse
                 _actuators.jogWinch(-1);
+                if (_commandQueueCb) _commandQueueCb("CMD:WINCH:1200");
                 msg = "Guincho a DESENROLAR (1200µs contínuo até Parar)";
                 break;
             case 6: // Toggle Rack
                 if (_actuators.isRackReleased()) {
                     _actuators.engageRack();
+                    if (_commandQueueCb) _commandQueueCb("CMD:RACK:ENGAGE");
                     msg = "Trinco da âncora travado (0°)";
                 } else {
                     _actuators.releaseRack();
+                    if (_commandQueueCb) _commandQueueCb("CMD:RACK:RELEASE");
                     msg = "Trinco da âncora solto (90°)";
                 }
                 break;
@@ -1975,6 +2004,7 @@ private:
                 break;
             case 13: // Relax rack servo (stop heating)
                 _actuators.relaxRack();
+                if (_commandQueueCb) _commandQueueCb("CMD:RACK:RELAX");
                 msg = "Servo do trinco relaxado (sem forçar)!";
                 break;
             default:

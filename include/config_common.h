@@ -100,10 +100,12 @@
 #define GPS_BAUDRATE     115200
 
 // Atuadores / Servos (Sinais PWM Diretos)
-#define PIN_C6_MOTOR_ESC     21   // GPIO 21 - ESC Propulsão Principal
-#define PIN_C6_SERVO_RUD     20   // GPIO 20 - Servo do Leme
-#define PIN_C6_WINCH         19   // GPIO 19 - Servo Guincho da Âncora
-#define PIN_C6_SERVO_RACK    18   // GPIO 18 - Servo Trinco/Cremalheira Âncora
+// NOTA PCB: O conector WIN da PCB liga ao Pino 5 do J_DK_R (GPIO 23 no ESP32-C6 DevKitC)
+#define PIN_C6_WINCH         23   // GPIO 23 - Conector WIN na PCB (DevKitC J3 Pin 5)
+#define PIN_C6_WINCH_ALT     19   // GPIO 19 - Pino alternativo direto no DevKitC
+#define PIN_C6_SERVO_RACK    21   // GPIO 21 - Conector RCK na PCB (DevKitC J3 Pin 7)
+#define PIN_C6_SERVO_RUD     15   // GPIO 15 - Conector RUD na PCB (DevKitC J3 Pin 4)
+#define PIN_C6_MOTOR_ESC     17   // GPIO 17 - Conector ESC na PCB (DevKitC J3 Pin 3)
 
 // Aliases e compatibilidade
 #define PIN_GPS_RX           PIN_C6_GPS_RX

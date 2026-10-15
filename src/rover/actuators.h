@@ -6,6 +6,14 @@
 #include "config_common.h"
 #include "lora_protocol.h"
 
+// Direct LEDC PWM Configuration for ESP32-C6 (50 Hz, 14-bit resolution: 0..16383)
+static const uint32_t ACT_PWM_FREQ = 50;
+static const uint8_t  ACT_PWM_RES  = 14;
+static inline uint32_t actUsToDuty(int us) {
+    if (us <= 0) return 0;
+    return (uint32_t)(((uint64_t)us * 16383ULL) / 20000ULL);
+}
+
 class ActuatorController {
 public:
     ActuatorController() 
@@ -21,30 +29,53 @@ public:
           pwmAvailable(false) {}
 
     void begin() {
-        Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);
-        
-        // Inicializa o sensor de fim de curso do içamento da âncora (J5 - GPIO 13)
-        #if ARDUINO_USB_CDC_ON_BOOT
-        // No ESP32-C6, GPIO 13 é USB D+. Ativar apenas se não estiver em conflito
-        if (!HWCDC::isPlugged()) {
-            pinMode(PIN_ANCHOR_DETECTOR, INPUT_PULLUP);
-        }
-        #else
-        pinMode(PIN_ANCHOR_DETECTOR, INPUT_PULLUP);
+        // 1. Configurar Canais PWM Diretos LEDC no ESP32-C6 (Hardware DevKitC)
+        #if defined(PIN_C6_WINCH) && (PIN_C6_WINCH >= 0)
+        ledcAttach(PIN_C6_WINCH, ACT_PWM_FREQ, ACT_PWM_RES);
+        ledcWrite(PIN_C6_WINCH, actUsToDuty(winchNeutralUs)); // Inicia no ponto neutro ativo (1500us hold)
         #endif
 
+        #if defined(PIN_C6_WINCH_ALT) && (PIN_C6_WINCH_ALT >= 0)
+        ledcAttach(PIN_C6_WINCH_ALT, ACT_PWM_FREQ, ACT_PWM_RES);
+        ledcWrite(PIN_C6_WINCH_ALT, actUsToDuty(winchNeutralUs)); // Inicia no ponto neutro ativo (1500us hold)
+        #endif
+
+        #if defined(PIN_C6_SERVO_RACK) && (PIN_C6_SERVO_RACK >= 0)
+        ledcAttach(PIN_C6_SERVO_RACK, ACT_PWM_FREQ, ACT_PWM_RES);
+        ledcWrite(PIN_C6_SERVO_RACK, actUsToDuty(map(RACK_POS_ENGAGED, 0, 180, PWM_PULSE_MIN, PWM_PULSE_MAX)));
+        #endif
+
+        #if defined(PIN_C6_SERVO_RUD) && (PIN_C6_SERVO_RUD >= 0)
+        ledcAttach(PIN_C6_SERVO_RUD, ACT_PWM_FREQ, ACT_PWM_RES);
+        ledcWrite(PIN_C6_SERVO_RUD, actUsToDuty(PWM_PULSE_MID));
+        #endif
+
+        #if defined(PIN_C6_MOTOR_ESC) && (PIN_C6_MOTOR_ESC >= 0)
+        ledcAttach(PIN_C6_MOTOR_ESC, ACT_PWM_FREQ, ACT_PWM_RES);
+        ledcWrite(PIN_C6_MOTOR_ESC, actUsToDuty(PWM_PULSE_MIN));
+        #endif
+
+        // 2. Tentar detetar chip opcional PCA9685 no barramento I2C
+        Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);
+        
+        // Inicializa o sensor de fim de curso do içamento da âncora (se configurado)
+        if (PIN_ANCHOR_DETECTOR >= 0) {
+            #if ARDUINO_USB_CDC_ON_BOOT
+            if (!HWCDC::isPlugged()) {
+                pinMode(PIN_ANCHOR_DETECTOR, INPUT_PULLUP);
+            }
+            #else
+            pinMode(PIN_ANCHOR_DETECTOR, INPUT_PULLUP);
+            #endif
+        }
+
         if (pwm.begin()) {
-            pwm.setPWMFreq(50); // 50 Hz para servos e ESCs normais (período de 20ms)
+            pwm.setPWMFreq(50);
             pwmAvailable = true;
             Serial.println(F("[ACT] PCA9685 16-Ch PWM detectado com sucesso em 0x40!"));
-            Serial.printf("      - Motor ESC: Canal PCA %d\n", PCA_CH_MOTOR);
-            Serial.printf("      - Leme: Canal PCA %d\n", PCA_CH_RUDDER);
-            Serial.printf("      - Guincho: Canal PCA %d\n", PCA_CH_WINCH);
-            Serial.printf("      - Cremalheira / Largar: Canal PCA %d\n", PCA_CH_RACK);
-            Serial.printf("      - Detector Âncora Fim de Curso: GPIO %d\n", PIN_ANCHOR_DETECTOR);
         } else {
             pwmAvailable = false;
-            Serial.println(F("[ACT-AVISO] PCA9685 nao encontrado em 0x40! Verifique as ligacoes I2C."));
+            Serial.println(F("[ACT] Controlo Direto LEDC ativo nos pinos GPIO 21, 20, 19, 18"));
         }
 
         stopMotor();
@@ -77,8 +108,11 @@ public:
         if (pwmAvailable) {
             pwm.writeMicroseconds(PCA_CH_RACK, pulseUs);
         }
+        #if defined(PIN_C6_SERVO_RACK) && (PIN_C6_SERVO_RACK >= 0)
+        ledcWrite(PIN_C6_SERVO_RACK, actUsToDuty(pulseUs));
+        #endif
         isRackLifted = (angle > 45);
-        Serial.printf("[ACT-SERVO] CALIBRACAO -> PCA CH %d enviado %d graus (%d us)\n", PCA_CH_RACK, angle, pulseUs);
+        Serial.printf("[ACT-SERVO] CALIBRACAO -> PCA CH %d / GPIO %d enviado %d graus (%d us)\n", PCA_CH_RACK, PIN_C6_SERVO_RACK, angle, pulseUs);
     }
 
     // Desativa o pulso do servo para relaxar o motor e evitar aquecimento em stall
@@ -86,7 +120,10 @@ public:
         if (pwmAvailable) {
             pwm.setPin(PCA_CH_RACK, 0, false); // 0V flat
         }
-        Serial.printf("[ACT-SERVO] RELAX -> PCA CH %d pulso PWM desligado (motor solto/frio)\n", PCA_CH_RACK);
+        #if defined(PIN_C6_SERVO_RACK) && (PIN_C6_SERVO_RACK >= 0)
+        ledcWrite(PIN_C6_SERVO_RACK, 0);
+        #endif
+        Serial.printf("[ACT-SERVO] RELAX -> pulso PWM desligado (motor solto/frio)\n");
     }
 
     bool isRackReleased() const { return isRackLifted; }
@@ -120,7 +157,10 @@ public:
         if (pwmAvailable) {
             pwm.writeMicroseconds(PCA_CH_MOTOR, pulseUs);
         }
-        Serial.printf("[ACT-MOTOR] ESC Throttle: %d%% (%d us no PCA CH %d)\n", currentThrottle, pulseUs, PCA_CH_MOTOR);
+        #if defined(PIN_C6_MOTOR_ESC) && (PIN_C6_MOTOR_ESC >= 0)
+        ledcWrite(PIN_C6_MOTOR_ESC, actUsToDuty(pulseUs));
+        #endif
+        Serial.printf("[ACT-MOTOR] ESC Throttle: %d%% (%d us no GPIO %d)\n", currentThrottle, pulseUs, PIN_C6_MOTOR_ESC);
     }
 
     // Rudder: -100 (full left) to +100 (full right)
@@ -130,7 +170,10 @@ public:
         if (pwmAvailable) {
             pwm.writeMicroseconds(PCA_CH_RUDDER, pulseUs);
         }
-        Serial.printf("[ACT-LEME] Leme: %d%% (%d us no PCA CH %d)\n", currentRudder, pulseUs, PCA_CH_RUDDER);
+        #if defined(PIN_C6_SERVO_RUD) && (PIN_C6_SERVO_RUD >= 0)
+        ledcWrite(PIN_C6_SERVO_RUD, actUsToDuty(pulseUs));
+        #endif
+        Serial.printf("[ACT-LEME] Leme: %d%% (%d us no GPIO %d)\n", currentRudder, pulseUs, PIN_C6_SERVO_RUD);
     }
 
     void stopMotor() {
@@ -147,23 +190,29 @@ public:
         if (pwmAvailable) {
             pwm.setPin(PCA_CH_WINCH, 0, false);
         }
-        Serial.printf("[ACT-GUINCHO] SINAL TOTALMENTE CORTADO (0V no PCA CH %d)\n", PCA_CH_WINCH);
+        #if defined(PIN_C6_WINCH) && (PIN_C6_WINCH >= 0)
+        ledcWrite(PIN_C6_WINCH, 0); // 0V plano, sinal totalmente cortado
+        #endif
+        #if defined(PIN_C6_WINCH_ALT) && (PIN_C6_WINCH_ALT >= 0)
+        ledcWrite(PIN_C6_WINCH_ALT, 0);
+        #endif
+        Serial.printf("[ACT-GUINCHO] SINAL TOTALMENTE CORTADO (0V nos GPIOs %d e %d)\n", PIN_C6_WINCH, PIN_C6_WINCH_ALT);
     }
 
     // Manual winch jog: -1 = desenrolar/descer cabo (1200us), 0 = desligar sinal (OFF), 1 = enrolar/subir (1800us)
     void jogWinch(int8_t direction) {
         if (direction < 0) {
             setWinchMicroseconds(1200);
-            Serial.printf("[ACT-GUINCHO] LIGADO (DESCE / DESENROLAR) -> 1200 us no PCA CH %d\n", PCA_CH_WINCH);
+            Serial.printf("[ACT-GUINCHO] LIGADO (DESCE / DESENROLAR) -> 1200 us\n");
         } else if (direction > 0) {
             // Verificar detector de topo da âncora
             if (isAnchorAtTopLimit()) {
-                Serial.printf("[ACT-GUINCHO] BLOQUEADO: Âncora já está no topo (detector J5 acionado)!\n");
+                Serial.printf("[ACT-GUINCHO] BLOQUEADO: Âncora já está no topo!\n");
                 stopWinch();
                 return;
             }
             setWinchMicroseconds(1800);
-            Serial.printf("[ACT-GUINCHO] LIGADO (SOBE / ENROLAR) -> 1800 us no PCA CH %d\n", PCA_CH_WINCH);
+            Serial.printf("[ACT-GUINCHO] LIGADO (SOBE / ENROLAR) -> 1800 us\n");
         } else {
             stopWinch();
         }
@@ -179,12 +228,18 @@ public:
         if (pwmAvailable) {
             pwm.writeMicroseconds(PCA_CH_WINCH, pulseUs);
         }
-        Serial.printf("[ACT-GUINCHO] SINAL ATIVO (ON): %d us no PCA CH %d\n", pulseUs, PCA_CH_WINCH);
+        #if defined(PIN_C6_WINCH) && (PIN_C6_WINCH >= 0)
+        ledcWrite(PIN_C6_WINCH, actUsToDuty(pulseUs));
+        #endif
+        #if defined(PIN_C6_WINCH_ALT) && (PIN_C6_WINCH_ALT >= 0)
+        ledcWrite(PIN_C6_WINCH_ALT, actUsToDuty(pulseUs));
+        #endif
+        Serial.printf("[ACT-GUINCHO] SINAL ATIVO (ON): %d us nos GPIOs %d e %d\n", pulseUs, PIN_C6_WINCH, PIN_C6_WINCH_ALT);
     }
 
     void setWinchNeutral(int neutralUs) {
         winchNeutralUs = constrain(neutralUs, 900, 2100);
-        Serial.printf("[ACT-GUINCHO] PONTO NEUTRO DEFINIDO: %d us no PCA CH %d\n", winchNeutralUs, PCA_CH_WINCH);
+        Serial.printf("[ACT-GUINCHO] PONTO NEUTRO DEFINIDO: %d us\n", winchNeutralUs);
         stopWinch();
     }
 
@@ -193,6 +248,7 @@ public:
     bool isWinchRunning() const { return (currentWinchPulseUs > 0); }
 
     bool isAnchorAtTopLimit() const {
+        if (PIN_ANCHOR_DETECTOR < 0) return false;
         #if ARDUINO_USB_CDC_ON_BOOT
         if (HWCDC::isPlugged()) return false; // Em USB CDC desativado para proteção
         #endif
@@ -200,7 +256,7 @@ public:
     }
 
     void stopWinch() {
-        releaseWinch(); // Corta o sinal a 100% (0V) para o motor parar
+        setWinchMicroseconds(winchNeutralUs); // Ponto morto ativo (1500us) para travar o carretel contra correntes de maré
         if (anchorState == ANCHOR_DEPLOYING || anchorState == ANCHOR_RETRACTING) {
             anchorState = (currentDepthCm > 10) ? ANCHOR_DEPLOYED : ANCHOR_RETRACTED;
         }

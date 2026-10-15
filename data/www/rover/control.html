@@ -84,11 +84,14 @@
 </div>
 
 <div class="card">
-  <div class="card-title"><i class="fa-solid fa-anchor"></i> Guincho da Âncora & Cremalheira de Travão</div>
+  <div class="card-title">
+    <span><i class="fa-solid fa-anchor"></i> Guincho da Âncora & Cremalheira de Travão</span>
+    <span id="winchPulseBadge" class="badge" style="background:#1e293b;border:1px solid #334155;color:var(--primary);font-size:0.85rem;">Sinal: OFF (0V)</span>
+  </div>
   <div class="btn-group">
-    <button type="button" onclick="sendAction(3)" class="btn btn-primary"><i class="fa-solid fa-anchor"></i> Lançar Âncora (Soltar)</button>
-    <button type="button" onclick="sendAction(4)" class="btn btn-primary"><i class="fa-solid fa-arrow-up"></i> Recolher Âncora (Guincho)</button>
-    <button type="button" onclick="sendAction(5)" class="btn btn-secondary"><i class="fa-solid fa-stop"></i> Parar Guincho</button>
+    <button type="button" onclick="sendAction(4)" class="btn btn-primary"><i class="fa-solid fa-arrow-up"></i> Recolher / Puxar (1800 µs)</button>
+    <button type="button" onclick="sendAction(14)" class="btn btn-secondary" style="background:#0284c7;color:#fff;"><i class="fa-solid fa-arrow-down"></i> Desenrolar / Descer (1200 µs)</button>
+    <button type="button" onclick="sendAction(5)" class="btn btn-secondary" style="background:#334155;color:#fff;font-weight:600;"><i class="fa-solid fa-stop"></i> Parar / Ponto Morto (1500 µs Hold)</button>
     <button type="button" onclick="sendAction(6)" class="btn btn-secondary"><i class="fa-solid fa-lock"></i> Alternar Travão Cremalheira</button>
   </div>
 </div>
@@ -152,6 +155,23 @@ setInterval(() => {
       document.getElementById('curAnchor').innerText = a.anchor_status_str || 'recolhida';
       document.getElementById('curDepth').innerText = (a.anchor_depth_m || 0).toFixed(1) + ' m';
       document.getElementById('curRack').innerText = a.rack_released ? 'LIVRE' : 'TRAVADA';
+      const wp = document.getElementById('winchPulseBadge');
+      if (wp) {
+        const p = a.winch_pulse_us || 0;
+        if (p === 1500) {
+          wp.innerText = 'Sinal: 1500 µs (Ponto Morto / Hold)';
+          wp.style.color = '#10b981';
+        } else if (p > 1500) {
+          wp.innerText = 'Sinal: ' + p + ' µs (A Enrolar / Subir)';
+          wp.style.color = '#38bdf8';
+        } else if (p > 0 && p < 1500) {
+          wp.innerText = 'Sinal: ' + p + ' µs (A Desenrolar / Descer)';
+          wp.style.color = '#f59e0b';
+        } else {
+          wp.innerText = 'Sinal: OFF (0V)';
+          wp.style.color = 'var(--muted)';
+        }
+      }
     }).catch(() => {});
 }, 1000);
 </script>

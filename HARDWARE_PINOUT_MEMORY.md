@@ -88,15 +88,15 @@ Comunicação SPI independente no barramento secundário do DevKitC:
 | **DIO0** | **GPIO 0** | J_DK_L Pin 7 / J3 Pin 8 | Interrupção Packet RX |
 | **RST** | **GPIO 1** | J_DK_L Pin 2 / J3 Pin 3 | Reset do rádio (opcional / NC) |
 
-### 3.3. Servos e Sensores no DevKitC
-| Periférico | GPIO DevKitC | Pino PCB | Função |
+### 3.3. Servos e Sensores no DevKitC (Validação em Bancada Real)
+| Periférico | GPIO DevKitC | Pino PCB / Cabeçalho | Função / Estado de Validação |
 | :--- | :--- | :--- | :--- |
-| **ESC Motor** | GPIO 21 | ESC Pin 3 | Sinal PWM (LEDC) |
-| **Leme (Rudder)** | GPIO 20 | RUD Pin 3 | Sinal PWM (LEDC) |
-| **Guincho (Winch)**| GPIO 19 | WIN Pin 3 | Sinal PWM (LEDC) |
-| **Rack Vela** | GPIO 18 | RCK Pin 3 | Sinal PWM (LEDC) |
+| **Guincho (Winch)**| **GPIO 23** | **WIN Pin 3** (J_DK_R Pin 5 / J3-5) | **100% Validado em Bancada**: Controlo Web bidirecional (1800µs enrolar / 1200µs descer / 1500µs neutro). Espelhado também em GPIO 19. |
+| **Rack Vela / Trinco**| **GPIO 21** | **RCK Pin 3** (J_DK_R Pin 7 / J3-7) | Sinal PWM (LEDC) Trinco da Âncora |
+| **Leme (Rudder)** | **GPIO 15** | **RUD Pin 3** (J_DK_R Pin 4 / J3-4) | Sinal PWM (LEDC) Leme de Direção |
+| **ESC Motor** | **GPIO 17** | **ESC Pin 3** (J_DK_R Pin 3 / J3-3) | Sinal PWM (LEDC) Propulsão Principal |
 | **Sensor de Água**| GPIO 15 | J_WATER Pin 2 | Entrada analógica ADC |
-| **Bateria Tensão** | GPIO 2 | J_BATT Pin 3 | Divisor de tensão ADC |
+| **Bateria Tensão** | GPIO 2 | J_BATT Pin 3 | Divisor de tensão ADC (Rácio 10.803) |
 | **Bateria Corrente**| GPIO 3 | J_BATT Pin 2 | Shunt / Sensor Hall ADC |
 | **GPS UART TX/RX**| GPIO 17 / 16 | J6 Header | Barramento NMEA 9600 baud |
 

@@ -368,6 +368,22 @@ void loop() {
                         int val = atoi(cmdStr + 10);
                         actuators.setThrottle(val);
                         lastControlReceivedTime = now;
+                    } else if (strncmp(cmdStr, "CMD:WINCH:", 10) == 0) {
+                        int pulse = atoi(cmdStr + 10);
+                        if (pulse <= 0) {
+                            actuators.stopWinch();
+                        } else {
+                            actuators.setWinchMicroseconds(pulse);
+                        }
+                    } else if (strcmp(cmdStr, "CMD:RACK:RELEASE") == 0) {
+                        actuators.releaseRack();
+                    } else if (strcmp(cmdStr, "CMD:RACK:ENGAGE") == 0) {
+                        actuators.engageRack();
+                    } else if (strcmp(cmdStr, "CMD:RACK:RELAX") == 0) {
+                        actuators.relaxRack();
+                    } else if (strcmp(cmdStr, "CMD:EMERGENCY_STOP") == 0) {
+                        actuators.emergencyStop();
+                        currentMotorStatus = MOTOR_IDLE;
                     } else if (strcmp(cmdStr, "CMD:DROP_ANCHOR") == 0) {
                         actuators.commandDropAnchor(300);
                         currentMotorStatus = MOTOR_ANCHORED;
@@ -410,8 +426,9 @@ void loop() {
                              lastRssi,
                              lastSnr);
                     interSerial.print(pong);
-                    printLog("[C6 ROVER] <<< %s | >>> PONG: Bat=%.2fV (%d%%) LoRa=%s\n",
-                             rxBuf, battery.getVoltageMv() / 1000.0f, battery.getPercentage(), loraReady ? "RF_OK" : "RF_ERR");
+                    printLog("[C6 ROVER] <<< %s | >>> PONG: Bat=%.2fV (%d%%) LoRa=%s | Winch=%dus\n",
+                             rxBuf, battery.getVoltageMv() / 1000.0f, battery.getPercentage(), 
+                             loraReady ? "RF_OK" : "RF_ERR", actuators.getWinchPulseUs());
                 }
                 rxIdx = 0;
             }
@@ -420,7 +437,7 @@ void loop() {
         }
     }
 
-    // 7. Consola de comandos Serial (ex: SET_ID 2)
+    // 7. Consola de comandos Serial (ex: SET_ID 2, WINCH 1800, WINCH 0)
     if (Serial.available()) {
         String cmd = Serial.readStringUntil('\n');
         cmd.trim();
@@ -431,6 +448,27 @@ void loop() {
                 c6Prefs.putUChar("id", roverId);
                 printLog("[C6] ★ ID guardado em NVS: %d\n", newId);
             }
+        } else if (cmd.startsWith("WINCH ")) {
+            int pulse = cmd.substring(6).toInt();
+            if (pulse <= 0) {
+                actuators.stopWinch();
+                printLog("[C6] Guincho parado (Sinal 0V no GPIO %d)\n", PIN_C6_WINCH);
+            } else {
+                actuators.setWinchMicroseconds(pulse);
+                printLog("[C6] Guincho acionado: %d us no GPIO %d\n", pulse, PIN_C6_WINCH);
+            }
+        } else if (cmd == "WINCH_STOP" || cmd == "STOP") {
+            actuators.stopWinch();
+            printLog("[C6] Guincho parado (0V)\n");
+        } else if (cmd == "RACK RELEASE") {
+            actuators.releaseRack();
+            printLog("[C6] Trinco da cremalheira SOLTO (90 graus)\n");
+        } else if (cmd == "RACK ENGAGE") {
+            actuators.engageRack();
+            printLog("[C6] Trinco da cremalheira TRAVADO (0 graus)\n");
+        } else if (cmd == "RACK RELAX") {
+            actuators.relaxRack();
+            printLog("[C6] Trinco relaxado\n");
         }
     }
 }
