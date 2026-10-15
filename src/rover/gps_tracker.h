@@ -6,28 +6,45 @@
 
 class GPSTracker {
 public:
-    GPSTracker() : gpsSerial(1) {}
+    GPSTracker(uint8_t uartNum = 0) : gpsSerial(uartNum), isHwEnabled(false) {}
 
-    void begin() {
-        gpsSerial.begin(GPS_BAUDRATE, SERIAL_8N1, PIN_GPS_RX, PIN_GPS_TX);
+    void begin(bool enableHw = false) {
+        isHwEnabled = enableHw;
+        if (isHwEnabled) {
+            gpsSerial.begin(GPS_BAUDRATE, SERIAL_8N1, PIN_GPS_RX, PIN_GPS_TX);
+        }
     }
 
     void update() {
+        if (!isHwEnabled) return;
         while (gpsSerial.available() > 0) {
             char c = gpsSerial.read();
             gps.encode(c);
         }
     }
 
+    void setValues(double lat, double lng, float spd, float head, uint8_t sats, bool fix) {
+        manualLat = lat;
+        manualLng = lng;
+        manualSpeed = spd;
+        manualHeading = head;
+        manualSats = sats;
+        manualFix = fix;
+        hasManualData = true;
+    }
+
     bool hasFix() {
+        if (hasManualData) return manualFix;
         return gps.location.isValid() && gps.location.age() < 2000;
     }
 
     double getLatitude() {
+        if (hasManualData) return manualLat;
         return gps.location.isValid() ? gps.location.lat() : 0.0;
     }
 
     double getLongitude() {
+        if (hasManualData) return manualLng;
         return gps.location.isValid() ? gps.location.lng() : 0.0;
     }
 
@@ -40,14 +57,17 @@ public:
     }
 
     float getSpeedKnots() {
+        if (hasManualData) return manualSpeed;
         return gps.speed.isValid() ? gps.speed.knots() : 0.0f;
     }
 
     float getHeading() {
+        if (hasManualData) return manualHeading;
         return gps.course.isValid() ? gps.course.deg() : 0.0f;
     }
 
     uint8_t getSatellites() {
+        if (hasManualData) return manualSats;
         return gps.satellites.isValid() ? gps.satellites.value() : 0;
     }
 
@@ -70,4 +90,12 @@ public:
 private:
     HardwareSerial gpsSerial;
     TinyGPSPlus gps;
+    bool isHwEnabled = false;
+    bool hasManualData = false;
+    double manualLat = 0.0;
+    double manualLng = 0.0;
+    float manualSpeed = 0.0f;
+    float manualHeading = 0.0f;
+    uint8_t manualSats = 0;
+    bool manualFix = false;
 };

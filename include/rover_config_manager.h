@@ -13,11 +13,13 @@ struct RoverConfig {
     uint8_t roverId;
     String apSsid;
     String apPassword;
-    uint8_t screenBrightness; // 0 - 100%
+    uint8_t screenBrightness;   // 0 - 100%
+    uint8_t batteryCells;       // 3, 4, or 6
+    uint16_t batteryCapacityMah; // e.g. 2650 mAh
 };
 
 /**
- * RoverConfigManager - Gere as configurações principais do Rover (ID, SSID, Password AP, Brilho Ecrã)
+ * RoverConfigManager - Gere as configurações principais do Rover (ID, SSID, Password AP, Brilho Ecrã, Bateria)
  * Sincroniza bidirecionalmente entre o Cartão MicroSD (/config.json) e a memória NVS.
  */
 class RoverConfigManager {
@@ -27,6 +29,8 @@ public:
         _config.apSsid = "WindDragons-Rover-01";
         _config.apPassword = "password123";
         _config.screenBrightness = 85;
+        _config.batteryCells = 4;
+        _config.batteryCapacityMah = 2650;
     }
 
     void begin(SDCardManager *sd = nullptr) {
@@ -50,6 +54,8 @@ public:
     String getApSsid() const { return _config.apSsid; }
     String getApPassword() const { return _config.apPassword; }
     uint8_t getScreenBrightness() const { return _config.screenBrightness; }
+    uint8_t getBatteryCells() const { return _config.batteryCells; }
+    uint16_t getBatteryCapacityMah() const { return _config.batteryCapacityMah; }
 
     void setRoverId(uint8_t id) {
         _config.roverId = id;
@@ -68,12 +74,30 @@ public:
         _config.screenBrightness = brightness;
     }
 
-    void updateConfig(uint8_t id, const String &ssid, const String &password, uint8_t brightness = 255) {
+    void setBatteryCells(uint8_t cells) {
+        if (cells == 3 || cells == 4 || cells == 6) {
+            _config.batteryCells = cells;
+        }
+    }
+
+    void setBatteryCapacityMah(uint16_t mah) {
+        if (mah >= 500 && mah <= 50000) {
+            _config.batteryCapacityMah = mah;
+        }
+    }
+
+    void updateConfig(uint8_t id, const String &ssid, const String &password, uint8_t brightness = 255, uint8_t cells = 0, uint16_t capacityMah = 0) {
         _config.roverId = (id > 0) ? id : 1;
         if (ssid.length() > 0) _config.apSsid = ssid;
         if (password.length() >= 8) _config.apPassword = password;
         if (brightness <= 100) {
             _config.screenBrightness = brightness;
+        }
+        if (cells == 3 || cells == 4 || cells == 6) {
+            _config.batteryCells = cells;
+        }
+        if (capacityMah >= 500 && capacityMah <= 50000) {
+            _config.batteryCapacityMah = capacityMah;
         }
         saveConfig();
     }
@@ -94,9 +118,17 @@ public:
             _config.apSsid = prefs.getString("ssid", "WindDragons-Rover-01");
             _config.apPassword = prefs.getString("pass", "password123");
             _config.screenBrightness = prefs.getUChar("bright", 85);
+            _config.batteryCells = prefs.getUChar("cells", 4);
+            if (_config.batteryCells != 3 && _config.batteryCells != 4 && _config.batteryCells != 6) {
+                _config.batteryCells = 4;
+            }
+            _config.batteryCapacityMah = prefs.getUShort("cap_mah", 2650);
+            if (_config.batteryCapacityMah < 500 || _config.batteryCapacityMah > 50000) {
+                _config.batteryCapacityMah = 2650;
+            }
             prefs.end();
-            Serial.printf("[CONFIG] Carregado da memoria NVS -> ID: %u | SSID AP: %s | Brilho: %u%%\n", 
-                          _config.roverId, _config.apSsid.c_str(), _config.screenBrightness);
+            Serial.printf("[CONFIG] Carregado da memoria NVS -> ID: %u | SSID AP: %s | Brilho: %u%% | Bateria: %uS (%u mAh)\n", 
+                          _config.roverId, _config.apSsid.c_str(), _config.screenBrightness, _config.batteryCells, _config.batteryCapacityMah);
         }
 
         // 3. Se o cartão SD estiver presente mas ainda não possuir o /config.json, criar com valores padrão
@@ -115,6 +147,8 @@ public:
         prefs.putString("ssid", _config.apSsid);
         prefs.putString("pass", _config.apPassword);
         prefs.putUChar("bright", _config.screenBrightness);
+        prefs.putUChar("cells", _config.batteryCells);
+        prefs.putUShort("cap_mah", _config.batteryCapacityMah);
         prefs.end();
 
         // Guarda no Cartão MicroSD
@@ -157,8 +191,24 @@ public:
         }
         if (_config.screenBrightness > 100) _config.screenBrightness = 100;
 
-        Serial.printf("[CONFIG] Carregado de /config.json (MicroSD) -> ID: %u | SSID AP: %s | Brilho: %u%%\n", 
-                      _config.roverId, _config.apSsid.c_str(), _config.screenBrightness);
+        if (doc["battery_cells"].is<uint8_t>()) {
+            uint8_t c = doc["battery_cells"].as<uint8_t>();
+            if (c == 3 || c == 4 || c == 6) _config.batteryCells = c;
+        } else if (doc["cells"].is<uint8_t>()) {
+            uint8_t c = doc["cells"].as<uint8_t>();
+            if (c == 3 || c == 4 || c == 6) _config.batteryCells = c;
+        }
+
+        if (doc["battery_capacity_mah"].is<uint16_t>()) {
+            uint16_t m = doc["battery_capacity_mah"].as<uint16_t>();
+            if (m >= 500 && m <= 50000) _config.batteryCapacityMah = m;
+        } else if (doc["capacity_mah"].is<uint16_t>()) {
+            uint16_t m = doc["capacity_mah"].as<uint16_t>();
+            if (m >= 500 && m <= 50000) _config.batteryCapacityMah = m;
+        }
+
+        Serial.printf("[CONFIG] Carregado de /config.json (MicroSD) -> ID: %u | SSID AP: %s | Brilho: %u%% | Bateria: %uS (%u mAh)\n", 
+                      _config.roverId, _config.apSsid.c_str(), _config.screenBrightness, _config.batteryCells, _config.batteryCapacityMah);
         return true;
     }
 
@@ -170,6 +220,8 @@ public:
         doc["ap_ssid"] = _config.apSsid;
         doc["ap_password"] = _config.apPassword;
         doc["screen_brightness"] = _config.screenBrightness;
+        doc["battery_cells"] = _config.batteryCells;
+        doc["battery_capacity_mah"] = _config.batteryCapacityMah;
 
         String jsonStr;
         serializeJsonPretty(doc, jsonStr);

@@ -298,6 +298,15 @@ public:
     int8_t getRudder() const { return currentRudder; }
     bool   isDriverReady() const { return pwmAvailable; }
 
+    void setValues(int8_t thr, int8_t rud, int winchUs, bool rackLifted, uint8_t anchorSt, uint16_t depth) {
+        currentThrottle = thr;
+        currentRudder = rud;
+        currentWinchPulseUs = winchUs;
+        isRackLifted = rackLifted;
+        anchorState = anchorSt;
+        currentDepthCm = depth;
+    }
+
 private:
     Adafruit_PWMServoDriver pwm;
 

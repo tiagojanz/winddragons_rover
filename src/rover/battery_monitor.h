@@ -8,8 +8,11 @@
 // ==============================================================================
 // APM Power Module (28V / 90A) Monitor via ADS1115 16-Bit I2C ADC (0x48)
 // ==============================================================================
-// - Bateria 4S: 13.2V (vazia / corte seguro) a 16.8V (totalmente carregada)
-// - Divisor de tensão APM: rácio 10.101 (16.8V entra -> ~1.66V no pino V)
+// - Baterias LiPo Suportadas:
+//   * 3S: 9.9V (3.30V/célula) a 12.6V (4.20V/célula) - Nominal 11.1V
+//   * 4S: 13.2V (3.30V/célula) a 16.8V (4.20V/célula) - Nominal 14.8V
+//   * 6S: 19.8V (3.30V/célula) a 25.2V (4.20V/célula) - Nominal 22.2V
+// - Divisor de tensão APM: rácio ~10.8
 // - Sensor de corrente APM: ~27.32 A/V (90A a 3.3V)
 // - Ganho ADS1115: GAIN_ONE (+/- 4.096V, 1 LSB = 0.125mV)
 // ==============================================================================
@@ -22,7 +25,41 @@ public:
           currentAmps(0.0f),
           consumedMah(0.0f),
           lastUpdateMs(0),
-          adsAvailable(false) {}
+          adsAvailable(false),
+          cellCount(4),
+          capacityMah(2650) {}
+
+    void setCellCount(uint8_t cells) {
+        if (cells == 3 || cells == 4 || cells == 6) {
+            cellCount = cells;
+            calculatePercentage();
+        }
+    }
+
+    uint8_t getCellCount() const { return cellCount; }
+
+    void setCapacityMah(uint16_t cap) {
+        if (cap >= 500 && cap <= 50000) {
+            capacityMah = cap;
+        }
+    }
+
+    uint16_t getCapacityMah() const { return capacityMah; }
+
+    float getRemainingMah() const {
+        return (consumedMah < (float)capacityMah) ? ((float)capacityMah - consumedMah) : 0.0f;
+    }
+
+    float getEstimatedHoursRemaining() const {
+        if (currentAmps > 0.05f) {
+            return (getRemainingMah() / 1000.0f) / currentAmps;
+        }
+        return -1.0f;
+    }
+
+    void resetConsumed() {
+        consumedMah = 0.0f;
+    }
 
     void begin() {
         Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);
@@ -38,17 +75,67 @@ public:
         update(); // Primeira leitura inicial
     }
 
+    void beginDirectAdc() {
+        useDirectAdc = true;
+        analogReadResolution(12);
+        analogSetAttenuation(ADC_11db);
+        pinMode(PIN_C6_ADC_VOLT, INPUT);
+        pinMode(PIN_C6_ADC_CURR, INPUT);
+        lastUpdateMs = millis();
+        update();
+    }
+
+    void setValues(uint16_t vMv, float cAmps, uint8_t pct) {
+        voltageMv = vMv;
+        currentAmps = cAmps;
+        calculatePercentage();
+        consumedMah += (cAmps * 1000.0f) * (0.2f / 3600.0f);
+    }
+
+    void calculatePercentage() {
+        uint16_t vMin = cellCount * 3300; // 3.30V min safe cut-off
+        uint16_t vMax = cellCount * 4200; // 4.20V 100% full
+        if (voltageMv >= vMax) {
+            batteryPct = 100;
+        } else if (voltageMv <= vMin) {
+            batteryPct = 0;
+        } else {
+            batteryPct = static_cast<uint8_t>(((uint32_t)(voltageMv - vMin) * 100) / (vMax - vMin));
+        }
+    }
+
     void update() {
         uint32_t now = millis();
         if (lastUpdateMs == 0) lastUpdateMs = now;
         float dtHours = (now - lastUpdateMs) / 3600000.0f;
         lastUpdateMs = now;
 
+        if (useDirectAdc) {
+            uint32_t sumV = 0, sumI = 0;
+            for (int i = 0; i < 15; i++) {
+                sumV += analogReadMilliVolts(PIN_C6_ADC_VOLT);
+                sumI += analogReadMilliVolts(PIN_C6_ADC_CURR);
+                delayMicroseconds(100);
+            }
+            float mvV = (float)sumV / 15.0f;
+            float mvI = (float)sumI / 15.0f;
+            float batteryV = (mvV * BATT_VOLT_DIVIDER) / 1000.0f;
+            voltageMv = static_cast<uint16_t>(batteryV * 1000.0f);
+
+            if (mvI > BATT_CURR_OFFSET_MV) {
+                currentAmps = ((mvI - BATT_CURR_OFFSET_MV) / 1000.0f) * BATT_AMPS_PER_VOLT;
+            } else {
+                currentAmps = 0.0f;
+            }
+
+            consumedMah += (currentAmps * 1000.0f) * dtHours;
+            calculatePercentage();
+            return;
+        }
+
         if (!adsAvailable) {
-            // Se o módulo ADS1115 ainda não estiver fisicamente conectado na bancada:
-            // mantem valores nominais saudáveis para testes
-            voltageMv = 16400;
-            batteryPct = 90;
+            voltageMv = cellCount * 3850; // Tensão nominal de armazenamento (~3.85V/cel)
+            calculatePercentage();
             currentAmps = 0.0f;
             return;
         }
@@ -61,11 +148,11 @@ public:
         float adcCurrV = ads.computeVolts(rawCurr);
 
         // 2. Fatores de conversão do Módulo APM 90A
-        const float VOLT_DIVIDER_RATIO = 10.101f;
+        const float VOLT_DIVIDER_RATIO = 10.803f;
         const float AMPS_PER_VOLT      = 27.32f;
-        const float CURR_OFFSET_V      = 0.015f; // Pequeno offset residual típico a 0A
+        const float CURR_OFFSET_V      = 0.015f;
 
-        // 3. Tensão real da bateria 4S
+        // 3. Tensão real da bateria
         float batteryV = adcVoltV * VOLT_DIVIDER_RATIO;
         if (batteryV < 0.0f) batteryV = 0.0f;
         voltageMv = static_cast<uint16_t>(batteryV * 1000.0f);
@@ -77,30 +164,16 @@ public:
             currentAmps = 0.0f;
         }
 
-        // 5. Integração temporal do consumo acumulado (mAh)
         consumedMah += (currentAmps * 1000.0f) * dtHours;
-
-        // 6. Percentagem para LiPo 4S (13.2V = 0%, 16.8V = 100%)
-        const uint16_t V_MIN_4S_MV = 13200; // 3.30V por célula
-        const uint16_t V_MAX_4S_MV = 16800; // 4.20V por célula
-
-        if (voltageMv >= V_MAX_4S_MV) {
-            batteryPct = 100;
-        } else if (voltageMv <= V_MIN_4S_MV) {
-            batteryPct = 0;
-        } else {
-            batteryPct = static_cast<uint8_t>(
-                ((uint32_t)(voltageMv - V_MIN_4S_MV) * 100) / (V_MAX_4S_MV - V_MIN_4S_MV)
-            );
-        }
+        calculatePercentage();
     }
 
     uint16_t getVoltageMv() const { return voltageMv; }
     uint8_t  getPercentage() const { return batteryPct; }
     float    getCurrentAmps() const { return currentAmps; }
     float    getConsumedMah() const { return consumedMah; }
-    float    getCellAverageV() const { return (voltageMv / 1000.0f) / 4.0f; }
-    bool     isSensorReady() const { return adsAvailable; }
+    float    getCellAverageV() const { return (cellCount > 0) ? (voltageMv / 1000.0f) / (float)cellCount : 0.0f; }
+    bool     isSensorReady() const { return useDirectAdc || adsAvailable; }
 
 private:
     Adafruit_ADS1115 ads;
@@ -110,4 +183,7 @@ private:
     float    consumedMah;
     uint32_t lastUpdateMs;
     bool     adsAvailable;
+    bool     useDirectAdc = false;
+    uint8_t  cellCount = 4;
+    uint16_t capacityMah = 2650;
 };

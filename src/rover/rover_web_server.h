@@ -36,6 +36,11 @@ public:
         _roverId = id;
     }
 
+    typedef std::function<void(const char*)> CommandQueueCallback;
+    void setCommandQueueCallback(CommandQueueCallback cb) {
+        _commandQueueCb = cb;
+    }
+
     void setDisplay(RoverDisplay *display) {
         _display = display;
     }
@@ -46,6 +51,7 @@ public:
 
 private:
     WebServer _server;
+    CommandQueueCallback _commandQueueCb = nullptr;
     WiFiConfigManager &_wifi;
     GPSTracker &_gps;
     BatteryMonitor &_battery;
@@ -135,13 +141,8 @@ private:
     void setupRoutes() {
         // Rotas principais (Prioridade ao Cartão SD /www/rover/... com fallback para /www/... e Flash)
         _server.on("/", [this]() {
-            if (_wifi.isAPMode()) {
-                if (tryServeSdFile("/www/wifi.html")) return;
-                handleWifiPage();
-            } else {
-                if (tryServeSdFile("/www/index.html") || tryServeSdFile("/www/gps.html")) return;
-                handleGpsPage();
-            }
+            if (tryServeSdFile("/www/index.html") || tryServeSdFile("/www/gps.html")) return;
+            handleGpsPage();
         });
 
         _server.on("/wifi", [this]() {
@@ -157,17 +158,15 @@ private:
             handleConfigPage();
         });
         _server.on("/gps", [this]() { 
-            if (_wifi.isAPMode()) { _server.sendHeader("Location", "/wifi"); _server.send(302, "text/plain", ""); return; }
             if (tryServeSdFile("/www/gps.html") || tryServeSdFile("/www/index.html")) return;
             handleGpsPage(); 
         });
         _server.on("/battery", [this]() { 
-            if (_wifi.isAPMode()) { _server.sendHeader("Location", "/wifi"); _server.send(302, "text/plain", ""); return; }
             if (tryServeSdFile("/www/battery.html")) return;
             handleBatteryPage(); 
         });
         _server.on("/control", [this]() { 
-            if (_wifi.isAPMode()) { _server.sendHeader("Location", "/wifi"); _server.send(302, "text/plain", ""); return; }
+            if (tryServeSdFile("/www/control.html")) return;
             handleControlPage(); 
         });
         _server.on("/www/control.html", [this]() { handleControlPage(); });
@@ -176,6 +175,7 @@ private:
             if (tryServeSdFile("/www/sd.html")) return;
             handleSdPage();
         });
+        _server.on("/favicon.ico", [this]() { _server.send(204, "image/x-icon", ""); });
 
         // APIs JSON & Operações
         _server.on("/api/status", [this]() { handleApiStatus(); });
@@ -191,6 +191,11 @@ private:
         _server.on("/api/rover/config", HTTP_POST, [this]() { handleApiRoverConfigSave(); });
         _server.on("/api/rover/config/reload", HTTP_POST, [this]() { handleApiRoverConfigReload(); });
         _server.on("/api/display/brightness", HTTP_POST, [this]() { handleApiDisplayBrightness(); });
+
+        // Configuração da Bateria (3S, 4S ou 6S e Capacidade mAh)
+        _server.on("/api/battery/config", HTTP_GET, [this]() { handleApiBatteryConfigGet(); });
+        _server.on("/api/battery/config", HTTP_POST, [this]() { handleApiBatteryConfigSet(); });
+        _server.on("/api/battery/reset", HTTP_POST, [this]() { handleApiBatteryReset(); });
 
         // Controle de atuadores
         _server.on("/api/control/actuator", [this]() { handleApiActuator(); });
@@ -246,12 +251,7 @@ private:
                     return;
                 }
             }
-            if (_wifi.isAPMode()) {
-                _server.sendHeader("Location", "/wifi");
-                _server.send(302, "text/plain", "");
-            } else {
-                _server.send(404, "text/plain", "Pagina nao encontrada");
-            }
+            _server.send(404, "text/plain", "Ficheiro ou pagina nao encontrada");
         });
     }
 
@@ -757,7 +757,7 @@ private:
     // PÁGINA 3: MONITORAMENTO DA BATERIA LIPO 4S
     // -------------------------------------------------------------
     void handleBatteryPage() {
-        String html = getHtmlHeader("Monitor da Bateria LiPo 4S", "battery");
+        String html = getHtmlHeader("Monitor da Bateria LiPo", "battery");
 
         _battery.update();
         uint8_t pct = _battery.getPercentage();
@@ -765,10 +765,35 @@ private:
         float vCell = _battery.getCellAverageV();
         float currentA = _battery.getCurrentAmps();
         float consumedMah = _battery.getConsumedMah();
+        uint8_t cells = _battery.getCellCount();
         String barColor = pct < 25 ? "var(--red)" : (pct < 50 ? "var(--yellow)" : "var(--green)");
 
+        html += "<style>";
+        html += ".batt-type-btn { flex: 1; min-width: 90px; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--card-border); background: rgba(15,23,42,0.6); color: var(--muted); cursor: pointer; font-weight: 600; transition: all 0.2s ease; display: flex; flex-direction: column; align-items: center; gap: 4px; }";
+        html += ".batt-type-btn.active { background: rgba(6,182,212,0.15); border-color: var(--primary); color: var(--text); box-shadow: 0 0 12px rgba(6,182,212,0.25); }";
+        html += ".batt-type-btn:hover:not(.active) { border-color: var(--muted); color: var(--text); }";
+        html += ".batt-type-btn .sub { font-size: 0.72rem; font-weight: normal; color: var(--muted); }";
+        html += ".batt-type-btn.active .sub { color: var(--primary); }";
+        html += "</style>";
+
         html += "<div class='card'>";
-        html += "<div class='card-title'><span><i class='fa-solid fa-battery-full'></i> Monitoramento APM Power Module (28V / 90A)</span></div>";
+        html += "<div class='card-title' style='display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;'>";
+        html += "  <span><i class='fa-solid fa-battery-full'></i> Monitorização APM Power Module (28V / 90A)</span>";
+        html += "  <span id='saveStatusBadge' class='badge' style='display:none;background:rgba(16,185,129,0.2);color:var(--green);border:1px solid var(--green);'><i class='fa-solid fa-check'></i> Gravado</span>";
+        html += "</div>";
+
+        // Selector 3S / 4S / 6S
+        html += "<div style='margin:12px 0 20px 0;background:rgba(0,0,0,0.25);padding:14px;border-radius:10px;border:1px solid var(--card-border);'>";
+        html += "  <div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:6px;'>";
+        html += "    <span class='stat-label' style='font-weight:600;color:var(--text);font-size:0.9rem;'><i class='fa-solid fa-sliders'></i> Configuração da Bateria LiPo:</span>";
+        html += "    <span id='battSpecs' style='font-size:0.8rem;color:var(--primary);font-weight:600;'></span>";
+        html += "  </div>";
+        html += "  <div style='display:grid;grid-template-columns:repeat(3,1fr);gap:10px;'>";
+        html += "    <button type='button' class='batt-type-btn" + String(cells == 3 ? " active" : "") + "' id='btn3S' onclick='selectBattery(3)'><span style='font-size:1.1rem;display:flex;align-items:center;gap:6px;'><i class='fa-solid fa-battery-half'></i> 3S LiPo</span><span class='sub'>11.1V Nom &bull; 12.6V Max</span></button>";
+        html += "    <button type='button' class='batt-type-btn" + String(cells == 4 ? " active" : "") + "' id='btn4S' onclick='selectBattery(4)'><span style='font-size:1.1rem;display:flex;align-items:center;gap:6px;'><i class='fa-solid fa-battery-three-quarters'></i> 4S LiPo</span><span class='sub'>14.8V Nom &bull; 16.8V Max</span></button>";
+        html += "    <button type='button' class='batt-type-btn" + String(cells == 6 ? " active" : "") + "' id='btn6S' onclick='selectBattery(6)'><span style='font-size:1.1rem;display:flex;align-items:center;gap:6px;'><i class='fa-solid fa-battery-full'></i> 6S LiPo</span><span class='sub'>22.2V Nom &bull; 25.2V Max</span></button>";
+        html += "  </div>";
+        html += "</div>";
 
         // Gauge Grande
         html += "<div style='text-align:center;padding:16px 0;'>";
@@ -783,27 +808,51 @@ private:
         html += "<div class='stat-box'><div class='stat-label'>Consumo Acumulado</div><div class='stat-value' id='consVal' style='color:var(--yellow);'>" + String(consumedMah, 0) + " mAh</div></div>";
         html += "</div>";
 
-        // Tabela representativa das 4 células
+        // Tabela representativa dinâmica
         html += "<div style='margin-top:20px;'>";
-        html += "<div class='stat-label' style='margin-bottom:8px;'>Distribuição Estimada de Tensão (4S LiPo):</div>";
-        html += "<div class='grid-4'>";
-        for (int c = 1; c <= 4; ++c) {
-            html += "<div class='stat-box' style='text-align:center;'><div class='stat-label'>Célula " + String(c) + "</div><div class='stat-value cell-v' style='font-size:1.2rem;color:var(--primary);'>" + String(vCell, 2) + " V</div></div>";
-        }
-        html += "</div></div></div>";
+        html += "<div class='stat-label' style='margin-bottom:8px;'>Distribuição Estimada de Tensão (<span id='cellsCountLabel'>" + String(cells) + "S</span> LiPo):</div>";
+        html += "<div id='cellsGrid' style='display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;'></div>";
+        html += "</div></div>";
 
         html += "<script>";
+        html += "let currentCells = " + String(cells) + "; let lastKnownAvg = " + String(vCell, 2) + ";";
+        html += "function updateBatteryUI(cells) {";
+        html += "  currentCells = cells;";
+        html += "  [3,4,6].forEach(c => { const btn = document.getElementById('btn' + c + 'S'); if(btn){ if(c===cells) btn.classList.add('active'); else btn.classList.remove('active'); } });";
+        html += "  const sp = document.getElementById('battSpecs');";
+        html += "  if(sp){ if(cells===3) sp.innerText='3S LiPo • 9.9V min • 12.6V max'; else if(cells===4) sp.innerText='4S LiPo • 13.2V min • 16.8V max'; else if(cells===6) sp.innerText='6S LiPo • 19.8V min • 25.2V max'; }";
+        html += "  const lbl = document.getElementById('cellsCountLabel'); if(lbl) lbl.innerText = cells + 'S';";
+        html += "  renderCellsGrid(cells, lastKnownAvg);";
+        html += "}";
+        html += "function renderCellsGrid(cells, avgV) {";
+        html += "  const grid = document.getElementById('cellsGrid'); if(!grid) return; let h = '';";
+        html += "  for(let i=1; i<=cells; i++){";
+        html += "    h += '<div class=\"stat-box\" style=\"text-align:center;padding:10px 8px;\"><div class=\"stat-label\" style=\"font-size:0.75rem;\"><i class=\"fa-solid fa-bolt\"></i> Célula ' + i + '</div><div class=\"stat-value cell-v\" style=\"font-size:1.15rem;color:var(--primary);margin-top:4px;\">' + (avgV>0 ? avgV.toFixed(2) + ' V' : '-- V') + '</div></div>';";
+        html += "  }";
+        html += "  grid.innerHTML = h;";
+        html += "}";
+        html += "function selectBattery(cells) {";
+        html += "  updateBatteryUI(cells);";
+        html += "  fetch('/api/battery/config', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({cells:cells}) })";
+        html += "    .then(r=>r.json()).then(res=>{";
+        html += "      const badge = document.getElementById('saveStatusBadge');";
+        html += "      if(badge){ badge.style.display='inline-flex'; setTimeout(()=>{ badge.style.display='none'; }, 2500); }";
+        html += "    }).catch(e=>console.error(e));";
+        html += "}";
+        html += "updateBatteryUI(currentCells);";
         html += "setInterval(()=>{fetch('/api/status').then(r=>r.json()).then(data=>{";
-        html += "const b=data.battery;";
-        html += "const p=b.pct;const v=b.voltage;const vc=b.cell_avg;";
-        html += "const col=p<25?'var(--red)':(p<50?'var(--yellow)':'var(--green)');";
-        html += "document.getElementById('batPct').innerText=p+'%';document.getElementById('batPct').style.color=col;";
-        html += "document.getElementById('batBar').style.width=p+'%';document.getElementById('batBar').style.background=col;";
-        html += "document.getElementById('vTotVal').innerText=v.toFixed(2)+' V';";
-        html += "document.getElementById('vCellVal').innerText=vc.toFixed(2)+' V/cel';";
-        html += "document.getElementById('currVal').innerText=b.current_a.toFixed(2)+' A';";
-        html += "document.getElementById('consVal').innerText=b.consumed_mah.toFixed(0)+' mAh';";
-        html += "document.querySelectorAll('.cell-v').forEach(el=>el.innerText=vc.toFixed(2)+' V');";
+        html += "  const b=data.battery; if(!b) return;";
+        html += "  const p=b.pct;const v=b.voltage;const vc=b.cell_avg;";
+        html += "  lastKnownAvg = vc;";
+        html += "  if(b.cells && b.cells !== currentCells) updateBatteryUI(b.cells);";
+        html += "  const col=p<25?'var(--red)':(p<50?'var(--yellow)':'var(--green)');";
+        html += "  document.getElementById('batPct').innerText=p+'%';document.getElementById('batPct').style.color=col;";
+        html += "  document.getElementById('batBar').style.width=p+'%';document.getElementById('batBar').style.background=col;";
+        html += "  document.getElementById('vTotVal').innerText=v.toFixed(2)+' V';";
+        html += "  document.getElementById('vCellVal').innerText=vc.toFixed(2)+' V/cel';";
+        html += "  document.getElementById('currVal').innerText=b.current_a.toFixed(2)+' A';";
+        html += "  document.getElementById('consVal').innerText=b.consumed_mah.toFixed(0)+' mAh';";
+        html += "  document.querySelectorAll('.cell-v').forEach(el=>el.innerText=vc.toFixed(2)+' V');";
         html += "});},1000);";
         html += "</script>";
 
@@ -1399,6 +1448,10 @@ private:
         b["pct"] = _battery.getPercentage();
         b["voltage"] = _battery.getVoltageMv() / 1000.0f;
         b["cell_avg"] = _battery.getCellAverageV();
+        b["cells"] = _battery.getCellCount();
+        b["capacity_mah"] = _battery.getCapacityMah();
+        b["remaining_mah"] = _battery.getRemainingMah();
+        b["autonomy_hrs"] = _battery.getEstimatedHoursRemaining();
         b["current_a"] = _battery.getCurrentAmps();
         b["consumed_mah"] = _battery.getConsumedMah();
 
@@ -1453,6 +1506,8 @@ private:
         doc["ap_ssid"] = _config.getApSsid();
         doc["ap_password"] = _config.getApPassword();
         doc["screen_brightness"] = _config.getScreenBrightness();
+        doc["battery_cells"] = _config.getBatteryCells();
+        doc["battery_capacity_mah"] = _config.getBatteryCapacityMah();
         doc["sd_ready"] = _sd.isReady();
         doc["has_config_file"] = (_sd.isReady() && _sd.fileExists("/config.json"));
         String out;
@@ -1476,9 +1531,21 @@ private:
         String pass = doc["ap_password"] | _config.getApPassword();
         uint8_t bright = doc["screen_brightness"] | doc["brightness"] | _config.getScreenBrightness();
         if (bright > 100) bright = 100;
+        uint8_t cells = doc["battery_cells"] | doc["cells"] | _config.getBatteryCells();
+        if (cells != 3 && cells != 4 && cells != 6) cells = _config.getBatteryCells();
+        uint16_t cap = doc["battery_capacity_mah"] | doc["capacity_mah"] | doc["capacity"] | _config.getBatteryCapacityMah();
 
-        _config.updateConfig(id, ssid, pass, bright);
+        _config.updateConfig(id, ssid, pass, bright, cells, cap);
         _roverId = _config.getRoverId();
+        _battery.setCellCount(cells);
+        if (cap >= 500 && cap <= 50000) {
+            _battery.setCapacityMah(cap);
+        }
+
+        if (_commandQueueCb) {
+            String cmd = "CMD:BATT:" + String(cells);
+            _commandQueueCb(cmd.c_str());
+        }
 
         if (_display) {
             _display->setBrightness(bright);
@@ -1490,7 +1557,94 @@ private:
         res["rover_id"] = _roverId;
         res["ap_ssid"] = _config.getApSsid();
         res["screen_brightness"] = _config.getScreenBrightness();
+        res["battery_cells"] = _config.getBatteryCells();
+        res["battery_capacity_mah"] = _config.getBatteryCapacityMah();
 
+        String out;
+        serializeJson(res, out);
+        _server.send(200, "application/json", out);
+    }
+
+    void handleApiBatteryConfigGet() {
+        JsonDocument doc;
+        uint8_t c = _battery.getCellCount();
+        doc["cells"] = c;
+        doc["capacity_mah"] = _battery.getCapacityMah();
+        doc["remaining_mah"] = _battery.getRemainingMah();
+        doc["autonomy_hrs"] = _battery.getEstimatedHoursRemaining();
+        doc["voltage_min"] = (c * 3300) / 1000.0f;
+        doc["voltage_max"] = (c * 4200) / 1000.0f;
+        doc["voltage_nom"] = (c * 3700) / 1000.0f;
+        String res;
+        serializeJson(doc, res);
+        _server.send(200, "application/json", res);
+    }
+
+    void handleApiBatteryConfigSet() {
+        uint8_t cells = 0;
+        uint16_t cap = 0;
+        bool reset = false;
+
+        if (_server.hasArg("cells")) cells = _server.arg("cells").toInt();
+        if (_server.hasArg("capacity")) cap = _server.arg("capacity").toInt();
+        if (_server.hasArg("capacity_mah")) cap = _server.arg("capacity_mah").toInt();
+        if (_server.hasArg("reset")) reset = (_server.arg("reset") == "1" || _server.arg("reset") == "true");
+
+        if (_server.hasArg("plain")) {
+            JsonDocument doc;
+            DeserializationError err = deserializeJson(doc, _server.arg("plain"));
+            if (!err) {
+                if (doc["cells"].is<int>()) cells = doc["cells"].as<uint8_t>();
+                if (doc["capacity_mah"].is<int>()) cap = doc["capacity_mah"].as<uint16_t>();
+                else if (doc["capacity"].is<int>()) cap = doc["capacity"].as<uint16_t>();
+                if (doc["reset"].is<bool>()) reset = doc["reset"].as<bool>();
+            }
+        }
+
+        bool changed = false;
+        if (cells == 3 || cells == 4 || cells == 6) {
+            _battery.setCellCount(cells);
+            _config.setBatteryCells(cells);
+            changed = true;
+            if (_commandQueueCb) {
+                String cmd = "CMD:BATT:" + String(cells);
+                _commandQueueCb(cmd.c_str());
+            }
+        }
+
+        if (cap >= 500 && cap <= 50000) {
+            _battery.setCapacityMah(cap);
+            _config.setBatteryCapacityMah(cap);
+            changed = true;
+        }
+
+        if (reset) {
+            _battery.resetConsumed();
+        }
+
+        if (changed) {
+            _config.saveConfig();
+        }
+
+        JsonDocument res;
+        res["success"] = true;
+        res["cells"] = _battery.getCellCount();
+        res["capacity_mah"] = _battery.getCapacityMah();
+        res["remaining_mah"] = _battery.getRemainingMah();
+        res["autonomy_hrs"] = _battery.getEstimatedHoursRemaining();
+        res["msg"] = "Configuração da Bateria atualizada com sucesso!";
+        String out;
+        serializeJson(res, out);
+        _server.send(200, "application/json", out);
+    }
+
+    void handleApiBatteryReset() {
+        _battery.resetConsumed();
+        JsonDocument res;
+        res["success"] = true;
+        res["msg"] = "Contador de consumo acumulado reposto a zero!";
+        res["remaining_mah"] = _battery.getRemainingMah();
+        res["capacity_mah"] = _battery.getCapacityMah();
         String out;
         serializeJson(res, out);
         _server.send(200, "application/json", out);
@@ -1502,6 +1656,12 @@ private:
             _display->setBrightness(_config.getScreenBrightness());
         }
         _roverId = _config.getRoverId();
+        _battery.setCellCount(_config.getBatteryCells());
+        _battery.setCapacityMah(_config.getBatteryCapacityMah());
+        if (_commandQueueCb) {
+            String cmd = "CMD:BATT:" + String(_config.getBatteryCells());
+            _commandQueueCb(cmd.c_str());
+        }
 
         JsonDocument res;
         res["success"] = true;
@@ -1509,6 +1669,7 @@ private:
         res["rover_id"] = _roverId;
         res["ap_ssid"] = _config.getApSsid();
         res["screen_brightness"] = _config.getScreenBrightness();
+        res["battery_cells"] = _config.getBatteryCells();
 
         String out;
         serializeJson(res, out);

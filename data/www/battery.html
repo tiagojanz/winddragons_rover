@@ -31,18 +31,66 @@
   <main class="container">
     
 <div class="card">
-  <div class="card-title">
-    <span><i class="fa-solid fa-battery-full"></i> Monitoramento APM Power Module (28V / 90A)</span>
+  <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+    <span><i class="fa-solid fa-battery-full"></i> Monitorização APM Power Module (28V / 90A)</span>
+    <span id="saveStatusBadge" class="badge" style="display:none;background:rgba(16,185,129,0.2);color:var(--green);border:1px solid var(--green);">
+      <i class="fa-solid fa-check"></i> Gravado
+    </span>
   </div>
 
-  <div style="text-align:center;padding:16px 0;">
+  <!-- Selector de Tipo de Bateria (3S / 4S / 6S) e Capacidade -->
+  <div style="margin: 12px 0 20px 0; background: rgba(0,0,0,0.25); padding: 14px; border-radius: 10px; border: 1px solid var(--card-border);">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:6px;">
+      <span class="stat-label" style="font-weight:600;color:var(--text);font-size:0.9rem;">
+        <i class="fa-solid fa-sliders"></i> Configuração da Bateria LiPo:
+      </span>
+      <span id="battSpecs" style="font-size:0.8rem;color:var(--primary);font-weight:600;">4S LiPo &bull; 13.2V min &bull; 16.8V max</span>
+    </div>
+    <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px;">
+      <button type="button" class="batt-type-btn" id="btn3S" onclick="selectBattery(3)">
+        <span style="font-size:1.1rem;display:flex;align-items:center;gap:6px;"><i class="fa-solid fa-battery-half"></i> 3S LiPo</span>
+        <span class="sub">11.1V Nom &bull; 12.6V Max</span>
+      </button>
+      <button type="button" class="batt-type-btn active" id="btn4S" onclick="selectBattery(4)">
+        <span style="font-size:1.1rem;display:flex;align-items:center;gap:6px;"><i class="fa-solid fa-battery-three-quarters"></i> 4S LiPo</span>
+        <span class="sub">14.8V Nom &bull; 16.8V Max</span>
+      </button>
+      <button type="button" class="batt-type-btn" id="btn6S" onclick="selectBattery(6)">
+        <span style="font-size:1.1rem;display:flex;align-items:center;gap:6px;"><i class="fa-solid fa-battery-full"></i> 6S LiPo</span>
+        <span class="sub">22.2V Nom &bull; 25.2V Max</span>
+      </button>
+    </div>
+
+    <!-- Capacidade Nominal e Ações de Bateria -->
+    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; padding-top:12px; border-top:1px solid rgba(255,255,255,0.08);">
+      <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+        <label for="batCapacityInput" style="font-size:0.85rem;color:var(--muted);font-weight:600;">Capacidade Nominal:</label>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <input type="number" id="batCapacityInput" min="500" max="50000" step="50" value="2650"
+                 style="width:110px; padding:6px 10px; background:rgba(15,23,42,0.8); border:1px solid var(--card-border); border-radius:6px; color:var(--text); font-weight:600; text-align:right;">
+          <span style="font-size:0.85rem;color:var(--muted);">mAh</span>
+          <button type="button" class="btn btn-secondary" onclick="saveCapacity()" style="padding:6px 12px; font-size:0.8rem;">
+            <i class="fa-solid fa-floppy-disk"></i> Guardar
+          </button>
+        </div>
+      </div>
+      <div>
+        <button type="button" onclick="resetConsumedCounter()" title="Repor contador de mAh quando carregar/trocar a bateria"
+                style="padding:6px 12px; font-size:0.8rem; border:1px solid var(--primary); color:var(--primary); background:transparent; border-radius:6px; cursor:pointer;">
+          <i class="fa-solid fa-rotate-left"></i> Bateria Nova (Zerar mAh)
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div style="text-align:center;padding:12px 0;">
     <div style="font-size:3.5rem;font-weight:800;color:var(--green);" id="batPct">--%</div>
     <div class="progress-bg" style="max-width:400px;margin:0 auto;">
       <div id="batBar" class="progress-bar" style="width:0%;background:var(--green);"></div>
     </div>
   </div>
 
-  <div class="grid-4">
+  <div class="grid-4" style="grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));">
     <div class="stat-box">
       <div class="stat-label">Tensão Total</div>
       <div class="stat-value" id="vTotVal" style="color:var(--text);">-- V</div>
@@ -52,39 +100,130 @@
       <div class="stat-value" id="vCellVal" style="color:var(--primary);">-- V/cel</div>
     </div>
     <div class="stat-box">
-      <div class="stat-label">Corrente Instantânea</div>
+      <div class="stat-label">Corrente Atual</div>
       <div class="stat-value" id="currVal" style="color:var(--text);">-- A</div>
     </div>
     <div class="stat-box">
-      <div class="stat-label">Consumo Acumulado</div>
+      <div class="stat-label">Consumo Total</div>
       <div class="stat-value" id="consVal" style="color:var(--yellow);">-- mAh</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Carga Restante</div>
+      <div class="stat-value" id="remVal" style="color:var(--green);">-- mAh</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Autonomia Estimada</div>
+      <div class="stat-value" id="autVal" style="color:var(--primary);">--</div>
     </div>
   </div>
 
+  <!-- Distribuição Dinâmica de Células (3, 4 ou 6) -->
   <div style="margin-top:20px;">
-    <div class="stat-label" style="margin-bottom:8px;">Distribuição Estimada de Tensão (4S LiPo):</div>
-    <div class="grid-4">
-      <div class="stat-box" style="text-align:center;">
-        <div class="stat-label">Célula 1</div>
-        <div class="stat-value cell-v" style="font-size:1.2rem;color:var(--primary);">-- V</div>
-      </div>
-      <div class="stat-box" style="text-align:center;">
-        <div class="stat-label">Célula 2</div>
-        <div class="stat-value cell-v" style="font-size:1.2rem;color:var(--primary);">-- V</div>
-      </div>
-      <div class="stat-box" style="text-align:center;">
-        <div class="stat-label">Célula 3</div>
-        <div class="stat-value cell-v" style="font-size:1.2rem;color:var(--primary);">-- V</div>
-      </div>
-      <div class="stat-box" style="text-align:center;">
-        <div class="stat-label">Célula 4</div>
-        <div class="stat-value cell-v" style="font-size:1.2rem;color:var(--primary);">-- V</div>
-      </div>
+    <div class="stat-label" id="cellsTitle" style="margin-bottom:8px;">Distribuição Estimada de Tensão (<span id="cellsCountLabel">4S</span> LiPo):</div>
+    <div id="cellsGrid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap:10px;">
     </div>
   </div>
 </div>
 
 <script>
+let currentCells = 4;
+let lastKnownAvg = 0;
+
+function updateBatteryUI(cells) {
+  currentCells = cells;
+  [3, 4, 6].forEach(c => {
+    const btn = document.getElementById('btn' + c + 'S');
+    if (btn) {
+      if (c === cells) btn.classList.add('active');
+      else btn.classList.remove('active');
+    }
+  });
+
+  const specsEl = document.getElementById('battSpecs');
+  if (specsEl) {
+    if (cells === 3) specsEl.innerText = '3S LiPo • 9.9V min • 12.6V max';
+    else if (cells === 4) specsEl.innerText = '4S LiPo • 13.2V min • 16.8V max';
+    else if (cells === 6) specsEl.innerText = '6S LiPo • 19.8V min • 25.2V max';
+  }
+
+  const lbl = document.getElementById('cellsCountLabel');
+  if (lbl) lbl.innerText = cells + 'S';
+
+  renderCellsGrid(cells, lastKnownAvg);
+}
+
+function renderCellsGrid(cells, avgV) {
+  const grid = document.getElementById('cellsGrid');
+  if (!grid) return;
+  let html = '';
+  for (let i = 1; i <= cells; i++) {
+    html += `
+      <div class="stat-box" style="text-align:center;padding:10px 8px;">
+        <div class="stat-label" style="font-size:0.75rem;"><i class="fa-solid fa-bolt"></i> Célula ${i}</div>
+        <div class="stat-value cell-v" style="font-size:1.15rem;color:var(--primary);margin-top:4px;">${avgV > 0 ? avgV.toFixed(2) + ' V' : '-- V'}</div>
+      </div>
+    `;
+  }
+  grid.innerHTML = html;
+}
+
+function showSaveBadge() {
+  const badge = document.getElementById('saveStatusBadge');
+  if (badge) {
+    badge.style.display = 'inline-flex';
+    setTimeout(() => { badge.style.display = 'none'; }, 2500);
+  }
+}
+
+function selectBattery(cells) {
+  updateBatteryUI(cells);
+  fetch('/api/battery/config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cells: cells })
+  })
+  .then(r => r.json())
+  .then(res => showSaveBadge())
+  .catch(err => console.error('Erro ao guardar config de bateria:', err));
+}
+
+function saveCapacity() {
+  const cap = parseInt(document.getElementById('batCapacityInput').value, 10);
+  if (isNaN(cap) || cap < 500 || cap > 50000) {
+    alert('Introduza um valor válido de capacidade entre 500 e 50000 mAh.');
+    return;
+  }
+  fetch('/api/battery/config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ capacity_mah: cap })
+  })
+  .then(r => r.json())
+  .then(res => showSaveBadge())
+  .catch(err => console.error('Erro ao guardar capacidade:', err));
+}
+
+function resetConsumedCounter() {
+  if (!confirm('Deseja repor a zero o contador de mAh consumidos para a nova bateria?')) return;
+  fetch('/api/battery/reset', { method: 'POST' })
+    .then(r => r.json())
+    .then(res => showSaveBadge())
+    .catch(err => console.error(err));
+}
+
+// Obter configuração inicial de células e capacidade
+fetch('/api/battery/config')
+  .then(r => r.json())
+  .then(data => {
+    if (data.cells) updateBatteryUI(data.cells);
+    else updateBatteryUI(4);
+    if (data.capacity_mah) {
+      const inp = document.getElementById('batCapacityInput');
+      if (inp) inp.value = data.capacity_mah;
+    }
+  })
+  .catch(() => updateBatteryUI(4));
+
 setInterval(() => {
   fetch('/api/status')
     .then(r => r.json())
@@ -94,6 +233,15 @@ setInterval(() => {
       const p = b.pct || 0;
       const v = b.voltage || 0;
       const vc = b.cell_avg || 0;
+      const cap = b.capacity_mah || 2650;
+      const rem = (b.remaining_mah !== undefined) ? b.remaining_mah : Math.max(0, cap - (b.consumed_mah || 0));
+      const hrs = b.autonomy_hrs;
+      lastKnownAvg = vc;
+      
+      if (b.cells && b.cells !== currentCells) {
+        updateBatteryUI(b.cells);
+      }
+
       const col = p < 25 ? 'var(--red)' : (p < 50 ? 'var(--yellow)' : 'var(--green)');
       document.getElementById('batPct').innerText = p + '%';
       document.getElementById('batPct').style.color = col;
@@ -103,6 +251,21 @@ setInterval(() => {
       document.getElementById('vCellVal').innerText = vc.toFixed(2) + ' V/cel';
       document.getElementById('currVal').innerText = (b.current_a || 0).toFixed(2) + ' A';
       document.getElementById('consVal').innerText = (b.consumed_mah || 0).toFixed(0) + ' mAh';
+      document.getElementById('remVal').innerText = rem.toFixed(0) + ' / ' + cap + ' mAh';
+
+      const autEl = document.getElementById('autVal');
+      if (autEl) {
+        if (hrs !== undefined && hrs > 0) {
+          const h = Math.floor(hrs);
+          const m = Math.round((hrs - h) * 60);
+          autEl.innerText = '~' + h + 'h ' + (m < 10 ? '0' : '') + m + 'm';
+          autEl.style.color = (hrs < 0.5) ? 'var(--red)' : ((hrs < 1.0) ? 'var(--yellow)' : 'var(--green)');
+        } else {
+          autEl.innerText = ((b.current_a || 0) > 0.05) ? '< 1 min' : 'Standby / Parado';
+          autEl.style.color = 'var(--muted)';
+        }
+      }
+
       document.querySelectorAll('.cell-v').forEach(el => el.innerText = vc.toFixed(2) + ' V');
     }).catch(() => {});
 }, 1000);

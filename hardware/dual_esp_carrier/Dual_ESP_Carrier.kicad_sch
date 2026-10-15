@@ -35,7 +35,7 @@
 		)
 		(uuid "a810b050-e56e-485a-a214-559ca08e49a5")
 	)
-	(text "INTER-ESP UART: HIGH-SPEED BIDIRECTIONAL LINK (GPIO 2 & 3 @ 921600)"
+	(text "INTER-ESP UART: HIGH-SPEED BIDIRECTIONAL LINK (Master TX: GPIO 2, Master RX: GPIO 1 @ 921600)"
 		(exclude_from_sim no)
 		(at 100 80 0)
 		(effects

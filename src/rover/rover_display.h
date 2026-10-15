@@ -380,7 +380,7 @@ private:
         canvas->setTextColor(UI_LIGHTGREY);
         canvas->setTextSize(1);
         canvas->setCursor(10, cardY + 6);
-        canvas->print("BATERIA LIPO 4S:");
+        canvas->printf("BATERIA LIPO %uS:", batt.getCellCount());
 
         // Big Percentage Number (Size 3)
         canvas->setCursor(10, cardY + 20);
@@ -412,7 +412,7 @@ private:
         canvas->setTextColor(UI_LIGHTGREY);
         canvas->setTextSize(1);
         canvas->setCursor(168, cardY + 6);
-        canvas->print("MEDIA P/ CELULA (4S):");
+        canvas->printf("MEDIA P/ CELULA (%uS):", batt.getCellCount());
         canvas->setCursor(168, cardY + 18);
         canvas->setTextSize(2);
         canvas->setTextColor(batt.getCellAverageV() < 3.4f ? UI_RED : UI_CYAN);

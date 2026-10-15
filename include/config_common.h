@@ -61,55 +61,72 @@
 #define PIN_I2C_SCL        1   // ESP32 GPIO 1 (SCL)
 
 // ==========================================
-// INTER-ESP UART DEFINITIONS (Lafvin LCD <-> ESP32-C6 Slave)
+// INTER-ESP UART DEFINITIONS (Lafvin Master <-> ESP32-C6 Slave)
 // ==========================================
-// Testado e validado em bancada a 115200 bps (0% perdas, RTT ~4-6ms)
-// Amarelo: C6 TX (GPIO 13) -> Lafvin RX (GPIO 2)
-// Verde:   Lafvin TX (GPIO 4) -> C6 RX (GPIO 22)
+// Testado e 100% validado em bancada a 115200 bps (0% perdas, RTT ~36ms em cadeia)
+// Amarelo: C6 TX (GPIO 13) -> Lafvin RX (GPIO 1 / Pad 5)
+// Verde:   Lafvin TX (GPIO 2 / Pad 4) -> C6 RX (GPIO 22)
 // Preto:   GND Comum
-#define PIN_INTER_ESP_LAFVIN_TX   4   // Lafvin Top Header (GPIO 4)
-#define PIN_INTER_ESP_LAFVIN_RX   2   // Lafvin Top Header (GPIO 2)
-#define PIN_INTER_ESP_C6_TX      13   // C6 DevKit Header J3 (GPIO 13)
-#define PIN_INTER_ESP_C6_RX      22   // C6 DevKit Header J3 (GPIO 22)
+#define PIN_INTER_ESP_LAFVIN_TX   2   // Lafvin Header J1 Pad 4 (Serigrafia 2 / GPIO 2)
+#define PIN_INTER_ESP_LAFVIN_RX   1   // Lafvin Header J1 Pad 5 (Serigrafia 1 / GPIO 1)
+#define PIN_INTER_ESP_C6_TX      13   // C6 DevKitC Header J3 Pin 13 (GPIO 13)
+#define PIN_INTER_ESP_C6_RX      22   // C6 DevKitC Header J3 Pin 6 (GPIO 22)
 #define INTER_ESP_BAUDRATE   115200
 
 // ==========================================
-// ROVER PIN DEFINITIONS
+// C6 DEVKITC ROVER PIN DEFINITIONS (COPROCESSADOR)
 // ==========================================
-// GPS Quectel LC29H on Bottom Header (Hardware UART on RX/TX)
-#define PIN_GPS_RX         16  // ESP32 RX <- Quectel LC29H TX (Bottom Header Pin 8 - RX)
-#define PIN_GPS_TX         17  // ESP32 TX -> Quectel LC29H RX (Bottom Header Pin 9 - TX)
-#define GPS_BAUDRATE       115200
+// LoRa SX1278 (Ra-02 433MHz no barramento de hardware FSPI do DevKitC)
+#define PIN_C6_LORA_NSS       6   // GPIO 6
+#define PIN_C6_LORA_SCK       5   // GPIO 5
+#define PIN_C6_LORA_MOSI      7   // GPIO 7
+#define PIN_C6_LORA_MISO      4   // GPIO 4
+#define PIN_C6_LORA_DIO0      0   // GPIO 0
+#define PIN_C6_LORA_RST      -1   // Sem reset externo
 
-// ADS1115 16-Bit I2C ADC (Address 0x48) - High Precision Telemetry
-#define ADS1115_I2C_ADDR   0x48
-#define ADS_CH_BATT_VOLT   0   // AIN0: APM Power Module Voltage (10.1:1 divider)
-#define ADS_CH_BATT_CURR   1   // AIN1: APM Power Module Current (27.32 A/V)
-#define ADS_CH_WATER_SENS  2   // AIN2: Water detector probe
-#define ADS_CH_AUX         3   // AIN3: Auxiliary analog input
+// Power Module (LiPo 6S) via ADC interno do ESP32-C6
+#define PIN_C6_ADC_VOLT       2   // GPIO 2
+#define PIN_C6_ADC_CURR       3   // GPIO 3
+#define BATT_VOLT_DIVIDER     10.803f
+#define BATT_AMPS_PER_VOLT    27.32f
+#define BATT_CURR_OFFSET_MV   6.5f
 
-// PCA9685 16-Channel 12-Bit PWM Driver (Address 0x40) - 50Hz Servo/ESC Controller
-#define PCA9685_I2C_ADDR   0x40
-#define PCA_CH_MOTOR       0   // Main propulsion ESC
-#define PCA_CH_RUDDER      1   // Rudder servo
-#define PCA_CH_WINCH       2   // Anchor winch servo
-#define PCA_CH_RACK        3   // Anchor rack/clutch servo
+// Sensor de Água
+#define PIN_C6_WATER_SENS    15   // GPIO 15 (Entrada Analógica)
 
-// Anchor Hoisted Limit Detector (Reed / End-Stop switch on Bottom Header J5)
-#define PIN_ANCHOR_DETECTOR 13 // Active LOW when anchor is fully hoisted / at top (Bottom Header Pin 7)
-#define PIN_ALARM_BUZZER   -1  // Repurposed on Rover to PIN_ANCHOR_DETECTOR
+// GPS Quectel LC29H (UART Hardware)
+#define PIN_C6_GPS_RX        16   // ESP32 RX <- Quectel LC29H TX (GPIO 16)
+#define PIN_C6_GPS_TX        17   // ESP32 TX -> Quectel LC29H RX (GPIO 17)
+#define GPS_BAUDRATE     115200
 
-// Actuators & Direct GPIO Fallbacks
-#define PIN_MOTOR_ESC      18  // Main propulsion ESC (direct fallback)
-#define PIN_SERVO_RUD      20  // Rudder servo (direct fallback)
-#define PIN_WINCH          19  // Anchor winch servo (direct fallback)
-#define PIN_SERVO_RACK     23  // Anchor rack/clutch servo (direct fallback)
+// Atuadores / Servos (Sinais PWM Diretos)
+#define PIN_C6_MOTOR_ESC     21   // GPIO 21 - ESC Propulsão Principal
+#define PIN_C6_SERVO_RUD     20   // GPIO 20 - Servo do Leme
+#define PIN_C6_WINCH         19   // GPIO 19 - Servo Guincho da Âncora
+#define PIN_C6_SERVO_RACK    18   // GPIO 18 - Servo Trinco/Cremalheira Âncora
 
-// Rack servo positions (degrees)
-#define RACK_POS_ENGAGED   0   // Cremalheira engatada / travada (para recolher ou travar âncora)
+// Aliases e compatibilidade
+#define PIN_GPS_RX           PIN_C6_GPS_RX
+#define PIN_GPS_TX           PIN_C6_GPS_TX
+#define PIN_ANCHOR_DETECTOR  -1
+#define ADS1115_I2C_ADDR     0x48
+#define ADS_CH_BATT_VOLT     0
+#define ADS_CH_BATT_CURR     1
+#define ADS_CH_WATER_SENS    2
+#define ADS_CH_AUX           3
+
+// PCA9685 I2C Channels (Opcional / Compatibilidade)
+#define PCA9685_I2C_ADDR     0x40
+#define PCA_CH_MOTOR         0   // Main propulsion ESC
+#define PCA_CH_RUDDER        1   // Rudder servo
+#define PCA_CH_WINCH         2   // Anchor winch servo
+#define PCA_CH_RACK          3   // Anchor rack/clutch servo
+
+// Posições da cremalheira
+#define RACK_POS_ENGAGED   0   // Cremalheira engatada / travada
 #define RACK_POS_RELEASED  90  // Cremalheira levantada (livre para queda da âncora por gravidade)
 
-// ESC / Servo pulse limits (microseconds)
+// Limites de pulso PWM
 #define PWM_PULSE_MIN      1000
 #define PWM_PULSE_MID      1500
 #define PWM_PULSE_MAX      2000
@@ -117,9 +134,9 @@
 // ==========================================
 // BASE PIN DEFINITIONS
 // ==========================================
-// 4-pin Joystick connector on Top Header
-#define PIN_JOYSTICK_X  0   // ADC1_CH0 (Top Header Pin 6)
-#define PIN_JOYSTICK_Y  1   // ADC1_CH1 (Top Header Pin 5)
+// 4-pin Joystick connector on Top Header J1 (Pads 3 e 6)
+#define PIN_JOYSTICK_X  3   // ADC1_CH3 (Lafvin J1 Pad 3 / Serigrafia 3)
+#define PIN_JOYSTICK_Y  0   // ADC1_CH0 (Lafvin J1 Pad 6 / Serigrafia 0)
 #define PIN_JOYSTICK_SW -1  // Desativado no joystick: GPIO 9 e o botao BOOT com interrupcao dedicada para mudar de pagina
 
 // Physical buttons on Base (Bottom Header)

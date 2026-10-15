@@ -16,22 +16,31 @@ const float VOLT_DIVIDER_RATIO = 10.803f;
 const float AMPS_PER_VOLT      = 27.32f;
 const float CURR_OFFSET_MV     = 6.5f; // Offset residual medido a vazio (0A)
 
+void printLog(const char* format, ...) {
+    char buf[256];
+    va_list args;
+    va_start(args, format);
+    vsnprintf(buf, sizeof(buf), format, args);
+    va_end(args);
+    Serial.print(buf);
+    Serial0.print(buf);
+}
+
 void setup() {
     Serial.begin(115200);
+    Serial0.begin(115200);
     uint32_t t = millis();
-    while (!Serial && millis() - t < 3000) delay(10);
+    while (!Serial && !Serial0 && millis() - t < 2000) delay(10);
 
     analogReadResolution(12);
     analogSetAttenuation(ADC_11db);
     pinMode(PIN_ADC_VOLT, INPUT);
     pinMode(PIN_ADC_CURR, INPUT);
 
-    Serial.println();
-    Serial.println(F("======================================================================="));
-    Serial.println(F("    POWER MODULE GM v1.0 - TELEMETRIA EM TEMPO REAL CALIBRADA         "));
-    Serial.println(F("======================================================================="));
-    Serial.println(F("Configuração: GPIO 2 = BATT_VOLT | GPIO 3 = BATT_CURR | GND = J1-15"));
-    Serial.println();
+    printLog("\n=======================================================================\n");
+    printLog("    POWER MODULE GM v1.0 - TELEMETRIA EM TEMPO REAL CALIBRADA         \n");
+    printLog("=======================================================================\n");
+    printLog("Configuração: GPIO 2 = BATT_VOLT | GPIO 3 = BATT_CURR | GND = J1-15\n\n");
 }
 
 void loop() {
@@ -65,8 +74,8 @@ void loop() {
     else if (batVolts <= 19.8f) pct6S = 0;
     else pct6S = (int)(((batVolts - 19.8f) / (25.2f - 19.8f)) * 100.0f);
 
-    Serial.printf("[BATERIA 6S] Tensao: %5.2f V (%4.2f V/celula | %3d%%) | Corrente: %5.2f A | P:%6.1f W [ADC: %5.1fmV]\n",
-                  batVolts, cell6S, pct6S, currAmps, (batVolts * currAmps), mvV);
+    printLog("[BATERIA 6S] Tensao: %5.2f V (%4.2f V/cel | %3d%%) | Corrente: %5.2f A | P:%6.1f W [ADC_V: %5.1f mV | ADC_I: %5.1f mV]\n",
+             batVolts, cell6S, pct6S, currAmps, (batVolts * currAmps), mvV, mvI);
 
     delay(500);
 }
