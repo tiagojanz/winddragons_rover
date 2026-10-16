@@ -22,7 +22,7 @@
 				(bold yes)
 			)
 		)
-		(uuid "655faac8-ebad-47db-a493-2a1e5e0de2f1")
+		(uuid "222026eb-8cfb-4423-9cca-0e3bffbc2383")
 	)
 	(text "BACK PERIPHERALS: ESP32-C6 DEVKITC-1, SX1278 LORA & 4x DIRECT SERVOS"
 		(exclude_from_sim no)
@@ -33,9 +33,9 @@
 				(bold yes)
 			)
 		)
-		(uuid "a810b050-e56e-485a-a214-559ca08e49a5")
+		(uuid "5c4b82e6-b029-4474-87b3-5e22bea6cbf6")
 	)
-	(text "INTER-ESP UART: HIGH-SPEED BIDIRECTIONAL LINK (Master TX: GPIO 2, Master RX: GPIO 1 @ 921600)"
+	(text "INTER-ESP UART: LAFVIN (TX=GPIO4, RX=GPIO2) <---> DEVKITC (TX=GPIO13, RX=GPIO22)"
 		(exclude_from_sim no)
 		(at 100 80 0)
 		(effects
@@ -44,6 +44,6 @@
 				(bold yes)
 			)
 		)
-		(uuid "ffd0c23b-f590-4059-b7de-3f7986b506c8")
+		(uuid "d4dac5da-18b3-4690-b4ee-ecf1225fec1d")
 	)
 )

@@ -24,9 +24,9 @@ BACK (B.Cu / B.SilkS) - DAUGHTERBOARDS, RF & ACTUATORS:
         - Outline: (71.19, 64.23) to (89.19, 87.23)
     * Quectel LC29H GNSS GPS Module at (11.88, 12.5)
         - Outline: (3.5, 10.0) to (30.5, 41.0)
-    * 4x Direct RC Servo Headers (ESC, RUD, WIN, RCK) at Y=73.58..73.5 (X=10.0, 13.0, 16.0, 19.0)
-    * Telemetry Headers: J_BATT at (22.0, 73.5), J_WATER at (25.0, 73.5)
-    * Dual Power Inputs: 5V Servo (J_PWR_SRV) at (5.0, 77.73), 5V ESP (J_PWR_ESP) at (95.5, 51.5)
+    * 4x Direct RC Servo Headers (ESC, RUD, WIN, RCK) at Y=74.5 (X=6.0, 9.0, 12.0, 15.0)
+    * Actuator & Telemetry Headers: STRB at (18.0, 74.46), J_BATT at (21.0, 74.46), J_LIMIT at (24.0, 74.46), J_WATER at (26.5, 74.5)
+    * Dual Power Inputs: 5V Servo (J_PWR_SRV) at (14.5, 84.5, -90 deg), 5V ESP (J_PWR_ESP) at (95.5, 51.5)
 """
 
 import os
@@ -180,9 +180,22 @@ def generate_kicad_sch(path):
 # ==============================================================================
 def generate_kicad_pcb(path, force=False):
     template_path = os.path.join(os.path.dirname(path), f"{PROJECT_NAME}_template.kicad_pcb")
-    if os.path.exists(path) and not force:
-        print(f"Preserving existing user-modified PCB: {path}")
-        return
+    if os.path.exists(path):
+        if os.path.exists(template_path):
+            with open(path, "r") as f_act, open(template_path, "r") as f_tpl:
+                c_act = f_act.read()
+                c_tpl = f_tpl.read()
+            if c_act != c_tpl:
+                print(f"Detected user PCB changes! Synchronizing active board to master template: {template_path}")
+                with open(template_path, "w") as f_tpl:
+                    f_tpl.write(c_act)
+        else:
+            print(f"Creating initial master template from active board: {template_path}")
+            with open(path, "r") as f_act, open(template_path, "w") as f_tpl:
+                f_tpl.write(f_act.read())
+        if not force:
+            print(f"Preserving existing user-modified PCB: {path}")
+            return
     if os.path.exists(template_path):
         print(f"Writing PCB from master user-calibrated template: {template_path}")
         with open(template_path, "r") as tf:

@@ -91,16 +91,16 @@ Comunicação SPI independente no barramento secundário do DevKitC:
 ### 3.3. Servos e Sensores no DevKitC (Validação em Bancada Real)
 | Periférico | GPIO DevKitC | Pino PCB / Cabeçalho | Função / Estado de Validação |
 | :--- | :--- | :--- | :--- |
-| **Guincho (Winch)**| **GPIO 23** | **WIN Pin 3** (J_DK_R Pin 5 / J3-5) | **100% Validado em Bancada**: Controlo Web bidirecional (1800µs enrolar / 1200µs descer / 1500µs neutro). |
-| **Rack Vela / Trinco**| **GPIO 21** | **RCK Pin 3** (J_DK_R Pin 7 / J3-7) | **100% Validado em Bancada**: Sinal PWM (LEDC) Trinco da Âncora (0° engatado / 90° solto). |
-| **Leme (Rudder)** | **GPIO 15** | **RUD Pin 3** (J_DK_R Pin 4 / J3-4) | **100% Validado em Bancada**: Sinal PWM (LEDC) Leme de Direção com controlo analógico proporcional (-100% a +100%). |
-| **ESC Motor** | **GPIO 17** | **ESC Pin 3** (J_DK_R Pin 3 / J3-3) | Sinal PWM (LEDC) Propulsão Principal |
-| **Fim de Curso Âncora** | **GPIO 18** | **J_LIMIT** (Pad 1: GND, Pad 2: GPIO 18)<br>J_DK_R Pin 10 | **100% Validado em Bancada Real (16/10/2026)**: Entrada digital `INPUT_PULLUP` (Microswitch fecha a GND no topo mecânico). Corte imediato de emergência do guincho por hardware/software. Conector de 2 pinos a X=4.0mm, Y=73.58mm na PCB Dual_ESP_Carrier. |
-| **LEDs WS2812B Strobe**| **GPIO 19** | **STRB** (Pad 1: GND, Pad 2: +5V_SERVO, Pad 3: DIN)<br>J_DK_R Pin 9 | **Integrado na PCB Dual_ESP_Carrier e Firmware**: Barramento WS2812B (8 LEDs RGB). Alimentado pelo barramento de 5V dos servos com linha de dados DIN direta. Conector padrão RC de 3 pinos a X=7.0mm, Y=73.58mm. |
+| **Guincho (Winch)**| **GPIO 23** | **WIN Pin 3** (X=11.08mm, Y=74.50mm)<br>J_DK_R Pin 5 / J3-5 | **100% Validado em Bancada**: Controlo Web bidirecional (1800µs enrolar / 1200µs descer / 1500µs neutro). |
+| **Rack Vela / Trinco**| **GPIO 21** | **RCK Pin 3** (X=13.62mm, Y=74.50mm)<br>J_DK_R Pin 7 / J3-7 | **100% Validado em Bancada**: Sinal PWM (LEDC) Trinco da Âncora (0° engatado / 90° solto). |
+| **Leme (Rudder)** | **GPIO 15** | **RUD Pin 3** (X=8.54mm, Y=74.50mm)<br>J_DK_R Pin 4 / J3-4 | **100% Validado em Bancada**: Sinal PWM (LEDC) Leme de Direção com controlo analógico proporcional (-100% a +100%). |
+| **ESC Motor** | **GPIO 17** | **ESC Pin 3** (X=6.00mm, Y=74.50mm)<br>J_DK_R Pin 3 / J3-3 | Sinal PWM (LEDC) Propulsão Principal |
+| **Fim de Curso Âncora** | **GPIO 18** | **J_LIMIT** (Pad 1: GND, Pad 2: GPIO 18)<br>X=21.24mm, Y=74.50mm | **100% Validado em Bancada Real (16/10/2026)**: Entrada digital `INPUT_PULLUP` (Microswitch fecha a GND no topo mecânico). Corte imediato de emergência do guincho por hardware/software. Conector de 2 pinos na PCB Dual_ESP_Carrier. |
+| **LEDs WS2812B Strobe**| **GPIO 19** | **STRB** (Pad 1: GND, Pad 2: +5V_SERVO, Pad 3: DIN)<br>X=16.16mm, Y=74.50mm | **Integrado na PCB Dual_ESP_Carrier e Firmware**: Barramento WS2812B (8 LEDs RGB). Alimentado pelo barramento de 5V dos servos com linha de dados DIN direta. Conector padrão RC de 3 pinos. |
 | **Contador Âncora (Hall)**| **GPIO 20** | **J_DK_R Pin 8** / DevKitC J3 Pin 8 | **100% Validado em Bancada Real (16/10/2026)**: Sensor de Efeito Hall Digital DRV5032 (Texas Instruments) para contagem de voltas do tambor da âncora. Modo `INPUT_PULLUP` com interrupção `FALLING`. Medição em tempo real de voltas, pulsos e profundidade do cabo solto em metros/cm com calibração interativa na Web e auto-zeroing no fim de curso superior. |
-| **Sensor de Água**| GPIO 15 | J_WATER Pin 2 | Entrada analógica ADC |
-| **Bateria Tensão** | GPIO 2 | J_BATT Pin 3 | Divisor de tensão ADC (Rácio 10.803) |
-| **Bateria Corrente**| GPIO 3 | J_BATT Pin 2 | Shunt / Sensor Hall ADC |
+| **Sensor de Água**| GPIO 15 | **J_WATER** Pin 2 (X=23.78mm, Y=74.50mm, F.SilkS) | Entrada analógica ADC (Frente / F.SilkS) |
+| **Bateria Tensão** | GPIO 2 | **J_BATT** Pin 3 (X=18.70mm, Y=74.50mm, F.SilkS) | Divisor de tensão ADC (Rácio 10.803, Frente / F.SilkS) |
+| **Bateria Corrente**| GPIO 3 | **J_BATT** Pin 2 (X=18.70mm, Y=74.50mm, F.SilkS) | Shunt / Sensor Hall ADC (Frente / F.SilkS) |
 | **GPS UART TX/RX**| GPIO 17 (RX) / 16 (TX) | J6 Header / J2 | **100% Validado em Bancada Real (16/10/2026)**: Módulo Quectel LC29H GNSS a 115200 baud. 14+ satélites sintonizados, FIX 3D imediato. R1 (RX Quectel) ligado ao TX (GPIO 16), T1 (TX Quectel) ligado ao RX (GPIO 17), PPS no GPIO 23. |
 
 ---
