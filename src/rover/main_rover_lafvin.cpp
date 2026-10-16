@@ -59,6 +59,10 @@ char queuedWebCommand[64] = "NONE";
 volatile bool flagPageChange = false;
 volatile uint32_t lastBtnPressTime = 0;
 
+// Calibração do Joystick Analógico
+int joyCenterX = 2048;
+int joyCenterY = 2048;
+
 void IRAM_ATTR isrBootButton() {
     uint32_t now = millis();
     if (now - lastBtnPressTime > 200) {
@@ -79,12 +83,10 @@ void printLog(const char* format, ...) {
     vsnprintf(buf, sizeof(buf), format, args);
     va_end(args);
     Serial.print(buf);
-    Serial0.print(buf);
 }
 
 void setup() {
     Serial.begin(115200);
-    Serial0.begin(115200);
     Serial.setTxTimeoutMs(0);
     delay(500);
 
@@ -118,6 +120,7 @@ void setup() {
     webServer.setRoverId(currentRoverId);
     battery.setCellCount(roverConfig.getBatteryCells());
     battery.setCapacityMah(roverConfig.getBatteryCapacityMah());
+    actuators.setAnchorCalibration(roverConfig.getAnchorDrumDiamMm(), roverConfig.getAnchorPulsesPerRev());
     webServer.setCommandQueueCallback([](const char* cmd) {
         if (cmd && strlen(cmd) > 0) {
             strncpy(queuedWebCommand, cmd, sizeof(queuedWebCommand) - 1);
@@ -175,12 +178,36 @@ void setup() {
     pinMode(PIN_BTN_BOOT, INPUT_PULLUP);
     attachInterrupt(digitalPinToInterrupt(PIN_BTN_BOOT), isrBootButton, FALLING);
 
+    // 8. Configurar Joystick Analógico (Pad 3=GPIO 3, Pad 6=GPIO 0)
+    analogReadResolution(12);
+    pinMode(PIN_JOYSTICK_X, INPUT);
+    pinMode(PIN_JOYSTICK_Y, INPUT);
+
+    // Auto-calibração do Ponto Neutro / Centro com o joystick em repouso
+    long sumX = 0, sumY = 0;
+    for (int i = 0; i < 30; i++) {
+        sumX += analogRead(PIN_JOYSTICK_X);
+        sumY += analogRead(PIN_JOYSTICK_Y);
+        delay(5);
+    }
+    joyCenterX = (int)(sumX / 30);
+    joyCenterY = (int)(sumY / 30);
+    printLog("[JOYSTICK] Auto-calibracao de centro concluida: X0=%d, Y0=%d\n", joyCenterX, joyCenterY);
+
+    // 9. Configurar GPS Quectel LC29H no Header J2 (Pad 9=GPIO 17 [TX do GPS], Pad 8=GPIO 16 [RX do GPS])
+    gps.begin(true, GPS_BAUDRATE, 17, 16);
+    printLog("[GPS ] Quectel LC29H inicializado no Lafvin (RX=GPIO 17, TX=GPIO 16 a %d baud)\n",
+             GPS_BAUDRATE);
+
     roverDisplay.bootLogf(UI_GREEN, 100, "[BOOT] Sistema Pronto!");
     roverDisplay.endBootScreen(1200);
 }
 
 void loop() {
     uint32_t now = millis();
+
+    // 1. Atualizar GPS Quectel LC29H
+    gps.update();
 
     // 1. Processar clientes HTTP Web
     webServer.handleClient();
@@ -193,15 +220,89 @@ void loop() {
         forceDisplay = true;
     }
 
-    // 3. Comunicação Inter-ESP UART (Ping periódico a cada 500ms)
-    if (now - lastUartPingTime >= 500) {
+    // 3. Leitura do Joystick Analógico com Curso Completo (100% no fim mecânico)
+    static uint32_t lastJoyReadTime = 0;
+    static int lastSentThr = 0;
+    static int lastSentRud = 0;
+    static bool joyActive = false;
+
+    if (now - lastJoyReadTime >= 50) {
+        lastJoyReadTime = now;
+        int rawX = analogRead(PIN_JOYSTICK_X);
+        int rawY = analogRead(PIN_JOYSTICK_Y);
+
+        int deadband = 100; // Zona morta equilibrada
+        int diffX = rawX - joyCenterX;
+        int diffY = rawY - joyCenterY;
+
+        static int maxSeenRight = 1450;
+        static int maxSeenLeft  = 1450;
+        static int maxSeenDown  = 1450;
+        static int maxSeenUp    = 1450;
+
+        int rud = 0;
+        if (diffX > deadband) {
+            // Estibordo (Right)
+            int d = diffX - deadband;
+            if (d > maxSeenRight) maxSeenRight = d;
+            rud = constrain(d * 100 / maxSeenRight, 0, 100);
+        } else if (diffX < -deadband) {
+            // Bombordo (Left)
+            int d = (-diffX) - deadband;
+            if (d > maxSeenLeft) maxSeenLeft = d;
+            rud = -constrain(d * 100 / maxSeenLeft, 0, 100);
+        }
+
+        int thr = 0;
+        if (diffY > deadband) {
+            // Marcha-atrás / Ré (Pull back)
+            int d = diffY - deadband;
+            if (d > maxSeenDown) maxSeenDown = d;
+            thr = -constrain(d * 100 / maxSeenDown, 0, 100);
+        } else if (diffY < -deadband) {
+            // Avanço / Frente (Push forward)
+            int d = (-diffY) - deadband;
+            if (d > maxSeenUp) maxSeenUp = d;
+            thr = constrain(d * 100 / maxSeenUp, 0, 100);
+        }
+
+        if (rud != 0 || thr != 0) {
+            joyActive = true;
+            actuators.setRudder((int8_t)rud);
+            actuators.setThrottle((int8_t)thr);
+            if (abs(rud - lastSentRud) >= 2 || abs(thr - lastSentThr) >= 2) {
+                lastSentRud = rud;
+                lastSentThr = thr;
+                snprintf(queuedWebCommand, sizeof(queuedWebCommand), "CMD:JOY:%d:%d", thr, rud);
+                printLog("[JOYSTICK] Ativo (X=%d Y=%d) -> Leme: %d%% | Motor: %d%%\n", rawX, rawY, rud, thr);
+            }
+        } else if (joyActive) {
+            joyActive = false;
+            lastSentRud = 0;
+            lastSentThr = 0;
+            actuators.setRudder(0);
+            actuators.setThrottle(0);
+            snprintf(queuedWebCommand, sizeof(queuedWebCommand), "CMD:JOY:0:0");
+            printLog("[JOYSTICK] Centro (X=%d Y=%d) -> Leme: 0% | Motor: 0%\n", rawX, rawY);
+        }
+    }
+
+    // 4. Comunicação Inter-ESP UART (Ping periódico a cada 200ms ou rápido a cada 50ms se houver comando pendente)
+    bool hasPendingCmd = (strcmp(queuedWebCommand, "NONE") != 0);
+    if ((now - lastUartPingTime >= 200) || (hasPendingCmd && (now - lastUartPingTime >= 50))) {
         lastUartPingTime = now;
         uartSeq++;
 
-        char pingMsg[128];
-        snprintf(pingMsg, sizeof(pingMsg), "PING:%u:%u:%s\n", uartSeq, roverConfig.getRoverId(), queuedWebCommand);
+        char pingMsg[160];
+        snprintf(pingMsg, sizeof(pingMsg), "PING:%u:%u:%s:%ld:%ld:%.1f:%.1f:%u:%u\n",
+                 uartSeq, roverConfig.getRoverId(), queuedWebCommand,
+                 (long)gps.getLatDeg7(), (long)gps.getLngDeg7(),
+                 gps.getSpeedKnots(), gps.getHeading(),
+                 gps.getSatellites(), gps.hasFix() ? 1 : 0);
         interSerial.print(pingMsg);
-        printLog("[LAFVIN] >>> %s", pingMsg);
+        if (hasPendingCmd) {
+            printLog("[LAFVIN] >>> %s", pingMsg);
+        }
         strncpy(queuedWebCommand, "NONE", sizeof(queuedWebCommand) - 1);
     }
 
@@ -234,7 +335,9 @@ void loop() {
                                         rfSt, &rssi, &snr);
                     if (parsed >= 10) {
                         battery.setValues(batMv, batA, (uint8_t)batPct);
-                        gps.setValues((double)lat7 / 10000000.0, (double)lng7 / 10000000.0, spd, head, (uint8_t)sats, fix > 0);
+                        if (!gps.isHardwareLocked() && !gps.hasFix()) {
+                            gps.setValues((double)lat7 / 10000000.0, (double)lng7 / 10000000.0, spd, head, (uint8_t)sats, fix > 0);
+                        }
                         actuators.setValues((int8_t)thr, (int8_t)rud, winch, rack > 0, (uint8_t)motSt, (uint16_t)depth);
                         currentMotorStatus = (uint8_t)motSt;
                         currentLoraRssi = (int16_t)rssi;

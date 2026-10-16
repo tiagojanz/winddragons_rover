@@ -31,6 +31,9 @@ GPSTracker gps;
 ActuatorController actuators;
 BatteryMonitor battery;
 Adafruit_NeoPixel rgbLed(1, PIN_RGB_LED, NEO_GRB + NEO_KHZ800);
+#if defined(PIN_STROBE_LEDS) && (PIN_STROBE_LEDS >= 0)
+Adafruit_NeoPixel strobeLeds(NUM_STROBE_LEDS, PIN_STROBE_LEDS, NEO_GRB + NEO_KHZ800);
+#endif
 
 // Hardware SPI FSPI para LoRa SX1278
 SPIClass loraSpiBus(FSPI);
@@ -74,6 +77,52 @@ void printLog(const char* format, ...) {
 void setRgbColor(uint8_t r, uint8_t g, uint8_t b) {
     rgbLed.setPixelColor(0, rgbLed.Color(r, g, b));
     rgbLed.show();
+}
+
+void updateStrobeLeds(uint32_t now) {
+#if defined(PIN_STROBE_LEDS) && (PIN_STROBE_LEDS >= 0)
+    static uint32_t lastStrobeRender = 0;
+    if (now - lastStrobeRender < 20) return;
+    lastStrobeRender = now;
+
+    static bool wasStrobeOn = false;
+
+    // Prioridade 1: Alarme ativo (manual ou comando) -> Estroboscópio náutico branco de alta intensidade
+    if (actuators.isAlarmActive()) {
+        // Padrão náutico duplo-flash a cada 600ms (40ms ON, 60ms OFF, 40ms ON, 460ms OFF)
+        uint32_t phase = now % 600;
+        bool isOn = (phase < 40) || (phase >= 100 && phase < 140);
+        if (isOn != wasStrobeOn) {
+            wasStrobeOn = isOn;
+            uint32_t color = isOn ? strobeLeds.Color(255, 255, 255) : 0;
+            for (int i = 0; i < NUM_STROBE_LEDS; i++) {
+                strobeLeds.setPixelColor(i, color);
+            }
+            strobeLeds.show();
+        }
+    }
+    // Prioridade 2: Modo Failsafe -> Flashing Âmbar/Vermelho a 2 Hz (250ms ON, 250ms OFF)
+    else if (currentMotorStatus == MOTOR_FAILSAFE) {
+        uint32_t phase = now % 500;
+        bool isOn = (phase < 250);
+        if (isOn != wasStrobeOn) {
+            wasStrobeOn = isOn;
+            uint32_t color = isOn ? strobeLeds.Color(255, 60, 0) : 0;
+            for (int i = 0; i < NUM_STROBE_LEDS; i++) {
+                strobeLeds.setPixelColor(i, color);
+            }
+            strobeLeds.show();
+        }
+    }
+    // Estado Normal: LEDs apagados (standby silencioso)
+    else {
+        if (wasStrobeOn) {
+            wasStrobeOn = false;
+            strobeLeds.clear();
+            strobeLeds.show();
+        }
+    }
+#endif
 }
 
 void sendLoRaTelemetry() {
@@ -267,10 +316,22 @@ void setup() {
     Serial.println("[GPS ] GPS Quectel preparado (modo bancada/simulado)");
 
     // 5. Atuadores (Direct PWM / PCA9685)
+    float ancDiam = c6Prefs.getFloat("anc_diam", 30.0f);
+    uint8_t ancPulses = c6Prefs.getUChar("anc_pulses", 1);
     actuators.begin();
-    Serial.println("[ACT ] Atuadores inicializados (ESC=21, Leme=20, Guincho=19, Rack=18)");
+    actuators.setAnchorCalibration(ancDiam, ancPulses);
+    Serial.printf("[ACT ] Atuadores inicializados (ESC=GPIO%d, Leme=GPIO%d, Guincho=GPIO%d, Rack=GPIO%d, FimCurso=GPIO%d, Hall=GPIO%d | Tambor=%.1fmm)\n",
+                  PIN_C6_MOTOR_ESC, PIN_C6_SERVO_RUD, PIN_C6_WINCH, PIN_C6_SERVO_RACK, PIN_ANCHOR_DETECTOR, PIN_ANCHOR_HALL, ancDiam);
 
-    // 6. LoRa SX1278 (FSPI Hardware)
+    // 6. Fita / Módulo de LEDs WS2812B Strobe
+    #if defined(PIN_STROBE_LEDS) && (PIN_STROBE_LEDS >= 0)
+    strobeLeds.begin();
+    strobeLeds.clear();
+    strobeLeds.show();
+    Serial.printf("[STROBE] LEDs WS2812B Strobe iniciados no GPIO %d (%d LEDs)\n", PIN_STROBE_LEDS, NUM_STROBE_LEDS);
+    #endif
+
+    // 7. LoRa SX1278 (FSPI Hardware)
     pinMode(PIN_C6_LORA_NSS, OUTPUT);
     digitalWrite(PIN_C6_LORA_NSS, HIGH);
     pinMode(PIN_C6_LORA_DIO0, INPUT);
@@ -297,10 +358,11 @@ void setup() {
 void loop() {
     uint32_t now = millis();
 
-    // 1. Atualizar sensores
+    // 1. Atualizar sensores e atuadores
     gps.update();
     battery.update();
     actuators.update();
+    updateStrobeLeds(now);
 
     // 2. Navegação autónoma (10 Hz)
     static uint32_t lastNavUpdate = 0;
@@ -353,17 +415,42 @@ void loop() {
                     uint32_t seq = 0;
                     uint32_t incomingId = 0;
                     char cmdStr[64] = "NONE";
-                    int parsed = sscanf(rxBuf + 5, "%u:%u:%63s", &seq, &incomingId, cmdStr);
+                    long lat7 = 0, lng7 = 0;
+                    float spd = 0.0f, head = 0.0f;
+                    uint32_t sats = 0, fix = 0;
+                    int parsed = sscanf(rxBuf + 5, "%u:%u:%63[^:]:%ld:%ld:%f:%f:%u:%u",
+                                        &seq, &incomingId, cmdStr,
+                                        &lat7, &lng7, &spd, &head, &sats, &fix);
                     if (parsed >= 2 && incomingId > 0 && incomingId != roverId) {
                         roverId = (uint8_t)incomingId;
                         c6Prefs.putUChar("id", roverId);
                         printLog("[C6 ROVER] ★ ID sincronizado com Lafvin e gravado em NVS: %u\n", roverId);
                     }
+                    if (parsed >= 9) {
+                        gps.setValues((double)lat7 / 10000000.0, (double)lng7 / 10000000.0,
+                                      spd, head, (uint8_t)sats, fix > 0);
+                    }
 
-                    // Se vier um comando da interface Web do Lafvin:
-                    if (strncmp(cmdStr, "CMD:LEME:", 9) == 0) {
+                    // PING recebido do Lafvin Master: ligação local UART está 100% viva
+                    lastControlReceivedTime = now;
+
+                    // Se vier um comando da interface Web ou Joystick do Lafvin:
+                    if (strncmp(cmdStr, "CMD:JOY:", 8) == 0) {
+                        int thr = 0, rud = 0;
+                        if (sscanf(cmdStr + 8, "%d:%d", &thr, &rud) == 2) {
+                            actuators.setThrottle(thr);
+                            actuators.setRudder(rud);
+                            currentMotorStatus = MOTOR_MANUAL;
+                            lastControlReceivedTime = now;
+                        }
+                    } else if (strcmp(cmdStr, "CMD:MODE:MANUAL") == 0) {
+                        currentMotorStatus = MOTOR_MANUAL;
+                        lastControlReceivedTime = now;
+                        printLog("[C6 ROVER] Modo Manual ativado via Web/Lafvin\n");
+                    } else if (strncmp(cmdStr, "CMD:LEME:", 9) == 0) {
                         int val = atoi(cmdStr + 9);
                         actuators.setRudder(val);
+                        lastControlReceivedTime = now;
                     } else if (strncmp(cmdStr, "CMD:MOTOR:", 10) == 0) {
                         int val = atoi(cmdStr + 10);
                         actuators.setThrottle(val);
@@ -399,6 +486,27 @@ void loop() {
                             c6Prefs.putUChar("cells", (uint8_t)cells);
                             printLog("[C6 ROVER] ★ Bateria configurada para %uS e gravada em NVS\n", cells);
                         }
+                    } else if (strncmp(cmdStr, "CMD:ALARM:", 10) == 0) {
+                        int dur = atoi(cmdStr + 10);
+                        if (dur > 0) {
+                            actuators.triggerAlarm((uint16_t)dur);
+                            printLog("[C6 ROVER] Alarme/Strobe WS2812B ATIVADO (%d seg)\n", dur);
+                        } else {
+                            actuators.stopAlarm();
+                            printLog("[C6 ROVER] Alarme/Strobe WS2812B DESLIGADO\n");
+                        }
+                    } else if (strcmp(cmdStr, "CMD:ZERO_ANCHOR") == 0) {
+                        actuators.zeroAnchorCounter();
+                        printLog("[C6 ROVER] Contador da ancora ZERADO (0.0 cm / 0 voltas)\n");
+                    } else if (strncmp(cmdStr, "CMD:ANC_CFG:", 12) == 0) {
+                        float d = 30.0f;
+                        int p = 1;
+                        if (sscanf(cmdStr + 12, "%f:%d", &d, &p) >= 1) {
+                            actuators.setAnchorCalibration(d, (uint8_t)p);
+                            c6Prefs.putFloat("anc_diam", d);
+                            c6Prefs.putUChar("anc_pulses", (uint8_t)p);
+                            printLog("[C6 ROVER] Calibracao da ancora gravada: Diam=%.1fmm, Pulsos=%d\n", d, p);
+                        }
                     }
 
                     // Resposta rica de telemetria para o Lafvin Master:
@@ -426,9 +534,9 @@ void loop() {
                              lastRssi,
                              lastSnr);
                     interSerial.print(pong);
-                    printLog("[C6 ROVER] <<< %s | >>> PONG: Bat=%.2fV (%d%%) LoRa=%s | Winch=%dus\n",
+                    printLog("[C6 ROVER] <<< %s | >>> PONG: Bat=%.2fV (%d%%) LoRa=%s | Winch=%dus | Depth=%ucm\n",
                              rxBuf, battery.getVoltageMv() / 1000.0f, battery.getPercentage(), 
-                             loraReady ? "RF_OK" : "RF_ERR", actuators.getWinchPulseUs());
+                             loraReady ? "RF_OK" : "RF_ERR", actuators.getWinchPulseUs(), actuators.getAnchorDepthCm());
                 }
                 rxIdx = 0;
             }
@@ -437,9 +545,13 @@ void loop() {
         }
     }
 
-    // 7. Consola de comandos Serial (ex: SET_ID 2, WINCH 1800, WINCH 0)
-    if (Serial.available()) {
-        String cmd = Serial.readStringUntil('\n');
+    // 7. Consola de comandos Serial (ex: SET_ID 2, WINCH 1800, ALARM 10, LIMIT, ZERO, ANC_CFG)
+    Stream* cmdStream = nullptr;
+    if (Serial.available()) cmdStream = &Serial;
+    else if (Serial0.available()) cmdStream = &Serial0;
+
+    if (cmdStream != nullptr) {
+        String cmd = cmdStream->readStringUntil('\n');
         cmd.trim();
         if (cmd.startsWith("SET_ID ") || cmd.startsWith("ID ")) {
             int newId = cmd.substring(cmd.indexOf(' ') + 1).toInt();
@@ -469,6 +581,37 @@ void loop() {
         } else if (cmd == "RACK RELAX") {
             actuators.relaxRack();
             printLog("[C6] Trinco relaxado\n");
+        } else if (cmd.startsWith("ALARM ") || cmd == "ALARM") {
+            int dur = 10;
+            if (cmd.startsWith("ALARM ")) dur = cmd.substring(6).toInt();
+            if (dur > 0) {
+                actuators.triggerAlarm((uint16_t)dur);
+                printLog("[C6] Alarme/Strobe WS2812B ativado por %d seg\n", dur);
+            } else {
+                actuators.stopAlarm();
+                printLog("[C6] Alarme/Strobe WS2812B desligado\n");
+            }
+        } else if (cmd == "LIMIT" || cmd == "ANCHOR") {
+            printLog("[C6] Fim de curso da ancora (GPIO %d): %s (Nivel digital: %d)\n",
+                     PIN_ANCHOR_DETECTOR,
+                     actuators.isAnchorAtTopLimit() ? "ACIONADO (NO TOPO)" : "LIVRE",
+                     digitalRead(PIN_ANCHOR_DETECTOR));
+            printLog("[C6] Sensor Hall DRV5032 (GPIO %d): Nivel=%d | Pulsos=%ld | Voltas=%.2f | Profundidade=%u cm (Tambor=%.1fmm)\n",
+                     PIN_ANCHOR_HALL, digitalRead(PIN_ANCHOR_HALL),
+                     actuators.getAnchorHallPulses(), actuators.getAnchorRevolutions(),
+                     actuators.getAnchorDepthCm(), actuators.getAnchorDrumDiamMm());
+        } else if (cmd == "ZERO_ANCHOR" || cmd == "ZERO") {
+            actuators.zeroAnchorCounter();
+            printLog("[C6] Contador de cabo da ancora ZERADO (0.0 cm)\n");
+        } else if (cmd.startsWith("ANC_CFG ")) {
+            float d = 30.0f;
+            int p = 1;
+            if (sscanf(cmd.c_str() + 8, "%f %d", &d, &p) >= 1) {
+                actuators.setAnchorCalibration(d, (uint8_t)p);
+                c6Prefs.putFloat("anc_diam", d);
+                c6Prefs.putUChar("anc_pulses", (uint8_t)p);
+                printLog("[C6] Calibracao da ancora definida: Diam=%.1fmm, Pulsos=%d\n", d, p);
+            }
         }
     }
 }

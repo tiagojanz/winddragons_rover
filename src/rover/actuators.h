@@ -14,6 +14,18 @@ static inline uint32_t actUsToDuty(int us) {
     return (uint32_t)(((uint64_t)us * 16383ULL) / 20000ULL);
 }
 
+// Static ISR variables for DRV5032 Hall Effect Sensor (Drum rotation counter)
+static volatile long _anchorHallPulseCount = 0;
+static volatile uint32_t _lastHallPulseTimeMs = 0;
+
+static void IRAM_ATTR isrAnchorHallPulse() {
+    uint32_t now = millis();
+    if (now - _lastHallPulseTimeMs >= 10) { // 10ms debounce (permite ate 100 rot/seg)
+        _lastHallPulseTimeMs = now;
+        _anchorHallPulseCount = _anchorHallPulseCount + 1;
+    }
+}
+
 class ActuatorController {
 public:
     ActuatorController() 
@@ -24,6 +36,9 @@ public:
           targetDepthCm(0), winchRetractSpeedCmPerSec(20.0f),
           gravityDropSpeedCmPerSec(80.0f),
           lastWinchUpdate(0), isRackLifted(false),
+          anchorDrumDiamMm(30.0f), anchorPulsesPerRev(1),
+          anchorHallPulses(0), anchorRevolutions(0.0f),
+          _lastProcessedHallPulseCount(0),
           alarmActive(false), alarmEndTimeMs(0),
           lastAlarmToggleMs(0), alarmStrobeState(false),
           pwmAvailable(false) {}
@@ -60,14 +75,16 @@ public:
         
         // Inicializa o sensor de fim de curso do içamento da âncora (se configurado)
         if (PIN_ANCHOR_DETECTOR >= 0) {
-            #if ARDUINO_USB_CDC_ON_BOOT
-            if (!HWCDC::isPlugged()) {
-                pinMode(PIN_ANCHOR_DETECTOR, INPUT_PULLUP);
-            }
-            #else
             pinMode(PIN_ANCHOR_DETECTOR, INPUT_PULLUP);
-            #endif
+            Serial.printf("[ACT-ANCORA] Fim de curso ativo no GPIO %d (INPUT_PULLUP)\n", PIN_ANCHOR_DETECTOR);
         }
+
+        // Inicializa o sensor Hall de contagem de voltas do tambor (DRV5032)
+        #if defined(PIN_ANCHOR_HALL) && (PIN_ANCHOR_HALL >= 0)
+        pinMode(PIN_ANCHOR_HALL, INPUT_PULLUP);
+        attachInterrupt(digitalPinToInterrupt(PIN_ANCHOR_HALL), isrAnchorHallPulse, FALLING);
+        Serial.printf("[ACT-ANCORA] Sensor Hall DRV5032 ativo no GPIO %d (INPUT_PULLUP)\n", PIN_ANCHOR_HALL);
+        #endif
 
         if (pwm.begin()) {
             pwm.setPWMFreq(50);
@@ -195,8 +212,10 @@ public:
         #endif
         #if defined(PIN_C6_WINCH_ALT) && (PIN_C6_WINCH_ALT >= 0)
         ledcWrite(PIN_C6_WINCH_ALT, 0);
-        #endif
         Serial.printf("[ACT-GUINCHO] SINAL TOTALMENTE CORTADO (0V nos GPIOs %d e %d)\n", PIN_C6_WINCH, PIN_C6_WINCH_ALT);
+        #else
+        Serial.printf("[ACT-GUINCHO] SINAL TOTALMENTE CORTADO (0V no GPIO %d)\n", PIN_C6_WINCH);
+        #endif
     }
 
     // Manual winch jog: -1 = desenrolar/descer cabo (1200us), 0 = desligar sinal (OFF), 1 = enrolar/subir (1800us)
@@ -224,6 +243,13 @@ public:
             return;
         }
         pulseUs = constrain(pulseUs, 800, 2200);
+
+        // Proteção mecânica: se a âncora já está no topo (fim de curso acionado), impede recolher mais (> 1500us)
+        if (pulseUs > winchNeutralUs && isAnchorAtTopLimit()) {
+            Serial.printf("[ACT-GUINCHO] BLOQUEADO: Fim de curso acionado no GPIO %d! Impedida recolha em excesso.\n", PIN_ANCHOR_DETECTOR);
+            pulseUs = winchNeutralUs;
+        }
+
         currentWinchPulseUs = pulseUs;
         if (pwmAvailable) {
             pwm.writeMicroseconds(PCA_CH_WINCH, pulseUs);
@@ -234,7 +260,7 @@ public:
         #if defined(PIN_C6_WINCH_ALT) && (PIN_C6_WINCH_ALT >= 0)
         ledcWrite(PIN_C6_WINCH_ALT, actUsToDuty(pulseUs));
         #endif
-        Serial.printf("[ACT-GUINCHO] SINAL ATIVO (ON): %d us nos GPIOs %d e %d\n", pulseUs, PIN_C6_WINCH, PIN_C6_WINCH_ALT);
+        Serial.printf("[ACT-GUINCHO] SINAL ATIVO (ON): %d us no GPIO %d\n", pulseUs, PIN_C6_WINCH);
     }
 
     void setWinchNeutral(int neutralUs) {
@@ -249,9 +275,6 @@ public:
 
     bool isAnchorAtTopLimit() const {
         if (PIN_ANCHOR_DETECTOR < 0) return false;
-        #if ARDUINO_USB_CDC_ON_BOOT
-        if (HWCDC::isPlugged()) return false; // Em USB CDC desativado para proteção
-        #endif
         return (digitalRead(PIN_ANCHOR_DETECTOR) == LOW);
     }
 
@@ -303,9 +326,37 @@ public:
         float dt = (now - lastWinchUpdate) / 1000.0f;
         lastWinchUpdate = now;
 
+        // 1. Processamento de pulsos reais do sensor Hall DRV5032 no tambor da âncora
+        if (_anchorHallPulseCount != _lastProcessedHallPulseCount) {
+            long diff = _anchorHallPulseCount - _lastProcessedHallPulseCount;
+            _lastProcessedHallPulseCount = _anchorHallPulseCount;
+
+            float cmPerPulse = (3.14159265f * (anchorDrumDiamMm / 10.0f)) / (float)(anchorPulsesPerRev > 0 ? anchorPulsesPerRev : 1);
+
+            // Determinação do sentido pelo comando do guincho:
+            if (currentWinchPulseUs > winchNeutralUs) {
+                // Guincho a recolher (puxar) -> diminui o cabo solto
+                currentDepthCm -= (diff * cmPerPulse);
+                if (currentDepthCm < 0) currentDepthCm = 0;
+                anchorHallPulses -= diff;
+                if (anchorHallPulses < 0) anchorHallPulses = 0;
+            } else {
+                // Queda livre, desenrolar ou teste de rotação em bancada -> aumenta o cabo solto
+                currentDepthCm += (diff * cmPerPulse);
+                anchorHallPulses += diff;
+            }
+            anchorRevolutions = (float)anchorHallPulses / (float)(anchorPulsesPerRev > 0 ? anchorPulsesPerRev : 1);
+
+            if (anchorState == ANCHOR_RETRACTED && currentDepthCm > 5.0f) {
+                anchorState = ANCHOR_DEPLOYED;
+            }
+        }
+
         // Queda por gravidade (cremalheira levantada)
         if (anchorState == ANCHOR_DEPLOYING) {
-            currentDepthCm += (gravityDropSpeedCmPerSec * dt);
+            if (_anchorHallPulseCount == 0 && targetDepthCm > 0) {
+                currentDepthCm += (gravityDropSpeedCmPerSec * dt);
+            }
             if (currentDepthCm >= targetDepthCm) {
                 currentDepthCm = targetDepthCm;
                 Serial.printf("[ACT-ANCORA] DROP CONCLUIDO -> Profundidade %u cm atingida. A travar cremalheira.\n", targetDepthCm);
@@ -318,17 +369,27 @@ public:
         else if (anchorState == ANCHOR_RETRACTING) {
             bool hitLimit = isAnchorAtTopLimit();
             if (hitLimit || currentDepthCm <= (winchRetractSpeedCmPerSec * dt)) {
-                currentDepthCm = 0;
+                zeroAnchorCounter();
                 if (hitLimit) {
                     Serial.printf("[ACT-ANCORA] RECOLHA CONCLUIDA -> Fim de curso acionado (detector topo)! Guincho parado.\n");
                 } else {
-                    Serial.printf("[ACT-ANCORA] RECOLHA CONCLUIDA -> Tempo decorrido. Guincho parado.\n");
+                    Serial.printf("[ACT-ANCORA] RECOLHA CONCLUIDA -> Alvo atingido. Guincho parado.\n");
                 }
                 stopWinch();
                 anchorState = ANCHOR_RETRACTED;
-            } else {
+            } else if (_anchorHallPulseCount == 0) {
                 currentDepthCm -= (winchRetractSpeedCmPerSec * dt);
             }
+        }
+
+        // Proteção contínua: se o guincho estiver a recolher (> winchNeutralUs) e acionar o fim de curso mecânico, corta imediatamente
+        if (isAnchorAtTopLimit()) {
+            if (currentWinchPulseUs > winchNeutralUs) {
+                Serial.printf("[ACT-GUINCHO] CORTE IMEDIATO: Fim de curso atingido no GPIO %d! Guincho parado no topo.\n", PIN_ANCHOR_DETECTOR);
+                stopWinch();
+            }
+            zeroAnchorCounter();
+            anchorState = ANCHOR_RETRACTED;
         }
 
         // Handle alarm timeout and strobe oscillation (100ms on / 100ms off)
@@ -341,6 +402,27 @@ public:
             }
         }
     }
+
+    void zeroAnchorCounter() {
+        _anchorHallPulseCount = 0;
+        _lastProcessedHallPulseCount = 0;
+        anchorHallPulses = 0;
+        anchorRevolutions = 0.0f;
+        currentDepthCm = 0.0f;
+    }
+
+    void setAnchorCalibration(float diamMm, uint8_t pulsesPerRev) {
+        if (diamMm >= 5.0f && diamMm <= 500.0f) anchorDrumDiamMm = diamMm;
+        if (pulsesPerRev >= 1 && pulsesPerRev <= 24) anchorPulsesPerRev = pulsesPerRev;
+        float cmPerPulse = (3.14159265f * (anchorDrumDiamMm / 10.0f)) / (float)anchorPulsesPerRev;
+        currentDepthCm = anchorHallPulses * cmPerPulse;
+        anchorRevolutions = (float)anchorHallPulses / (float)anchorPulsesPerRev;
+    }
+
+    float getAnchorDrumDiamMm() const { return anchorDrumDiamMm; }
+    uint8_t getAnchorPulsesPerRev() const { return anchorPulsesPerRev; }
+    long getAnchorHallPulses() const { return anchorHallPulses; }
+    float getAnchorRevolutions() const { return anchorRevolutions; }
 
     uint8_t getAnchorStatus() const {
         return anchorState;
@@ -361,6 +443,11 @@ public:
         isRackLifted = rackLifted;
         anchorState = anchorSt;
         currentDepthCm = depth;
+        float cmPerPulse = (3.14159265f * (anchorDrumDiamMm / 10.0f)) / (float)(anchorPulsesPerRev > 0 ? anchorPulsesPerRev : 1);
+        if (cmPerPulse > 0.001f) {
+            anchorHallPulses = (long)(currentDepthCm / cmPerPulse);
+            anchorRevolutions = (float)anchorHallPulses / (float)(anchorPulsesPerRev > 0 ? anchorPulsesPerRev : 1);
+        }
     }
 
 private:
@@ -378,6 +465,12 @@ private:
     float gravityDropSpeedCmPerSec;
     uint32_t lastWinchUpdate;
     bool isRackLifted;
+
+    float anchorDrumDiamMm;
+    uint8_t anchorPulsesPerRev;
+    long anchorHallPulses;
+    float anchorRevolutions;
+    long _lastProcessedHallPulseCount;
 
     bool alarmActive;
     uint32_t alarmEndTimeMs;

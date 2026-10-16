@@ -91,14 +91,17 @@ Comunicação SPI independente no barramento secundário do DevKitC:
 ### 3.3. Servos e Sensores no DevKitC (Validação em Bancada Real)
 | Periférico | GPIO DevKitC | Pino PCB / Cabeçalho | Função / Estado de Validação |
 | :--- | :--- | :--- | :--- |
-| **Guincho (Winch)**| **GPIO 23** | **WIN Pin 3** (J_DK_R Pin 5 / J3-5) | **100% Validado em Bancada**: Controlo Web bidirecional (1800µs enrolar / 1200µs descer / 1500µs neutro). Espelhado também em GPIO 19. |
-| **Rack Vela / Trinco**| **GPIO 21** | **RCK Pin 3** (J_DK_R Pin 7 / J3-7) | Sinal PWM (LEDC) Trinco da Âncora |
-| **Leme (Rudder)** | **GPIO 15** | **RUD Pin 3** (J_DK_R Pin 4 / J3-4) | Sinal PWM (LEDC) Leme de Direção |
+| **Guincho (Winch)**| **GPIO 23** | **WIN Pin 3** (J_DK_R Pin 5 / J3-5) | **100% Validado em Bancada**: Controlo Web bidirecional (1800µs enrolar / 1200µs descer / 1500µs neutro). |
+| **Rack Vela / Trinco**| **GPIO 21** | **RCK Pin 3** (J_DK_R Pin 7 / J3-7) | **100% Validado em Bancada**: Sinal PWM (LEDC) Trinco da Âncora (0° engatado / 90° solto). |
+| **Leme (Rudder)** | **GPIO 15** | **RUD Pin 3** (J_DK_R Pin 4 / J3-4) | **100% Validado em Bancada**: Sinal PWM (LEDC) Leme de Direção com controlo analógico proporcional (-100% a +100%). |
 | **ESC Motor** | **GPIO 17** | **ESC Pin 3** (J_DK_R Pin 3 / J3-3) | Sinal PWM (LEDC) Propulsão Principal |
+| **Fim de Curso Âncora** | **GPIO 18** | **J_LIMIT** (Pad 1: GND, Pad 2: GPIO 18)<br>J_DK_R Pin 10 | **100% Validado em Bancada Real (16/10/2026)**: Entrada digital `INPUT_PULLUP` (Microswitch fecha a GND no topo mecânico). Corte imediato de emergência do guincho por hardware/software. Conector de 2 pinos a X=4.0mm, Y=73.58mm na PCB Dual_ESP_Carrier. |
+| **LEDs WS2812B Strobe**| **GPIO 19** | **STRB** (Pad 1: GND, Pad 2: +5V_SERVO, Pad 3: DIN)<br>J_DK_R Pin 9 | **Integrado na PCB Dual_ESP_Carrier e Firmware**: Barramento WS2812B (8 LEDs RGB). Alimentado pelo barramento de 5V dos servos com linha de dados DIN direta. Conector padrão RC de 3 pinos a X=7.0mm, Y=73.58mm. |
+| **Contador Âncora (Hall)**| **GPIO 20** | **J_DK_R Pin 8** / DevKitC J3 Pin 8 | **100% Validado em Bancada Real (16/10/2026)**: Sensor de Efeito Hall Digital DRV5032 (Texas Instruments) para contagem de voltas do tambor da âncora. Modo `INPUT_PULLUP` com interrupção `FALLING`. Medição em tempo real de voltas, pulsos e profundidade do cabo solto em metros/cm com calibração interativa na Web e auto-zeroing no fim de curso superior. |
 | **Sensor de Água**| GPIO 15 | J_WATER Pin 2 | Entrada analógica ADC |
 | **Bateria Tensão** | GPIO 2 | J_BATT Pin 3 | Divisor de tensão ADC (Rácio 10.803) |
 | **Bateria Corrente**| GPIO 3 | J_BATT Pin 2 | Shunt / Sensor Hall ADC |
-| **GPS UART TX/RX**| GPIO 17 / 16 | J6 Header | Barramento NMEA 9600 baud |
+| **GPS UART TX/RX**| GPIO 17 (RX) / 16 (TX) | J6 Header / J2 | **100% Validado em Bancada Real (16/10/2026)**: Módulo Quectel LC29H GNSS a 115200 baud. 14+ satélites sintonizados, FIX 3D imediato. R1 (RX Quectel) ligado ao TX (GPIO 16), T1 (TX Quectel) ligado ao RX (GPIO 17), PPS no GPIO 23. |
 
 ---
 
@@ -109,9 +112,37 @@ Durante os ensaios práticos com o firmware `src/test_uart/main_test_uart.cpp`:
 - 🟡 **Amarelo:** DevKitC Pin 13 (GPIO 13 / TX) $\longrightarrow$ Lafvin Pad 5 (GPIO 1 / RX)
 - ⚫ **Preto:** GND Comum entre placas
 
+### 4.1. Ligação do Joystick Analógico (Direto na Placa Lafvin)
+- **VCC:** Lafvin Pad 7 (`3V3` - Alimentação lógica estável)
+- **GND:** Lafvin Pad 8 (`GND` - Terra de referência analógica)
+- **VRX (Eixo X - Leme):** Lafvin Pad 3 (`GPIO 3` / ADC1_CH3)
+- **VRY (Eixo Y - Motor):** Lafvin Pad 6 (`GPIO 0` / ADC1_CH0)
+- **SW (Botão de Clique):** Não conectado (Navegação feita via botão BOOT onboard `GPIO 9`)
+
+### 4.2. Ligação do Sensor de Efeito Hall DRV5032 (Contador do Tambor da Âncora)
+- **Pino 1 (VCC):** DevKitC Pino 1 do conector J1 ou J3 (`3V3`)
+- **Pino 2 (OUT):** DevKitC Pino 8 do conector J3 / `J_DK_R Pin 8` (`GPIO 20` - Entrada digital `INPUT_PULLUP` com ISR `FALLING`)
+- **Pino 3 (GND):** DevKitC Pino 15 do conector J1 ou J3 (`GND`)
+
+### 4.3. Ligação do Módulo GNSS / GPS Quectel LC29H
+- **VCC:** `+3.3V` (Obrigatório 3.3V; não alimentar a 5V)
+- **GND:** `GND` Comum de referência
+- **R1 (RX1 Quectel):** Ligado ao **TX** do ESP32 (`GPIO 16` / J2 Pad 8)
+- **T1 (TX1 Quectel):** Ligado ao **RX** do ESP32 (`GPIO 17` / J2 Pad 9)
+- **PPS (Pulse Per Second):** Ligado ao `GPIO 23` / J2 Pad 5 (LED verde pisca a 1 Hz com FIX 3D)
+- **Baudrate:** **115200 baud** (Protocolo NMEA 0183 com constelações GPS, GLONASS, Galileo, BeiDou)
+- **Correção da PCB `Dual_ESP_Carrier.kicad_pcb` (16/10/2026):**
+  - O layout original conectava o R1 do Quectel ao RX (GPIO 17) e o T1 ao TX (GPIO 16) de forma direta (não cruzada).
+  - Pistas B.Cu corrigidas com roteamento paralelo sem cruzamento de planos:
+    - `J6 Pad 4 (R1)` $\longleftrightarrow$ `J2 Pad 8 (GPIO 16 / TX)` (Net `/GPS_RX`)
+    - `J6 Pad 5 (T1)` $\longleftrightarrow$ `J2 Pad 9 (GPIO 17 / RX)` (Net `/GPS_TX`)
+    - `J6 Pad 1 (PPS)` $\longleftrightarrow$ `J2 Pad 5 (GPIO 23)` (Net `/GPS_PPS`)
+  - Verificação DRC: **0 itens desconectados**, **0 erros de isolamento/cruzamento**.
+  - Gerbers e renders 3D atualizados e re-empacotados em `Dual_ESP_Carrier_Gerber.zip`.
+
 ---
 
-## 5. Resultados de Validação em Hardware (15/10/2026)
+## 5. Resultados de Validação em Hardware (15/10/2026 - 16/10/2026)
 
 1. **LCD ST7789:** Inicializado a 80 MHz com rotação 3 (Landscape 320x172). Live update a 10 Hz sem artefactos.
 2. **MicroSD Card:** Cartão 32GB FAT32 montado em concorrência no SPI partilhado (`PIN_SD_CS = 4`). Leitura e escrita periódica de ficheiros `/test_uart_sd.txt` e `/telemetry_test.log` com sucesso absoluto.
@@ -123,5 +154,41 @@ Durante os ensaios práticos com o firmware `src/test_uart/main_test_uart.cpp`:
    - Nível de sinal RF registado: **RSSI = -47 dBm a -49 dBm**, **SNR = +9.5 dB a +12.0 dB** (excelente margem de ruído).
    - Latência RTT completa da cadeia (Lafvin $\rightarrow$ UART $\rightarrow$ C6 #1 $\rightarrow$ RF $\rightarrow$ C6 #2 $\rightarrow$ RF $\rightarrow$ C6 #1 $\rightarrow$ UART $\rightarrow$ Lafvin): **36 ms a 46 ms**.
    - Telemetria integral (tensão 6S, corrente, percentagem, estado LoRa, RSSI, SNR, RTT) exibida graficamente no IPS ST7789 e gravada autonomamente no MicroSD em `/telemetry_test.log`.
-
-
+7. **Joystick Analógico e Controlo Manual em Tempo Real (16/10/2026):**
+   - **100% Validado em Bancada Real:** Resposta instantânea, suave e sem perdas de comando.
+   - **Auto-calibração no Arranque:** Leitura dinâmica das primeiras 30 amostras em repouso eliminando qualquer offset de centro dos potenciómetros (repouso calibrado a exatamente 0% de Leme e 0% de Motor).
+   - **Mapeamento Adaptativo de Pico:** O algoritmo ajusta dinamicamente a escala dos limites mecânicos (~1450 pontos a partir do centro). Atinge **-100%** a Bombordo, **0%** ao Centro e **+100%** a Estibordo aproveitando 100% do curso físico do manípulo.
+   - **Watchdog / Failsafe Protegido:** O PING periódico da UART atua como heartbeat ativo entre as placas, mantendo o modo manual estável e evitando falsos disparos de *failsafe*.
+   - **Interface Web Sincronizada:** O endpoint `/control` reflete a posição dos sliders e percentagens a 300ms com proteção contra conflitos de toque manual.
+8. **Servo da Cremalheira / Trinco da Âncora (GPIO 21) (16/10/2026):**
+   - **100% Validado em Bancada Real:** Atuação angular precisa (0° travado / 90° livre para queda livre por gravidade) através dos comandos do firmware e Web.
+9. **Fim de Curso da Âncora (GPIO 18 / J3-10 no DevKitC):**
+   - **100% Validado em Bancada Real (16/10/2026):** Corte imediato e bloqueio de tração de subida verificado em hardware com o microswitch físico.
+   - **Configuração:** `PIN_ANCHOR_DETECTOR = 18`, modo `INPUT_PULLUP`.
+   - **Comportamento Elétrico:** Microswitch mecânico NA (Normalmente Aberto) liga entre GPIO 18 e GND. Quando a âncora atinge o batente superior, o contacto fecha ao GND (`digitalRead == LOW`).
+   - **Proteção Ativa:** Qualquer ordem de subida (`1800 µs` ou recolha automática) é imediatamente cortada e bloqueada enquanto o fim de curso estiver acionado, marcando o estado como `ANCHOR_RETRACTED` e profundidade 0 cm.
+   - **Diagnóstico Serial:** Comando `LIMIT` ou `ANCHOR` na consola do C6 devolve em tempo real o estado lógico e elétrico do pino.
+10. **LEDs WS2812B Strobe Náutico (GPIO 19 / J3-9 no DevKitC):**
+    - **Configuração:** `PIN_STROBE_LEDS = 19`, `NUM_STROBE_LEDS = 8`, protocolo NeoPixel 800 kHz.
+    - **Modo Alarme / Emergência (Web Button ou CMD:ALARM:10):** Estroboscópio náutico de alta intensidade (Branco puro `255, 255, 255`) em padrão duplo flash a cada 600 ms (40ms ON / 60ms OFF / 40ms ON / 460ms OFF).
+    - **Modo Failsafe:** Aviso intermitente âmbar/laranja (`255, 60, 0`) a 2 Hz (250ms ON / 250ms OFF) quando ocorre perda de comunicação em modo manual.
+    - **Diagnóstico Serial:** Comandos `ALARM 10` (liga por 10s) e `ALARM 0` (desliga) na consola do C6.
+11. **Contador de Cabo da Âncora - Sensor Hall DRV5032 (GPIO 20 / J3-8 no DevKitC):**
+    - **100% Validado em Bancada Real (16/10/2026):** Deteção precisa de rotações do tambor da âncora através da passagem de íman permanente pelo sensor digital Hall DRV5032 da Texas Instruments.
+    - **Configuração:** `PIN_ANCHOR_HALL = 20`, modo `INPUT_PULLUP`, interrupção `FALLING` com filtro debounce de 10 ms por hardware/software.
+    - **Cálculo Dinâmico de Cabo Solto (Profundidade):**
+      $$\Delta_{\text{cabo}} = \frac{\pi \times \text{Diâmetro}_{\text{tambor}}}{\text{Pulsos/Volta}}$$
+      Com o tambor padrão de 30.0 mm e 1 íman, resolução = **9.42 cm/pulso**.
+    - **Deteção de Sentido e Auto-Zeroing:**
+      - Quando o guincho está em recolha (`> 1500 µs`), os pulsos diminuem a profundidade até `0.0 m`.
+      - Em queda livre ou rotação para descer (`<= 1500 µs`), os pulsos aumentam a profundidade.
+      - Quando o fim de curso (`GPIO 18`) fecha no topo ou ao pressionar "Zerar Contador" na Web, a profundidade é reinicializada a zero.
+    - **Interface Web Sincronizada:** Exibição contínua a 300 ms da profundidade em metros e centímetros, rotações, pulsos e formulário de calibração que grava na NVS e no `/config.json` do MicroSD.
+12. **Módulo GNSS / GPS Quectel LC29H (16/10/2026):**
+    - **100% Validado em Bancada Real:** Aquisição e descodificação de tramas NMEA em tempo real a **115200 baud** (`RX = GPIO 17`, `TX = GPIO 16`, `PPS = GPIO 23`).
+    - **Desempenho Extraordinário:** **14 a 15 satélites sintonizados** em simultâneo (constelações GPS + GLONASS + Galileo + BeiDou) com **FIX 3D** ativo e contínuo.
+    - **Cadeia de Propagação Integrada e Confirmada:**
+      1. Descodificação direta via `TinyGPSPlus` no Lafvin Master (`gps.update()`).
+      2. Transmissão imediata ao Slave C6 via pacote `PING` por UART a 921600 baud (`PING:...:lat7:lng7:spd:head:sats:fix`).
+      3. Propagação pelo rádio LoRa 433 MHz na telemetria de voo/navegação.
+      4. Apresentação em tempo real no Ecrã IPS ST7789, na página Web `/gps` com mapa dinâmico e na API `/api/status`.

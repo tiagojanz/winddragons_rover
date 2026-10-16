@@ -201,6 +201,7 @@ private:
         _server.on("/api/control/actuator", [this]() { handleApiActuator(); });
         _server.on("/api/control/action", [this]() { handleApiAction(); });
         _server.on("/api/control/winch", [this]() { handleApiControlWinch(); });
+        _server.on("/api/control/anchor/config", [this]() { handleApiAnchorConfig(); });
 
         // Gestão do Cartão SD
         _server.on("/api/sd/list", [this]() { handleApiSdList(); });
@@ -943,6 +944,29 @@ private:
         html += "<button onclick='saveCurrentAsNeutral()' class='btn btn-primary' style='background:#059669;'><i class='fa-solid fa-check'></i> Guardar como Neutro Padrão</button>";
         html += "</div></div>";
 
+        // Card: Contador de Cabo da Âncora (Sensor Hall DRV5032)
+        html += "<div class='card' style='border:1px solid #0284c7;'>";
+        html += "<div class='card-title' style='display:flex;justify-content:space-between;align-items:center;'>";
+        html += "<span><i class='fa-solid fa-compass-drafting'></i> Contador de Cabo da Âncora (Sensor Hall DRV5032 - GPIO 20)</span>";
+        html += "<span id='anchorLimitBadge' class='badge' style='background:#1e293b;border:1px solid #334155;color:var(--muted);font-size:0.85rem;'>Fim de Curso: LIVRE</span>";
+        html += "</div>";
+        html += "<div class='grid-4' style='margin-bottom:14px;'>";
+        html += "<div class='stat-box'><div class='stat-label'>Cabo Desenrolado</div><div class='stat-value' id='hallDepthVal' style='color:var(--primary);font-size:1.4rem;font-weight:700;'>" + String(_actuators.getAnchorDepthCm() / 100.0f, 2) + " m</div></div>";
+        html += "<div class='stat-box'><div class='stat-label'>Voltas do Tambor</div><div class='stat-value' id='hallRevsVal' style='color:#38bdf8;font-size:1.4rem;font-weight:700;'>" + String(_actuators.getAnchorRevolutions(), 2) + "</div></div>";
+        html += "<div class='stat-box'><div class='stat-label'>Total de Pulsos</div><div class='stat-value' id='hallPulsesVal' style='font-size:1.4rem;font-weight:700;'>" + String(_actuators.getAnchorHallPulses()) + "</div></div>";
+        html += "<div class='stat-box'><div class='stat-label'>Perímetro / Volta</div><div class='stat-value' id='hallCircVal' style='color:var(--yellow);font-size:1.2rem;font-weight:600;'>" + String((3.14159f * _config.getAnchorDrumDiamMm() / 10.0f), 1) + " cm</div></div>";
+        html += "</div>";
+        html += "<div style='background:rgba(15,23,42,0.6);border:1px solid #334155;border-radius:8px;padding:14px;'>";
+        html += "<div style='font-weight:600;font-size:0.95rem;margin-bottom:10px;color:var(--text);'><i class='fa-solid fa-gear'></i> Calibração do Tambor do Guincho</div>";
+        html += "<div style='display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;'>";
+        html += "<div><label style='display:block;font-size:0.8rem;color:var(--muted);margin-bottom:4px;'>Diâmetro do Tambor (mm):</label>";
+        html += "<input type='number' id='cfgDrumDiam' step='0.5' min='5' max='500' value='" + String(_config.getAnchorDrumDiamMm(), 1) + "' style='background:#0f172a;border:1px solid #334155;color:#fff;padding:8px 12px;border-radius:6px;width:130px;font-size:1rem;'></div>";
+        html += "<div><label style='display:block;font-size:0.8rem;color:var(--muted);margin-bottom:4px;'>Pulsos por Volta (Ímanes):</label>";
+        html += "<input type='number' id='cfgPulsesPerRev' min='1' max='24' value='" + String(_config.getAnchorPulsesPerRev()) + "' style='background:#0f172a;border:1px solid #334155;color:#fff;padding:8px 12px;border-radius:6px;width:110px;font-size:1rem;'></div>";
+        html += "<button type='button' onclick='saveAnchorConfig()' class='btn btn-primary' style='padding:10px 18px;'><i class='fa-solid fa-floppy-disk'></i> Guardar Calibração</button>";
+        html += "<button type='button' onclick='zeroAnchorCounter()' class='btn btn-secondary' style='background:#0284c7;color:#fff;'><i class='fa-solid fa-rotate-left'></i> Zerar Contador (0.0 m)</button>";
+        html += "</div></div></div>";
+
         // Card: Modos Operacionais & Emergência
         html += "<div class='card'>";
         html += "<div class='card-title'><i class='fa-solid fa-sliders'></i> Modos de Operação & Paragem Imediata</div>";
@@ -975,6 +999,10 @@ private:
         html += "fetch('/api/control/actuator',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({throttle:t,rudder:r})});}";
         html += "function sendAction(a){fetch('/api/control/action',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:a})})";
         html += ".then(r=>r.json()).then(res=>{if(res&&res.msg)showFeedback(res.msg);});}";
+        html += "function zeroAnchorCounter(){sendAction(15);}";
+        html += "function saveAnchorConfig(){const d=parseFloat(document.getElementById('cfgDrumDiam').value)||30.0;const p=parseInt(document.getElementById('cfgPulsesPerRev').value)||1;";
+        html += "fetch('/api/control/anchor/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({diam_mm:d,pulses_per_rev:p})})";
+        html += ".then(r=>r.json()).then(res=>showFeedback(res.msg||'Calibração guardada!'));}";
         html += "function sendEmergencyStop(){setThrottle(0);setRudder(0);sendAction(2);}";
         html += "let winchTimer=null;";
         html += "function onWinchInput(v){document.getElementById('winchVal').innerText=v+' µs (ON)';if(winchTimer)clearTimeout(winchTimer);winchTimer=setTimeout(()=>{sendWinchPulse(v);},40);}";
@@ -985,13 +1013,20 @@ private:
         html += "function cutWinchSignal(){sendAction(5);fetch('/api/control/winch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pulseUs:0})})";
         html += ".then(r=>r.json()).then(res=>{document.getElementById('winchVal').innerText='OFF (0V - Cortado)';showFeedback('Sinal PWM cortado (0V / OFF)');});}";
         html += "function stopWinchCalib(){cutWinchSignal();}";
-        html += "function saveCurrentAsNeutral(){const val=parseInt(document.getElementById('winchSlider').value);sendWinchPulse(val,true);}";
-        html += "setInterval(()=>{fetch('/api/status').then(r=>r.json()).then(data=>{";
-        html += "document.getElementById('curMotor').innerText=data.actuators.motor_status_str;";
-        html += "document.getElementById('curAnchor').innerText=data.actuators.anchor_status_str;";
-        html += "document.getElementById('curDepth').innerText=data.actuators.anchor_depth_m.toFixed(1)+' m';";
-        html += "document.getElementById('curRack').innerText=data.actuators.rack_released?'LIVRE':'TRAVADA';";
-        html += "});},1000);";
+        html += "setInterval(()=>{fetch('/api/status').then(r=>r.json()).then(data=>{const a=data.actuators;if(!a)return;";
+        html += "document.getElementById('curMotor').innerText=a.motor_status_str||'';";
+        html += "document.getElementById('curAnchor').innerText=a.anchor_status_str||'';";
+        html += "document.getElementById('curDepth').innerText=(a.anchor_depth_m||0).toFixed(2)+' m';";
+        html += "document.getElementById('curRack').innerText=a.rack_released?'LIVRE':'TRAVADA';";
+        html += "const hd=document.getElementById('hallDepthVal');if(hd&&a.anchor_depth_m!==undefined){hd.innerText=a.anchor_depth_m.toFixed(2)+' m ('+(a.anchor_depth_cm||0)+' cm)';}";
+        html += "const hr=document.getElementById('hallRevsVal');if(hr&&a.anchor_revs!==undefined){hr.innerText=a.anchor_revs.toFixed(2);}";
+        html += "const hp=document.getElementById('hallPulsesVal');if(hp&&a.anchor_pulses!==undefined){hp.innerText=a.anchor_pulses;}";
+        html += "const hc=document.getElementById('hallCircVal');if(hc&&a.anchor_drum_diam_mm!==undefined){hc.innerText=(Math.PI*a.anchor_drum_diam_mm/10.0).toFixed(1)+' cm';const di=document.getElementById('cfgDrumDiam');if(di&&!di.matches(':focus'))di.value=a.anchor_drum_diam_mm;}";
+        html += "const pi=document.getElementById('cfgPulsesPerRev');if(pi&&a.anchor_pulses_per_rev!==undefined&&!pi.matches(':focus'))pi.value=a.anchor_pulses_per_rev;";
+        html += "const lb=document.getElementById('anchorLimitBadge');if(lb){if(a.anchor_limit){lb.innerText='Fim de Curso: NO TOPO (Acionado)';lb.style.background='#059669';lb.style.color='#fff';}else{lb.innerText='Fim de Curso: LIVRE';lb.style.background='#1e293b';lb.style.color='var(--muted)';}}";
+        html += "if(document.getElementById('rudVal')&&a.rudder!==undefined){document.getElementById('rudVal').innerText=a.rudder+'%';if(document.getElementById('rudderSlider'))document.getElementById('rudderSlider').value=a.rudder;}";
+        html += "if(document.getElementById('thrVal')&&a.throttle!==undefined){document.getElementById('thrVal').innerText=a.throttle+'%';if(document.getElementById('throttleSlider'))document.getElementById('throttleSlider').value=a.throttle;}";
+        html += "});},300);";
         html += "</script>";
 
         html += getHtmlFooter();
@@ -1443,6 +1478,13 @@ private:
         g["heading"] = _gps.getHeading();
         g["satellites"] = _gps.getSatellites();
         g["fix"] = _gps.hasFix();
+        g["chars_processed"] = _gps.getCharsProcessed();
+        g["hw_locked"] = _gps.isHardwareLocked();
+        g["rx_pin"] = _gps.getRxPin();
+        g["tx_pin"] = _gps.getTxPin();
+        g["baud"] = _gps.getBaud();
+        g["bytes"] = _gps.getTotalBytes();
+        g["raw"] = _gps.getRawSentence();
 
         JsonObject b = doc["battery"].to<JsonObject>();
         b["pct"] = _battery.getPercentage();
@@ -1463,6 +1505,12 @@ private:
         a["anchor_status"] = _actuators.getAnchorStatus();
         a["anchor_status_str"] = get_anchor_status_str(_actuators.getAnchorStatus());
         a["anchor_depth_m"] = _actuators.getAnchorDepthCm() / 100.0f;
+        a["anchor_depth_cm"] = _actuators.getAnchorDepthCm();
+        a["anchor_pulses"] = _actuators.getAnchorHallPulses();
+        a["anchor_revs"] = _actuators.getAnchorRevolutions();
+        a["anchor_drum_diam_mm"] = _config.getAnchorDrumDiamMm();
+        a["anchor_pulses_per_rev"] = _config.getAnchorPulsesPerRev();
+        a["anchor_limit"] = _actuators.isAnchorAtTopLimit();
         a["rack_released"] = _actuators.isRackReleased();
         a["alarm_active"] = _actuators.isAlarmActive();
         a["winch_pulse_us"] = _actuators.getWinchPulseUs();
@@ -1992,20 +2040,28 @@ private:
             case 8: // Toggle Alarm
                 if (_actuators.isAlarmActive()) {
                     _actuators.stopAlarm();
+                    if (_commandQueueCb) _commandQueueCb("CMD:ALARM:0");
                     msg = "Alarme sonoro/strobe DESLIGADO";
                 } else {
                     _actuators.triggerAlarm(10);
+                    if (_commandQueueCb) _commandQueueCb("CMD:ALARM:10");
                     msg = "Alarme sonoro/strobe LIGADO (10s)";
                 }
                 break;
             case 10: // Manual mode
                 _motorStatus = MOTOR_MANUAL;
+                if (_commandQueueCb) _commandQueueCb("CMD:MODE:MANUAL");
                 msg = "Modo Manual ativado";
                 break;
             case 13: // Relax rack servo (stop heating)
                 _actuators.relaxRack();
                 if (_commandQueueCb) _commandQueueCb("CMD:RACK:RELAX");
                 msg = "Servo do trinco relaxado (sem forçar)!";
+                break;
+            case 15: // Zero Anchor Counter
+                _actuators.zeroAnchorCounter();
+                if (_commandQueueCb) _commandQueueCb("CMD:ZERO_ANCHOR");
+                msg = "Contador de cabo da âncora ZERADO (0.0 m)!";
                 break;
             default:
                 msg = "Comando desconhecido";
@@ -2020,6 +2076,29 @@ private:
         String res;
         serializeJson(resDoc, res);
         _server.send(200, "application/json", res);
+    }
+
+    void handleApiAnchorConfig() {
+        if (!_server.hasArg("plain")) {
+            _server.send(400, "application/json", "{\"error\":\"Missing body\"}");
+            return;
+        }
+        JsonDocument doc;
+        DeserializationError err = deserializeJson(doc, _server.arg("plain"));
+        if (err) {
+            _server.send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
+            return;
+        }
+        float diam = doc["diam_mm"] | _config.getAnchorDrumDiamMm();
+        uint8_t pulses = doc["pulses_per_rev"] | _config.getAnchorPulsesPerRev();
+        _config.setAnchorCalibration(diam, pulses);
+        _actuators.setAnchorCalibration(diam, pulses);
+        if (_commandQueueCb) {
+            char cmd[32];
+            snprintf(cmd, sizeof(cmd), "CMD:ANC_CFG:%.1f:%d", diam, pulses);
+            _commandQueueCb(cmd);
+        }
+        _server.send(200, "application/json", "{\"success\":true,\"msg\":\"Calibração do tambor guardada com sucesso!\"}");
     }
 
     // -------------------------------------------------------------

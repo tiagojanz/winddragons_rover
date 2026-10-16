@@ -95,22 +95,33 @@
 #define PIN_C6_WATER_SENS    15   // GPIO 15 (Entrada Analógica)
 
 // GPS Quectel LC29H (UART Hardware)
-#define PIN_C6_GPS_RX        16   // ESP32 RX <- Quectel LC29H TX (GPIO 16)
-#define PIN_C6_GPS_TX        17   // ESP32 TX -> Quectel LC29H RX (GPIO 17)
+#define PIN_LAFVIN_GPS_RX    16   // Lafvin Header J2 Pad 8 (Serigrafia RX / GPIO 16)
+#define PIN_LAFVIN_GPS_TX    17   // Lafvin Header J2 Pad 9 (Serigrafia TX / GPIO 17)
+#define PIN_C6_GPS_RX        16   // DevKitC RX (GPIO 16)
+#define PIN_C6_GPS_TX        17   // DevKitC TX (GPIO 17)
 #define GPS_BAUDRATE     115200
 
 // Atuadores / Servos (Sinais PWM Diretos)
 // NOTA PCB: O conector WIN da PCB liga ao Pino 5 do J_DK_R (GPIO 23 no ESP32-C6 DevKitC)
 #define PIN_C6_WINCH         23   // GPIO 23 - Conector WIN na PCB (DevKitC J3 Pin 5)
-#define PIN_C6_WINCH_ALT     19   // GPIO 19 - Pino alternativo direto no DevKitC
+#define PIN_C6_WINCH_ALT     -1   // Desativado: GPIO 19 dedicado a LEDs WS2812B Strobe
 #define PIN_C6_SERVO_RACK    21   // GPIO 21 - Conector RCK na PCB (DevKitC J3 Pin 7)
 #define PIN_C6_SERVO_RUD     15   // GPIO 15 - Conector RUD na PCB (DevKitC J3 Pin 4)
 #define PIN_C6_MOTOR_ESC     17   // GPIO 17 - Conector ESC na PCB (DevKitC J3 Pin 3)
 
+// Fim de Curso da Âncora (Microswitch topo)
+#define PIN_ANCHOR_DETECTOR  18   // GPIO 18 no DevKitC (INPUT_PULLUP, fecha ao GND no topo)
+
+// Sensor de Efeito Hall do Tambor da Âncora (DRV5032)
+#define PIN_ANCHOR_HALL      20   // GPIO 20 no DevKitC (INPUT_PULLUP, contador de voltas do tambor)
+
+// Fita / Módulo de LEDs WS2812B Strobe Náutico
+#define PIN_STROBE_LEDS      19   // GPIO 19 no DevKitC (Linha de dados DIN WS2812B)
+#define NUM_STROBE_LEDS       8   // Quantidade padrão de LEDs na fita/anel
+
 // Aliases e compatibilidade
 #define PIN_GPS_RX           PIN_C6_GPS_RX
 #define PIN_GPS_TX           PIN_C6_GPS_TX
-#define PIN_ANCHOR_DETECTOR  -1
 #define ADS1115_I2C_ADDR     0x48
 #define ADS_CH_BATT_VOLT     0
 #define ADS_CH_BATT_CURR     1

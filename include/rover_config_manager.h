@@ -16,10 +16,12 @@ struct RoverConfig {
     uint8_t screenBrightness;   // 0 - 100%
     uint8_t batteryCells;       // 3, 4, or 6
     uint16_t batteryCapacityMah; // e.g. 2650 mAh
+    float anchorDrumDiamMm;     // Diâmetro do tambor do guincho da âncora (mm, ex: 30.0)
+    uint8_t anchorPulsesPerRev; // Número de pulsos/ímanes por volta do tambor (ex: 1)
 };
 
 /**
- * RoverConfigManager - Gere as configurações principais do Rover (ID, SSID, Password AP, Brilho Ecrã, Bateria)
+ * RoverConfigManager - Gere as configurações principais do Rover (ID, SSID, Password AP, Brilho Ecrã, Bateria, Âncora)
  * Sincroniza bidirecionalmente entre o Cartão MicroSD (/config.json) e a memória NVS.
  */
 class RoverConfigManager {
@@ -31,6 +33,8 @@ public:
         _config.screenBrightness = 85;
         _config.batteryCells = 4;
         _config.batteryCapacityMah = 2650;
+        _config.anchorDrumDiamMm = 30.0f;
+        _config.anchorPulsesPerRev = 1;
     }
 
     void begin(SDCardManager *sd = nullptr) {
@@ -56,6 +60,8 @@ public:
     uint8_t getScreenBrightness() const { return _config.screenBrightness; }
     uint8_t getBatteryCells() const { return _config.batteryCells; }
     uint16_t getBatteryCapacityMah() const { return _config.batteryCapacityMah; }
+    float getAnchorDrumDiamMm() const { return _config.anchorDrumDiamMm; }
+    uint8_t getAnchorPulsesPerRev() const { return _config.anchorPulsesPerRev; }
 
     void setRoverId(uint8_t id) {
         _config.roverId = id;
@@ -84,6 +90,12 @@ public:
         if (mah >= 500 && mah <= 50000) {
             _config.batteryCapacityMah = mah;
         }
+    }
+
+    void setAnchorCalibration(float diamMm, uint8_t pulsesPerRev) {
+        if (diamMm >= 5.0f && diamMm <= 500.0f) _config.anchorDrumDiamMm = diamMm;
+        if (pulsesPerRev >= 1 && pulsesPerRev <= 24) _config.anchorPulsesPerRev = pulsesPerRev;
+        saveConfig();
     }
 
     void updateConfig(uint8_t id, const String &ssid, const String &password, uint8_t brightness = 255, uint8_t cells = 0, uint16_t capacityMah = 0) {
@@ -126,9 +138,18 @@ public:
             if (_config.batteryCapacityMah < 500 || _config.batteryCapacityMah > 50000) {
                 _config.batteryCapacityMah = 2650;
             }
+            _config.anchorDrumDiamMm = prefs.getFloat("anc_diam", 30.0f);
+            if (_config.anchorDrumDiamMm < 5.0f || _config.anchorDrumDiamMm > 500.0f) {
+                _config.anchorDrumDiamMm = 30.0f;
+            }
+            _config.anchorPulsesPerRev = prefs.getUChar("anc_pulses", 1);
+            if (_config.anchorPulsesPerRev < 1 || _config.anchorPulsesPerRev > 24) {
+                _config.anchorPulsesPerRev = 1;
+            }
             prefs.end();
-            Serial.printf("[CONFIG] Carregado da memoria NVS -> ID: %u | SSID AP: %s | Brilho: %u%% | Bateria: %uS (%u mAh)\n", 
-                          _config.roverId, _config.apSsid.c_str(), _config.screenBrightness, _config.batteryCells, _config.batteryCapacityMah);
+            Serial.printf("[CONFIG] Carregado da memoria NVS -> ID: %u | SSID AP: %s | Brilho: %u%% | Bateria: %uS (%u mAh) | Âncora: Tambor=%.1fmm (%u p/rev)\n", 
+                          _config.roverId, _config.apSsid.c_str(), _config.screenBrightness, _config.batteryCells, _config.batteryCapacityMah,
+                          _config.anchorDrumDiamMm, _config.anchorPulsesPerRev);
         }
 
         // 3. Se o cartão SD estiver presente mas ainda não possuir o /config.json, criar com valores padrão
@@ -149,6 +170,8 @@ public:
         prefs.putUChar("bright", _config.screenBrightness);
         prefs.putUChar("cells", _config.batteryCells);
         prefs.putUShort("cap_mah", _config.batteryCapacityMah);
+        prefs.putFloat("anc_diam", _config.anchorDrumDiamMm);
+        prefs.putUChar("anc_pulses", _config.anchorPulsesPerRev);
         prefs.end();
 
         // Guarda no Cartão MicroSD
@@ -207,8 +230,18 @@ public:
             if (m >= 500 && m <= 50000) _config.batteryCapacityMah = m;
         }
 
-        Serial.printf("[CONFIG] Carregado de /config.json (MicroSD) -> ID: %u | SSID AP: %s | Brilho: %u%% | Bateria: %uS (%u mAh)\n", 
-                      _config.roverId, _config.apSsid.c_str(), _config.screenBrightness, _config.batteryCells, _config.batteryCapacityMah);
+        if (doc["anchor_drum_diam_mm"].is<float>()) {
+            float d = doc["anchor_drum_diam_mm"].as<float>();
+            if (d >= 5.0f && d <= 500.0f) _config.anchorDrumDiamMm = d;
+        }
+        if (doc["anchor_pulses_per_rev"].is<uint8_t>()) {
+            uint8_t p = doc["anchor_pulses_per_rev"].as<uint8_t>();
+            if (p >= 1 && p <= 24) _config.anchorPulsesPerRev = p;
+        }
+
+        Serial.printf("[CONFIG] Carregado de /config.json (MicroSD) -> ID: %u | SSID AP: %s | Brilho: %u%% | Bateria: %uS (%u mAh) | Âncora: Tambor=%.1fmm (%u p/rev)\n", 
+                      _config.roverId, _config.apSsid.c_str(), _config.screenBrightness, _config.batteryCells, _config.batteryCapacityMah,
+                      _config.anchorDrumDiamMm, _config.anchorPulsesPerRev);
         return true;
     }
 
@@ -222,6 +255,8 @@ public:
         doc["screen_brightness"] = _config.screenBrightness;
         doc["battery_cells"] = _config.batteryCells;
         doc["battery_capacity_mah"] = _config.batteryCapacityMah;
+        doc["anchor_drum_diam_mm"] = _config.anchorDrumDiamMm;
+        doc["anchor_pulses_per_rev"] = _config.anchorPulsesPerRev;
 
         String jsonStr;
         serializeJsonPretty(doc, jsonStr);
