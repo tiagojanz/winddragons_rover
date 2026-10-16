@@ -1,11 +1,8 @@
 ** Drc report for Dual_ESP_Carrier.kicad_pcb **
-** Created on 2026-10-16T16:32:45 **
+** Created on 2026-10-16T17:02:59 **
 ** Report includes: Errors, Warnings **
 
-** Found 39 DRC violations **
-[track_dangling]: Track has unconnected end
-    Local override; warning
-    @(75.2224 mm, 64.2776 mm): Pista [/+3V3] no F.Cu, comprimento 0.3145 mm
+** Found 38 DRC violations **
 [lib_footprint_mismatch]: O footprint 'MountingHole_3.2mm_M3' não corresponde à cópia na biblioteca 'MountingHole'
     Local override; warning
     @(4.5000 mm, 95.5000 mm): Footprint H3

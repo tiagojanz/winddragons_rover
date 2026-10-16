@@ -140,6 +140,23 @@ Durante os ensaios práticos com o firmware `src/test_uart/main_test_uart.cpp`:
   - Verificação DRC: **0 itens desconectados**, **0 erros de isolamento/cruzamento**.
   - Gerbers e renders 3D atualizados e re-empacotados em `Dual_ESP_Carrier_Gerber.zip`.
 
+### 4.4. Separação dos Domínios de Alimentação 3.3V (Lafvin vs DevKitC C6)
+Para evitar o paralelismo indesejado de reguladores LDO internos das duas placas (o que provocava sobreaquecimento e correntes reversas entre os reguladores ao partilhar o mesmo barramento 3.3V), a alimentação 3.3V foi segregada em dois domínios independentes na carrier board `Dual_ESP_Carrier.kicad_pcb`:
+- **Domínio Lafvin (`/+3V3`):**
+  - Alimentado exclusivamente pelo regulador LDO da placa Lafvin (`J1 Pad 7`).
+  - Alimenta:
+    - Módulo GNSS Quectel LC29H (`J6 Pad 7` / VCC)
+    - Potenciómetros analógicos do Joystick PS5 (`JOY1 Pad 6` para Eixo X e `JOY1 Pad 3` para Eixo Y)
+- **Domínio DevKitC C6 (`/+3V3_C6`):**
+  - Alimentado exclusivamente pelo regulador LDO do ESP32-C6 DevKitC-1 (`J_DK_L Pad 1`).
+  - Alimenta:
+    - Módulo de Rádio LoRa SX1278 433 MHz (`J3 Pad 2` / VCC)
+    - Pista dedicada em `F.Cu` com isolamento superior a 3.0 mm de qualquer outro sinal.
+- **Terra Comum (`GND`):**
+  - O plano de massa continua 100% partilhado entre ambas as placas, módulos de RF, GPS e sensores para garantir a integridade de sinal na UART (921600 baud) e nas leituras analógicas.
+- **Alimentação 5V (`+5V`):**
+  - Conector `J_PWR_ESP` distribui 5V da bateria/BEC a ambos os pinos `5V` das placas para que cada regulador LDO opere de forma limpa e autónoma.
+
 ---
 
 ## 5. Resultados de Validação em Hardware (15/10/2026 - 16/10/2026)
