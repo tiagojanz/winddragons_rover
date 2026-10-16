@@ -97,7 +97,7 @@ Comunicação SPI independente no barramento secundário do DevKitC:
 | **ESC Motor** | **GPIO 17** | **ESC Pin 3** (X=6.00mm, Y=74.50mm)<br>J_DK_R Pin 3 / J3-3 | Sinal PWM (LEDC) Propulsão Principal |
 | **Fim de Curso Âncora** | **GPIO 18** | **J_LIMIT** (Pad 1: GND, Pad 2: GPIO 18)<br>X=21.24mm, Y=74.50mm | **100% Validado em Bancada Real (16/10/2026)**: Entrada digital `INPUT_PULLUP` (Microswitch fecha a GND no topo mecânico). Corte imediato de emergência do guincho por hardware/software. Conector de 2 pinos na PCB Dual_ESP_Carrier. |
 | **LEDs WS2812B Strobe**| **GPIO 19** | **STRB** (Pad 1: GND, Pad 2: +5V_SERVO, Pad 3: DIN)<br>X=16.16mm, Y=74.50mm | **Integrado na PCB Dual_ESP_Carrier e Firmware**: Barramento WS2812B (8 LEDs RGB). Alimentado pelo barramento de 5V dos servos com linha de dados DIN direta. Conector padrão RC de 3 pinos. |
-| **Contador Âncora (Hall)**| **GPIO 20** | **J_DK_R Pin 8** / DevKitC J3 Pin 8 | **100% Validado em Bancada Real (16/10/2026)**: Sensor de Efeito Hall Digital DRV5032 (Texas Instruments) para contagem de voltas do tambor da âncora. Modo `INPUT_PULLUP` com interrupção `FALLING`. Medição em tempo real de voltas, pulsos e profundidade do cabo solto em metros/cm com calibração interativa na Web e auto-zeroing no fim de curso superior. |
+| **Contador Âncora (Hall)**| **GPIO 20** | **HALL** Header (Pad 1: GND, Pad 2: +3V3_C6, Pad 3: GPIO 20 / ANCHOR_HALL)<br>X=26.32mm, Y=74.50mm, F.SilkS / J_DK_R Pin 8 | **100% Validado em Bancada Real (16/10/2026)**: Sensor de Efeito Hall Digital DRV5032 (Texas Instruments) para contagem de voltas do tambor da âncora. Conector dedicado `HALL` de 3 pinos na placa principal (passo contínuo 2.54mm alinhado com a barra inferior). Modo `INPUT_PULLUP` com interrupção `FALLING`. Medição em tempo real de voltas, pulsos e profundidade do cabo solto em metros/cm com calibração interativa na Web e auto-zeroing no fim de curso superior. |
 | **Sensor de Água**| GPIO 15 | **J_WATER** Pin 2 (X=23.78mm, Y=74.50mm, F.SilkS) | Entrada analógica ADC (Frente / F.SilkS) |
 | **Bateria Tensão** | GPIO 2 | **J_BATT** Pin 3 (X=18.70mm, Y=74.50mm, F.SilkS) | Divisor de tensão ADC (Rácio 10.803, Frente / F.SilkS) |
 | **Bateria Corrente**| GPIO 3 | **J_BATT** Pin 2 (X=18.70mm, Y=74.50mm, F.SilkS) | Shunt / Sensor Hall ADC (Frente / F.SilkS) |
@@ -137,9 +137,10 @@ Durante os ensaios práticos com o firmware `src/test_uart/main_test_uart.cpp`:
 - **SW (Botão de Clique):** Não conectado (Navegação feita via botão BOOT onboard `GPIO 9`)
 
 ### 4.2. Ligação do Sensor de Efeito Hall DRV5032 (Contador do Tambor da Âncora)
-- **Pino 1 (VCC):** DevKitC Pino 1 do conector J1 ou J3 (`3V3`)
-- **Pino 2 (OUT):** DevKitC Pino 8 do conector J3 / `J_DK_R Pin 8` (`GPIO 20` - Entrada digital `INPUT_PULLUP` com ISR `FALLING`)
-- **Pino 3 (GND):** DevKitC Pino 15 do conector J1 ou J3 (`GND`)
+Ligação direta ao conector **`HALL`** na placa principal ($X = 26.32\text{ mm}, Y = 74.50\text{ mm}$) ou via chicote de cabos à régua destacável (`J_HALL`):
+- **Pino 1 (GND):** `GND` Comum (Cabo Preto)
+- **Pino 2 (VCC):** `+3V3_C6` Alimentação limpa do DevKitC (Cabo Vermelho)
+- **Pino 3 (OUT):** `GPIO 20` (`J_DK_R Pin 8` - Entrada digital `INPUT_PULLUP` com ISR `FALLING`, Cabo Amarelo/Branco)
 
 ### 4.3. Ligação do Módulo GNSS / GPS Quectel LC29H
 - **VCC:** `+3.3V` (Obrigatório 3.3V; não alimentar a 5V)

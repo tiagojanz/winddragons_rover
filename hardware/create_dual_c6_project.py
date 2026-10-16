@@ -24,9 +24,19 @@ BACK (B.Cu / B.SilkS) - DAUGHTERBOARDS, RF & ACTUATORS:
         - Outline: (71.19, 64.23) to (89.19, 87.23)
     * Quectel LC29H GNSS GPS Module at (11.88, 12.5)
         - Outline: (3.5, 10.0) to (30.5, 41.0)
-    * 4x Direct RC Servo Headers (ESC, RUD, WIN, RCK) at Y=74.5 (X=6.0, 9.0, 12.0, 15.0)
-    * Actuator & Telemetry Headers: STRB at (18.0, 74.46), J_BATT at (21.0, 74.46), J_LIMIT at (24.0, 74.46), J_WATER at (26.5, 74.5)
-    * Dual Power Inputs: 5V Servo (J_PWR_SRV) at (14.5, 84.5, -90 deg), 5V ESP (J_PWR_ESP) at (95.5, 51.5)
+        - Crossed UART: R1 -> GPIO 16 (TX), T1 -> GPIO 17 (RX), PPS -> GPIO 23
+    * Standardized 2.54mm Pitch Actuator & Sensor Headers at Y=74.5 (X=6.00 to 26.32):
+        - ESC (6.00), RUD (8.54), WIN (11.08), RCK (13.62), STRB (16.16), J_BATT (18.70), J_LIMIT (21.24), J_WATER (23.78), HALL (26.32)
+        - Front Silkscreen labels for direct rover wiring
+    * Dual Power Inputs: 5V Servo (J_PWR_SRV: 5V | 6V SBEC) at (14.5, 84.5, -90 deg), 5V ESP (J_PWR_ESP) at (95.5, 51.5)
+
+BREAKAWAY PROBE (Bottom edge X=50.0..90.0, Y=92.8..100.0):
+    * DRV5032 Hall Effect Sensor Breakaway Stick for Winch Spool (40.0 x 7.2 mm):
+        - H_HALL: M3 Mounting Hole at (54.0, 96.4) with 2mm FR4 perimeter
+        - J_HALL: 3-pin 2.54mm connector (1: GND, 2: VCC, 3: OUT) at (66.0, 96.4)
+        - C_HALL: 100nF 0805 SMD Decoupling Capacitor at (75.0, 96.4)
+        - U_HALL: DRV5032 SOT-23-3 Hall Sensor at (86.5, 96.4) facing outer edge
+        - Mouse-Bites: 2x 4mm tabs (X=60..64 and X=76..80) with 5x 0.5mm stamp holes along Y=92.2
 """
 
 import os
@@ -649,6 +659,29 @@ def main():
         print("Upgrading board and schematic to native KiCad 10 format...")
         subprocess.run([kicad_cli, "pcb", "upgrade", "--force", pcb_path], capture_output=True)
         subprocess.run([kicad_cli, "sch", "upgrade", "--force", sch_path], capture_output=True)
+
+        print("Refilling copper zones and verifying DRC...")
+        drc_rpt = os.path.join(TARGET_DIR, f"{PROJECT_NAME}-drc.rpt")
+        subprocess.run([
+            kicad_cli, "pcb", "drc", "--refill-zones", "--save-board", "-o", drc_rpt, pcb_path
+        ], capture_output=True, text=True)
+
+        # Synchronize refilled active board to template
+        template_path = os.path.join(os.path.dirname(pcb_path), f"{PROJECT_NAME}_template.kicad_pcb")
+        if os.path.exists(pcb_path):
+            with open(pcb_path, "r") as f_act, open(template_path, "w") as f_tpl:
+                f_tpl.write(f_act.read())
+            print(f"Synchronized refilled board to master template: {template_path}")
+
+        # Check DRC output report
+        drc_rpt = os.path.join(TARGET_DIR, f"{PROJECT_NAME}-drc.rpt")
+        if os.path.exists(drc_rpt):
+            with open(drc_rpt, "r") as f:
+                drc_text = f.read()
+            errors = [b for b in drc_text.split('\n[') if '; error' in b]
+            unconn = "0 Itens desconectados" in drc_text or "0 unconnected" in drc_text
+            print(f"DRC Status: {len(errors)} errors, Unconnected items clean: {unconn}")
+            os.remove(drc_rpt)
 
         print("Rendering 3D preview images...")
         render_top = os.path.join(TARGET_DIR, f"{PROJECT_NAME}_3d_top.png")
