@@ -103,6 +103,23 @@ Comunicação SPI independente no barramento secundário do DevKitC:
 | **Bateria Corrente**| GPIO 3 | **J_BATT** Pin 2 (X=18.70mm, Y=74.50mm, F.SilkS) | Shunt / Sensor Hall ADC (Frente / F.SilkS) |
 | **GPS UART TX/RX**| GPIO 17 (RX) / 16 (TX) | J6 Header / J2 | **100% Validado em Bancada Real (16/10/2026)**: Módulo Quectel LC29H GNSS a 115200 baud. 14+ satélites sintonizados, FIX 3D imediato. R1 (RX Quectel) ligado ao TX (GPIO 16), T1 (TX Quectel) ligado ao RX (GPIO 17), PPS no GPIO 23. |
 
+### 3.4. Régua Destacável para Sensor Hall DRV5032 (Holder no Carretel do Guincho)
+Aproveitando o painel padrão 100x100mm da JLCPCB sem custos adicionais de múltiplos desenhos, foi integrada uma régua/haste destacável (*breakaway probe*) ao longo da margem inferior da placa:
+- **Dimensões Físicas:** $40.0\text{ mm} \times 7.2\text{ mm}$ ($X \in [50.0, 90.0]\text{ mm}$, $Y \in [92.8, 100.0]\text{ mm}$).
+- **Furo de Fixação M3:** Furo NPTH $\varnothing 3.2\text{ mm}$ na ponta oposta ao sensor ($X = 54.0\text{ mm}, Y = 96.4\text{ mm}$), com margem periférica de $2.0\text{ mm}$ de FR4 para fixação robusta por parafuso M3 e anilha no suporte do carretel.
+- **Conector de Ligação (`J_HALL`):** 3 ilhas *through-hole* passo 2.54 mm ($X = 66.0\text{ mm}, Y = 96.4\text{ mm}$) para soldadura direta de fios ou barra de pinos macho/fêmea:
+  - **Pino 1 (Quadrado):** `GND` (`/HALL_GND`)
+  - **Pino 2 (Redondo):** `VCC` (`/HALL_VCC`, suporta 1.65V a 5.5V)
+  - **Pino 3 (Redondo):** `OUT` (`/HALL_OUT`, saída digital ligada ao `GPIO 20` do ESP32)
+- **Condensador de Desacoplamento (`C_HALL`):** 100 nF cerâmico SMD 0805 ($X = 75.0\text{ mm}, Y = 96.4\text{ mm}$) montado em paralelo entre VCC e GND imediatamente antes do sensor.
+- **Sensor Hall (`U_HALL`):** Texas Instruments **DRV5032** em encapsulamento SMD **SOT-23-3** ($X = 86.5\text{ mm}, Y = 96.4\text{ mm}$), com o elemento de deteção orientado diretamente para a ponta extrema ($X = 90.0\text{ mm}$), permitindo proximidade máxima aos ímanes do tambor do carretel.
+- **Separação Mecânica (*Mouse-Bites* / Furos de Picotado):**
+  - Rasgo fresado de $1.2\text{ mm}$ de largura na camada `Edge.Cuts` ($Y = 91.6\text{ mm}$ a $92.8\text{ mm}$, com aberturas laterais $X = 48.5\text{ mm}$ e $X = 91.5\text{ mm}$).
+  - Duas pontes de fixação de $4.0\text{ mm}$ em $X \in [60.0, 64.0]\text{ mm}$ e $X \in [76.0, 80.0]\text{ mm}$.
+  - Cada ponte contém 5 furos não metalizados (*stamp holes*) de $\varnothing 0.5\text{ mm}$ espaçados a $0.8\text{ mm}$ ao longo de $Y = 92.2\text{ mm}$.
+  - Permite destacar a régua com facilidade manualmente sem recurso a ferramentas de corte, deixando um acabamento limpo.
+- **Estado DRC e Fabrico:** **0 erros DRC, 0 itens desconectados**, mantém a elegibilidade para preço padrão de placa única na JLCPCB.
+
 ---
 
 ## 4. Código das Cores dos Cabos (Bancada de Testes)
