@@ -257,6 +257,7 @@ private:
         // Controle de atuadores e comandos
         _server.on("/api/control/actuator", [this]() { handleApiActuator(); });
         _server.on("/api/control/action", [this]() { handleApiAction(); });
+        _server.on("/api/rover/target", HTTP_POST, [this]() { handleApiAction(); });
         _server.on("/api/select_rover", [this]() { handleApiSelectRover(); });
 
         // Gestão do Cartão SD da Base Station
@@ -1499,16 +1500,40 @@ private:
             return;
         }
         JsonDocument doc;
-        deserializeJson(doc, _server.arg("plain"));
+        DeserializationError err = deserializeJson(doc, _server.arg("plain"));
+        if (err) {
+            _server.send(400, "application/json", "{\"error\":\"JSON invalido\"}");
+            return;
+        }
 
         uint8_t action = doc["action"] | 0;
         uint8_t targetRid = doc["rover_id"] | _fleet.getSelectedRoverId();
         uint16_t depth = doc["depth_cm"] | 0;
+        uint16_t duration = doc["duration_s"] | 0;
 
-        _fleet.queueCommand(targetRid, ++_nextCmdId, action, depth);
+        double lat = doc["lat"] | (doc["target_lat"] | 0.0);
+        double lng = doc["lng"] | (doc["target_lng"] | 0.0);
+        int32_t latDeg7 = static_cast<int32_t>(round(lat * 10000000.0));
+        int32_t lngDeg7 = static_cast<int32_t>(round(lng * 10000000.0));
+
+        // Se foram fornecidas coordenadas e nenhuma ação específica foi selecionada, define ACTION_NAVIGATE (6)
+        if (action == 0 && (latDeg7 != 0 || lngDeg7 != 0)) {
+            action = ACTION_NAVIGATE;
+        }
+
+        FleetRover *r = _fleet.getRoverById(targetRid);
+        if (r && (lat != 0.0 || lng != 0.0)) {
+            r->target_lat = lat;
+            r->target_lng = lng;
+        }
+
+        _fleet.queueCommand(targetRid, ++_nextCmdId, action, depth, duration, latDeg7, lngDeg7);
 
         String msg = "Comando '" + String(get_action_str(action)) + "' colocado na fila LoRa para ROVER-" + String(targetRid);
-        _server.send(200, "application/json", "{\"status\":\"queued\",\"msg\":\"" + msg + "\"}");
+        if (latDeg7 != 0 || lngDeg7 != 0) {
+            msg += " (Alvo: " + String(lat, 6) + ", " + String(lng, 6) + ")";
+        }
+        _server.send(200, "application/json", "{\"status\":\"queued\",\"msg\":\"" + msg + "\",\"rover_id\":" + String(targetRid) + ",\"action\":" + String(action) + ",\"lat\":" + String(lat, 6) + ",\"lng\":" + String(lng, 6) + "}");
     }
 
     void handleApiSelectRover() {

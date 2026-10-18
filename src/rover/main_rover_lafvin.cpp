@@ -316,9 +316,11 @@ void loop() {
             if (rxIdx > 0) {
                 rxBuf[rxIdx] = '\0';
                 
-                // Formato esperado:
-                // PONG:<seq>:<batMv>:<batA>:<batPct>:<lat7>:<lng7>:<spd>:<head>:<sats>:<fix>:<motSt>:<rud>:<thr>:<winch>:<rack>:<depth>:<loraSt>:<rssi>:<snr>
-                if (strncmp(rxBuf, "PONG:", 5) == 0) {
+                if (strncmp(rxBuf, "PONG:OTA:", 9) == 0) {
+                    lastUartRxTime = now;
+                    printLog("[LAFVIN ROVER] ★ C6 OTA: %s\n", rxBuf + 9);
+                    webServer.setC6OtaStatus(rxBuf + 9);
+                } else if (strncmp(rxBuf, "PONG:", 5) == 0) {
                     lastUartRxTime = now;
                     uint32_t seq = 0, batMv = 0, batPct = 0, sats = 0, fix = 0, motSt = 0, depth = 0;
                     long lat7 = 0, lng7 = 0;

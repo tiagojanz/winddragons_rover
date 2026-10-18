@@ -387,6 +387,14 @@ public:
         return _apPass;
     }
 
+    String getConnectedPassword() const {
+        if (_isApMode) return _apPass;
+        for (const auto &n : _networks) {
+            if (n.ssid.equalsIgnoreCase(_connectedSsid)) return n.password;
+        }
+        return "";
+    }
+
 private:
     bool _isApMode;
     String _apSsid;

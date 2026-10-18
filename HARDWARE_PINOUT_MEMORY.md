@@ -120,6 +120,26 @@ Aproveitando o painel padrão 100x100mm da JLCPCB sem custos adicionais de múlt
   - Permite destacar a régua com facilidade manualmente sem recurso a ferramentas de corte, deixando um acabamento limpo.
 - **Estado DRC e Fabrico:** **0 erros DRC, 0 itens desconectados**, mantém a elegibilidade para preço padrão de placa única na JLCPCB.
 
+### 3.5. Ilha Dedicada de Expansão (J_EXP — 2x03 Pinos 2.54mm)
+Para ligação futura de sensores analógicos/digitais, atuadores ou barramentos I2C/OneWire, foi criada uma ilha dedicada de pinos (`J_EXP`) no painel frontal:
+- **Localização:** $X = 64.00\text{ mm}, Y = 78.00\text{ mm}$ (imediatamente à direita do cabeçalho `J_DK_L` do DevKitC).
+- **Formato Físico:** Conector vertical 2x03 passo padrão 2.54 mm (`PinHeader_2x03_P2.54mm_Vertical`).
+- **Encaminhamento:** 100% na camada superior (`F.Cu`), 0 vias, 0 cruzamentos, pistas curtas e diretas com isolamento total das alterações manuais da PCB.
+- **Pinos Seguros e Livres Expostos:**
+  - **`GPIO 1` (Pino 1, Pad Retangular):** ADC1_CH1 / LP_GPIO1 no DevKitC. Suporta leitura analógica de alta precisão ou IO digital de baixo consumo.
+  - **`GPIO 11` (Pino 3):** Standard Digital GPIO de alta velocidade no DevKitC. Suporta PWM (LEDC), interrupções de hardware ou barramentos de comunicação.
+  - *(Nota: Todos os outros pinos dos microcontroladores estão dedicados ao ecrã ST7789, SD Card, LoRa SX1278, GPS Quectel, Joysticks, Botões, Servos ou são strapping pins / LEDs internos).*
+- **Mapeamento de Pinos da Ilha `J_EXP`:**
+
+| Linha | Coluna Esquerda ($X = 64.00\text{ mm}$) | Coluna Direita ($X = 66.54\text{ mm}$) | Função / Aplicação |
+| :---: | :---: | :---: | :--- |
+| **Linha 1 ($Y = 78.00\text{ mm}$)** | **Pino 1:** `GPIO 1` (`/EXP_IO1`) | **Pino 2:** `+3V3_C6` (Alimentação 3.3V) | Canal Analógico / Sensor 3.3V |
+| **Linha 2 ($Y = 80.54\text{ mm}$)** | **Pino 3:** `GPIO 11` (`/EXP_IO11`) | **Pino 4:** `+5V` (Barramento 5V Principal) | Canal Digital / Atuador 5V |
+| **Linha 3 ($Y = 83.08\text{ mm}$)** | **Pino 5:** `GND` (Plano de Massa) | **Pino 6:** `GND` (Plano de Massa) | Referência de Terra Comum |
+
+- **Serigrafia Frontal (`F.SilkS`):** Caixa delimitadora retangular com identificadores em negrito: `EXPANSION`, `IO1  3V3`, `IO11  5V` e `GND  GND`.
+- **Validação DRC:** **0 erros DRC, 0 itens desconectados**.
+
 ---
 
 ## 4. Código das Cores dos Cabos (Bancada de Testes)

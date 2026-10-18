@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <WebServer.h>
+#include <Update.h>
 #include <ArduinoJson.h>
 #include "wifi_config_manager.h"
 #include "rover_config_manager.h"
@@ -30,6 +31,21 @@ public:
 
     void handleClient() {
         _server.handleClient();
+        if (_restartScheduled > 0 && millis() >= _restartScheduled) {
+            _restartScheduled = 0;
+            delay(300);
+            ESP.restart();
+        }
+    }
+
+    void setC6OtaStatus(const char* status) {
+        if (!status) return;
+        _c6OtaState = String(status);
+        _c6OtaTimestamp = millis();
+        Serial.printf("[ROVER HTTP] C6 OTA Estado: %s\n", status);
+        if (_display) {
+            _display->bootLogf(UI_CYAN, 50, "[OTA] C6: %s", status);
+        }
     }
 
     void setRoverId(uint8_t id) {
@@ -66,6 +82,10 @@ private:
     bool _isBusy = false;
     bool _uploadSuccess = false;
     String _uploadCurrentPath = "";
+    String _c6OtaState = "IDLE";
+    String _c6OtaDetail = "";
+    uint32_t _c6OtaTimestamp = 0;
+    uint32_t _restartScheduled = 0;
 
     bool handleStaticFile(String path = "") {
         if (path.isEmpty()) {
@@ -216,6 +236,32 @@ private:
         _server.on("/api/sd/upload", HTTP_POST, 
             [this]() { handleApiSdUploadFinish(); },
             [this]() { handleApiSdUploadData(); }
+        );
+
+        // Servir o binario para o C6 descarregar via HTTPUpdate
+        _server.on("/firmware/c6.bin", HTTP_GET, [this]() {
+            if (_sd.isReady() && _sd.fileExists("/firmware/c6.bin")) {
+                File f = _sd.openFile("/firmware/c6.bin", FILE_READ);
+                if (f) {
+                    _server.sendHeader("Access-Control-Allow-Origin", "*");
+                    _server.client().setTimeout(30000);
+                    _server.streamFile(f, "application/octet-stream");
+                    f.close();
+                    return;
+                }
+            }
+            _server.send(404, "text/plain", "Firmware c6.bin nao encontrado no cartao SD");
+        });
+
+        // Endpoints de atualizacao OTA do Rover (Dual-Core C6 + Lafvin)
+        _server.on("/api/ota/c6", HTTP_POST, 
+            [this]() { handleOtaC6UploadFinish(); },
+            [this]() { handleOtaC6UploadData(); }
+        );
+        _server.on("/api/ota/c6/status", HTTP_GET, [this]() { handleApiOtaC6Status(); });
+        _server.on("/api/ota/lafvin", HTTP_POST, 
+            [this]() { handleApiOtaLafvinFinish(); },
+            [this]() { handleApiOtaLafvinData(); }
         );
 
         // Servir fontes ou outros ficheiros estáticos diretamente do Cartão SD
@@ -2380,5 +2426,133 @@ private:
         }
         _server.sendHeader("Location", "/sd");
         _server.send(303, "text/plain", _uploadSuccess ? "Upload concluído com sucesso" : "Erro no upload");
+    }
+
+    void handleOtaC6UploadData() {
+        HTTPUpload& upload = _server.upload();
+        if (upload.status == UPLOAD_FILE_START) {
+            _server.client().setTimeout(30000);
+            _uploadSuccess = false;
+            _isBusy = true;
+            _c6OtaState = "UPLOADING";
+            _c6OtaDetail = "A receber binario c6.bin...";
+            Serial.printf("[OTA C6] Recebendo firmware: %s\n", upload.filename.c_str());
+            if (_display) _display->bootLogf(UI_CYAN, 30, "[OTA] A receber C6...");
+
+            if (_sd.isReady()) {
+                if (!_sd.fileExists("/firmware")) {
+                    _sd.createDir("/firmware");
+                }
+                if (_sd.fileExists("/firmware/c6.bin")) {
+                    _sd.deleteFile("/firmware/c6.bin");
+                }
+                _uploadFile = _sd.openFile("/firmware/c6.bin", FILE_WRITE);
+            }
+        } else if (upload.status == UPLOAD_FILE_WRITE) {
+            yield();
+            if (_uploadFile) {
+                _sd.prepareBus();
+                _uploadFile.write(upload.buf, upload.currentSize);
+            }
+        } else if (upload.status == UPLOAD_FILE_END) {
+            if (_uploadFile) {
+                _uploadFile.flush();
+                _uploadFile.close();
+                _uploadSuccess = true;
+                _c6OtaState = "SAVED";
+                _c6OtaDetail = String("Ficheiro gravado: ") + upload.totalSize + " bytes";
+                Serial.printf("[OTA C6] Firmware gravado no SD: %u bytes\n", upload.totalSize);
+            }
+            _isBusy = false;
+        } else if (upload.status == UPLOAD_FILE_ABORTED) {
+            _uploadSuccess = false;
+            _c6OtaState = "ERROR";
+            _c6OtaDetail = "Upload abortado";
+            if (_uploadFile) _uploadFile.close();
+            _isBusy = false;
+        }
+    }
+
+    void handleOtaC6UploadFinish() {
+        if (!_uploadSuccess) {
+            _server.send(500, "application/json", "{\"success\":false,\"error\":\"Falha ao receber c6.bin no cartao SD\"}");
+            return;
+        }
+
+        // Obter credenciais de rede
+        String ssid = _wifi.getSSID();
+        String pass = _wifi.getConnectedPassword();
+        String ip   = _wifi.getIPAddress();
+
+        // Se IP estiver a 0.0.0.0 ou SSID invalido, recorrer a credenciais de AP
+        if (ip == "0.0.0.0" || ssid.isEmpty()) {
+            ssid = _wifi.getSSID();
+            pass = _wifi.getAPPassword();
+            ip = "192.168.4.1";
+        }
+
+        String otaUrl = "http://" + ip + "/firmware/c6.bin";
+        String cmd = "CMD:OTA:" + ssid + "|" + pass + "|" + otaUrl;
+
+        Serial.printf("[OTA C6] Disparando OTA para C6: %s\n", cmd.c_str());
+        if (_commandQueueCb) {
+            _commandQueueCb(cmd.c_str());
+        }
+
+        _c6OtaState = "STARTING";
+        _c6OtaDetail = "Comando de download enviado ao Coprocessador C6";
+        if (_display) _display->bootLogf(UI_CYAN, 50, "[OTA] C6 a atualizar...");
+
+        _server.send(200, "application/json", "{\"success\":true,\"state\":\"STARTING\",\"url\":\"" + otaUrl + "\"}");
+    }
+
+    void handleApiOtaC6Status() {
+        JsonDocument doc;
+        doc["state"] = _c6OtaState;
+        doc["detail"] = _c6OtaDetail;
+        doc["time"] = millis();
+        String res;
+        serializeJson(doc, res);
+        _server.send(200, "application/json", res);
+    }
+
+    void handleApiOtaLafvinData() {
+        HTTPUpload& upload = _server.upload();
+        if (upload.status == UPLOAD_FILE_START) {
+            _server.client().setTimeout(40000);
+            _isBusy = true;
+            Serial.printf("[OTA LAFVIN] A iniciar gravacao: %s\n", upload.filename.c_str());
+            if (_display) _display->bootLogf(UI_CYAN, 70, "[OTA] A gravar Master...");
+            if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
+                Update.printError(Serial);
+            }
+        } else if (upload.status == UPLOAD_FILE_WRITE) {
+            yield();
+            if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
+                Update.printError(Serial);
+            }
+        } else if (upload.status == UPLOAD_FILE_END) {
+            if (Update.end(true)) {
+                Serial.printf("[OTA LAFVIN] Gravacao concluida: %u bytes\n", upload.totalSize);
+                if (_display) _display->bootLogf(UI_GREEN, 100, "[OTA] Master OK! A reiniciar...");
+            } else {
+                Update.printError(Serial);
+            }
+            _isBusy = false;
+        } else if (upload.status == UPLOAD_FILE_ABORTED) {
+            Update.end();
+            _isBusy = false;
+            Serial.println("[OTA LAFVIN] Gravacao abortada");
+        }
+    }
+
+    void handleApiOtaLafvinFinish() {
+        _server.sendHeader("Connection", "close");
+        if (Update.hasError()) {
+            _server.send(500, "application/json", "{\"success\":false,\"error\":\"Erro ao gravar firmware do Master Lafvin\"}");
+        } else {
+            _server.send(200, "application/json", "{\"success\":true,\"message\":\"Master Lafvin atualizado com sucesso! A reiniciar em 2 segundos...\"}");
+            _restartScheduled = millis() + 1500;
+        }
     }
 };

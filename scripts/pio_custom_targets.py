@@ -11,3 +11,14 @@ env.AddCustomTarget(
     description="Build web assets and upload to SD Card via HTTP",
     always_build=True
 )
+
+env.AddCustomTarget(
+    name="bundle_rover",
+    dependencies=None,
+    actions=[
+        "python3 scripts/bundle_firmware.py"
+    ],
+    title="Bundle Rover Firmware",
+    description="Package dual C6 + Lafvin firmwares into dist/rover_firmware.zip",
+    always_build=True
+)

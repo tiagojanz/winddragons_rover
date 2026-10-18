@@ -41,9 +41,13 @@ def detect_device_type(ip):
     try:
         url = f"http://{ip}/api/status"
         req = urllib.request.Request(url)
-        with urllib.request.urlopen(req, timeout=1.2) as resp:
+        with urllib.request.urlopen(req, timeout=3.0) as resp:
             data = json.loads(resp.read().decode("utf-8"))
-            if "selected" in data or "rover_id" not in data:
+            if "station_id" in data or "station_name" in data or "operation_state" in data:
+                return "base"
+            if "rover_id" in data or "actuators" in data:
+                return "rover"
+            if "rovers" in data or "selected" in data:
                 return "base"
             return "rover"
     except Exception:
@@ -92,6 +96,7 @@ def sync_device(ip, device_type):
     make_sd_dir(ip, "/www")
     make_sd_dir(ip, "/www/rover")
     make_sd_dir(ip, "/www/base")
+    make_sd_dir(ip, "/www/leaflet")
     make_sd_dir(ip, "/system")
     make_sd_dir(ip, "/system/fonts")
 
@@ -112,13 +117,21 @@ def sync_device(ip, device_type):
                 if upload_file(ip, fpath, remote_dir):
                     success += 1
 
-    # 2. Ficheiros partilhados na raiz (/www/)
+    # 2. Ficheiros partilhados na raiz (/www/) e bibliotecas (/www/leaflet/)
     for fname in ["style.css", "app.js"]:
         f = WWW_DIR / fname
         if f.exists():
             total += 1
             if upload_file(ip, f, "/www"):
                 success += 1
+
+    leaflet_dir = WWW_DIR / "leaflet"
+    if leaflet_dir.exists():
+        for f in sorted(leaflet_dir.iterdir()):
+            if f.is_file() and not f.name.startswith("."):
+                total += 1
+                if upload_file(ip, f, "/www/leaflet"):
+                    success += 1
 
     # 3. Páginas especializadas
     subfolder = "base" if device_type == "base" else "rover"

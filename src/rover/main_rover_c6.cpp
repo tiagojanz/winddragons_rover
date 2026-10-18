@@ -4,6 +4,9 @@
 #include <Adafruit_NeoPixel.h>
 
 #include <Preferences.h>
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <HTTPUpdate.h>
 
 #include "config_common.h"
 #include "lora_protocol.h"
@@ -277,6 +280,89 @@ void updateAutonomousNavigation() {
     }
 }
 
+void performHttpOta(const char* ssid, const char* pass, const char* url) {
+    printLog("\n[OTA] ==========================================\n");
+    printLog("[OTA] Inicio de Atualizacao OTA no Coprocessador C6!\n");
+    printLog("[OTA] Rede WiFi : %s\n", ssid);
+    printLog("[OTA] URL Alvo  : %s\n", url);
+    printLog("[OTA] ==========================================\n");
+
+    // 1. Parar atuadores por seguranca
+    actuators.stopMotor();
+    actuators.centerRudder();
+    actuators.stopWinch();
+    currentMotorStatus = MOTOR_IDLE;
+    setRgbColor(30, 0, 30); // Roxo: Indicador visual de modo OTA
+
+    // 2. Colocar o LoRa em Sleep para libertar consumo e barramento
+    if (loraReady) {
+        radio.sleep();
+    }
+
+    // 3. Notificar Master pela UART que o OTA foi iniciado
+    interSerial.println("PONG:OTA:STARTING");
+    interSerial.flush();
+
+    // 4. Ligar Wi-Fi em modo STA e conectar ao Master ou rede local
+    WiFi.mode(WIFI_STA);
+    WiFi.disconnect(false);
+    delay(100);
+    WiFi.begin(ssid, (pass && strlen(pass) > 0) ? pass : nullptr);
+
+    uint32_t startConn = millis();
+    bool connected = false;
+    while (millis() - startConn < 10000) {
+        if (WiFi.status() == WL_CONNECTED) {
+            connected = true;
+            break;
+        }
+        delay(200);
+        printLog(".");
+    }
+
+    if (!connected) {
+        printLog("\n[OTA] ERRO: Falha ao conectar a rede WiFi '%s'\n", ssid);
+        interSerial.println("PONG:OTA:FAIL_WIFI");
+        interSerial.flush();
+        WiFi.disconnect(true);
+        WiFi.mode(WIFI_OFF);
+        if (loraReady) radio.startReceive();
+        setRgbColor(40, 0, 0);
+        return;
+    }
+
+    printLog("\n[OTA] Conectado ao WiFi! IP: %s\n", WiFi.localIP().toString().c_str());
+    interSerial.println("PONG:OTA:DOWNLOADING");
+    interSerial.flush();
+
+    WiFiClient client;
+    client.setTimeout(25000);
+    httpUpdate.rebootOnUpdate(false); // Manter controlo para confirmar ao Master antes de reiniciar
+    
+    t_httpUpdate_return ret = httpUpdate.update(client, url);
+
+    if (ret == HTTP_UPDATE_OK) {
+        printLog("[OTA] ★★★ SUCESSO! Novo firmware gravado na Flash! ★★★\n");
+        setRgbColor(0, 50, 0); // Verde: Sucesso
+        interSerial.println("PONG:OTA:SUCCESS");
+        interSerial.flush();
+        delay(1200);
+        ESP.restart();
+    } else {
+        int errCode = httpUpdate.getLastError();
+        String errStr = httpUpdate.getLastErrorString();
+        printLog("[OTA] Falha na gravacao OTA: (%d) %s\n", errCode, errStr.c_str());
+        char failMsg[64];
+        snprintf(failMsg, sizeof(failMsg), "PONG:OTA:FAIL:%d", errCode);
+        interSerial.println(failMsg);
+        interSerial.flush();
+        WiFi.disconnect(true);
+        WiFi.mode(WIFI_OFF);
+        if (loraReady) radio.startReceive();
+        setRgbColor(40, 0, 0);
+    }
+}
+
 void setup() {
     Serial.begin(115200);
     Serial0.begin(115200);
@@ -506,6 +592,34 @@ void loop() {
                             c6Prefs.putFloat("anc_diam", d);
                             c6Prefs.putUChar("anc_pulses", (uint8_t)p);
                             printLog("[C6 ROVER] Calibracao da ancora gravada: Diam=%.1fmm, Pulsos=%d\n", d, p);
+                        }
+                    } else if (strncmp(cmdStr, "CMD:OTA:", 8) == 0) {
+                        // Formato esperado: CMD:OTA:<ssid>|<pass>|<url>
+                        char otaSsid[33] = "";
+                        char otaPass[33] = "";
+                        char otaUrl[128] = "";
+                        const char* p = cmdStr + 8;
+                        const char* sep1 = strchr(p, '|');
+                        if (sep1) {
+                            size_t lenSsid = sep1 - p;
+                            if (lenSsid > sizeof(otaSsid) - 1) lenSsid = sizeof(otaSsid) - 1;
+                            strncpy(otaSsid, p, lenSsid);
+                            otaSsid[lenSsid] = '\0';
+                            
+                            const char* p2 = sep1 + 1;
+                            const char* sep2 = strchr(p2, '|');
+                            if (sep2) {
+                                size_t lenPass = sep2 - p2;
+                                if (lenPass > sizeof(otaPass) - 1) lenPass = sizeof(otaPass) - 1;
+                                strncpy(otaPass, p2, lenPass);
+                                otaPass[lenPass] = '\0';
+                                
+                                strncpy(otaUrl, sep2 + 1, sizeof(otaUrl) - 1);
+                                otaUrl[sizeof(otaUrl) - 1] = '\0';
+                            }
+                        }
+                        if (strlen(otaSsid) > 0 && strlen(otaUrl) > 0) {
+                            performHttpOta(otaSsid, otaPass, otaUrl);
                         }
                     }
 
