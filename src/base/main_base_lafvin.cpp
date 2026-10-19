@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include <SPI.h>
-#include <RadioLib.h>
 #include <Adafruit_NeoPixel.h>
+#include <Preferences.h>
 
 #include "config_common.h"
 #include "lora_protocol.h"
@@ -12,10 +12,18 @@
 #include "sd_card_manager.h"
 #include "wifi_config_manager.h"
 #include "base_web_server.h"
+#include "base_version.h"
 
-#include "soft_spi_hal.h"
+// =========================================================================
+// WINDDRAGONS BASE STATION - LAFVIN MASTER FIRMWARE
+// Placa: Lafvin ESP32-C6 LCD 1.47" (IPS ST7789 320x172)
+// Arquitetura Universal Dual ESP32-C6:
+//  - Master Lafvin: LCD ST7789, MicroSD TF, WiFi STA/AP, WebServer, Joystick
+//  - Coprocessador C6: LoRa SX1278 (433 MHz) em barramento de hardware FSPI
+//  - Inter-ESP Link: UART (Lafvin TX=GPIO 2, RX=GPIO 1 @ 115200 baud)
+// =========================================================================
 
-// System components
+// Componentes do Sistema
 FleetManager      fleet;
 BaseJoystick      joystick;
 WiFiConfigManager wifiConfig;
@@ -25,19 +33,19 @@ SDCardManager     sdCard;
 BaseWebServer     webServer(wifiConfig, fleet, &sdCard, &network);
 Adafruit_NeoPixel rgbLed(1, PIN_RGB_LED, NEO_GRB + NEO_KHZ800);
 
-#if ENABLE_LORA
-// Dedicated SoftSpiHal isolates LoRa completely from hardware FSPI (LCD & MicroSD)
-SoftSpiHal loraHal(PIN_LORA_SCK, PIN_LORA_MISO, PIN_LORA_MOSI);
-Module loraModule(&loraHal, PIN_LORA_NSS, PIN_LORA_DIO0, PIN_LORA_RST, RADIOLIB_NC);
-SX1278 radio(&loraModule);
+// UART Inter-ESP (Lafvin Master <-> C6 Coprocessor)
+HardwareSerial interSerial(1);
+uint32_t uartSeq = 0;
+uint32_t lastUartPingTime = 0;
+uint32_t lastUartRxTime = 0;
+char queuedWebCommand[256] = "NONE";
 bool loraReady = false;
-#endif
 
-// Loop timers
+// Temporizadores e controlo
 uint32_t lastControlTxTime = 0;
-const uint32_t CONTROL_TX_INTERVAL_MS = 100; // 10Hz manual control stream
+const uint32_t CONTROL_TX_INTERVAL_MS = 100; // 10Hz stream de controlo
 
-// Navigation Mode & UI Menu state
+// Modo de navegação e menu UI
 uint8_t currentNavMode = 0; // 0 = MANUAL, 1 = HOLD STATION
 uint16_t localCmdId = 1000;
 
@@ -62,7 +70,7 @@ uint32_t lastMenuActivityMs = 0;
 const char* menuFeedback = nullptr;
 uint32_t menuFeedbackUntilMs = 0;
 
-// BOOT Button Navigation Interrupt (Same as Rover)
+// Botão BOOT e navegação de ecrãs
 volatile bool flagPageChange = false;
 volatile uint32_t lastBtnPressTime = 0;
 
@@ -79,46 +87,48 @@ void setRgbColor(uint8_t r, uint8_t g, uint8_t b) {
     rgbLed.show();
 }
 
+void printLog(const char* format, ...) {
+    char buf[256];
+    va_list args;
+    va_start(args, format);
+    vsnprintf(buf, sizeof(buf), format, args);
+    va_end(args);
+    Serial.print(buf);
+}
+
 void setup() {
     Serial.begin(115200);
-    Serial.setTxTimeoutMs(0); // Non-blocking USB CDC TX (prevents stalls)
+    Serial.setTxTimeoutMs(0); // Não-bloqueante USB CDC
     delay(200);
-    Serial.println("\n=== WINDDRAGONS BASE STATION BOOTING ===");
 
-    // De-assert all SPI Chip Selects before bus init
+    printLog("\n=======================================================\n");
+    printLog("  WINDDRAGONS BASE STATION: LAFVIN MASTER (LCD+SD+WIFI)\n");
+    printLog("  Firmware: Master Lafvin %s (%s)\n", BASE_LAFVIN_VERSION, BASE_BUILD_DATE);
+    printLog("=======================================================\n");
+
+    // Desativar CS de periféricos SPI antes do arranque
     pinMode(PIN_LCD_CS, OUTPUT);
     digitalWrite(PIN_LCD_CS, HIGH);
-    pinMode(PIN_LORA_NSS, OUTPUT);
-    digitalWrite(PIN_LORA_NSS, HIGH);
     pinMode(PIN_SD_CS, OUTPUT);
-    digitalWrite(PIN_SD_CS, HIGH); // MicroSD CS
+    digitalWrite(PIN_SD_CS, HIGH);
 
-    // 1. Initialize Display & Boot Screen
+    // 1. Inicializar Display ST7789
     display.begin();
     display.showBootScreen();
-    display.bootLogf(UI_CYAN, 10, "[BOOT] WindDragons Base v2");
-    Serial.println("[BASE] LCD ST7789 initialized");
+    display.bootLogf(UI_CYAN, 10, "[BOOT] WindDragons Base %s", BASE_LAFVIN_VERSION);
 
-    // 2. Status RGB NeoPixel LED
+    // 2. LED RGB NeoPixel
     rgbLed.begin();
-    setRgbColor(20, 20, 0); // Yellow: Booting
+    setRgbColor(20, 20, 0); // Amarelo: arranque
     display.bootLogf(UI_LIGHTGREY, 20, "[LED ] NeoPixel RGB ativo");
 
-    // 3. Initialize MicroSD Card
-    Serial.print("[BASE] A inicializar cartao MicroSD... ");
+    // 3. Inicializar MicroSD Card
+    printLog("[BASE] A inicializar cartao MicroSD... ");
     if (sdCard.begin()) {
-        Serial.println("OK!");
+        printLog("OK (%llu MB)!\n", sdCard.getCardSizeMB());
         display.bootLogf(UI_GREEN, 35, "[SD  ] MicroSD FAT32 pronto");
-        sdCard.printCardInfo();
-        sdCard.printDirectory("/", 1);
-
-        if (sdCard.fileExists("/config.txt")) {
-            Serial.println("[BASE] Leitura de /config.txt:");
-            Serial.println(sdCard.readFile("/config.txt"));
-            display.bootLogf(UI_CYAN, 45, "[SD  ] /config.txt lido");
-        }
     } else {
-        Serial.println("Nenhum cartao detetado (ou formato nao suportado).");
+        printLog("Sem cartao presente.\n");
         display.bootLogf(UI_YELLOW, 35, "[SD  ] Sem cartao presente");
     }
 
@@ -126,85 +136,70 @@ void setup() {
     fleet.begin(&sdCard);
     display.bootLogf(UI_GREEN, 48, "[FROTA] %u rovers | %s", (uint32_t)fleet.getRovers().size(), fleet.getOperationStateBadge());
 
-    // 4. Initialize Joystick
+    // 4. Inicializar Joystick
     joystick.begin();
-    Serial.println("[BASE] Joystick inputs initialized");
     display.bootLogf(UI_LIGHTGREY, 55, "[JOY ] Joystick calib. OK");
 
-#if ENABLE_LORA
-    // 5. Initialize LoRa
-    Serial.printf("[BASE] LoRa Pinos: SCK=IO%d, MOSI=IO%d, MISO=IO%d, NSS=IO%d, DIO0=IO%d\n",
-                  PIN_LORA_SCK, PIN_LORA_MOSI, PIN_LORA_MISO, PIN_LORA_NSS, PIN_LORA_DIO0);
-    loraHal.spiBegin();
+    // 5. Configurar UART Inter-ESP (TX=GPIO 2, RX=GPIO 1) com o Coprocessador C6
+    interSerial.setRxBufferSize(512);
+    interSerial.begin(INTER_ESP_BAUDRATE, SERIAL_8N1, PIN_INTER_ESP_LAFVIN_RX, PIN_INTER_ESP_LAFVIN_TX);
+    display.bootLogf(UI_GREEN, 65, "[UART] Inter-ESP C6 115200");
+    printLog("[BASE] UART com Coprocessador C6 iniciada (TX=GPIO%d, RX=GPIO%d @ %d baud)\n",
+             PIN_INTER_ESP_LAFVIN_TX, PIN_INTER_ESP_LAFVIN_RX, INTER_ESP_BAUDRATE);
 
-    int state = RADIOLIB_ERR_CHIP_NOT_FOUND;
-    for (int attempt = 1; attempt <= 10; attempt++) {
-        uint8_t chipVersion = loraHal.readReg(0x42, PIN_LORA_NSS);
-        uint8_t regOpMode   = loraHal.readReg(0x01, PIN_LORA_NSS);
-        Serial.printf("[BASE] Tentativa #%d - RegVersion (0x42): 0x%02X | OpMode: 0x%02X\n", 
-                      attempt, chipVersion, regOpMode);
-        
-        if (chipVersion == 0x12) {
-            Serial.print("[BASE] SX1278 pronto! A inicializar RadioLib (433MHz)... ");
-            state = radio.begin(LORA_FREQUENCY, LORA_BANDWIDTH, LORA_SPREAD_FACTOR,
-                                LORA_CODING_RATE, LORA_SYNC_WORD, LORA_OUTPUT_POWER,
-                                LORA_PREAMBLE_LEN);
-            if (state == RADIOLIB_ERR_NONE) {
-                Serial.println("OK!");
-                loraReady = true;
-                setRgbColor(0, 30, 0); // Green
-                radio.startReceive();
-                display.bootLogf(UI_GREEN, 70, "[LORA] SX1278 433MHz OK");
-                break;
-            } else {
-                Serial.printf("RadioLib erro (%d)\n", state);
-            }
-        }
-        delay(500);
-    }
+    // Consulta imediata de versão ao Coprocessador C6
+    interSerial.println("CMD:GET_VER");
+    interSerial.flush();
 
-    if (!loraReady) {
-        Serial.printf("[BASE] Initializing LoRa SX1278... FAILED! (code: %d)\n", state);
-        setRgbColor(50, 0, 0); // Red
-        display.bootLogf(UI_RED, 70, "[LORA] Falha SX1278 (%d)", state);
-    }
-#else
-    Serial.println("[BASE] LoRa em repouso (barramento SPI dedicado ao Display ST7789 e MicroSD)");
-    display.bootLogf(UI_LIGHTGREY, 70, "[LORA] SX1278 em repouso");
-#endif
-
-    // 6. Initialize Network (WiFi + AP Fallback + Web Server)
-    Serial.println("[BASE] A inicializar gestor WiFi...");
-    display.bootLogf(UI_YELLOW, 78, "[NET ] A ligar WiFi (STA)...");
+    // 6. Configurar WiFi e Gestor de Redes
+    display.bootLogf(UI_YELLOW, 75, "[NET ] A ligar WiFi (STA)...");
     wifiConfig.begin(&sdCard);
-    Serial.println("[BASE] A verificar ligacoes WiFi guardadas...");
     bool wifiOk = wifiConfig.autoConnect(8000, [](const char* ssid) {
-        display.bootLogf(UI_YELLOW, 82, "[NET ] A testar '%s'...", ssid);
+        display.bootLogf(UI_YELLOW, 80, "[NET ] A testar '%s'...", ssid);
     });
 
     if (!wifiOk) {
-        Serial.println("[BASE] Sem ligacao WiFi no arranque -> A ATIVAR MODO AP!");
+        printLog("[BASE] Sem rede STA -> A ativar Modo AP (WindDragons-Base)\n");
         wifiConfig.startAccessPoint("WindDragons-Base", "12345678");
-        setRgbColor(30, 15, 0); // Orange / AP mode
-        display.bootLogf(UI_YELLOW, 84, "[NET ] Falha STA -> Modo AP");
-        display.bootLogf(UI_CYAN, 87, "[NET ] AP: WindDragons-Base");
+        setRgbColor(30, 15, 0); // Laranja / Modo AP
+        display.bootLogf(UI_YELLOW, 85, "[NET ] Falha STA -> Modo AP");
+        display.bootLogf(UI_CYAN, 88, "[NET ] AP: WindDragons-Base");
         display.bootLogf(UI_WHITE, 90, "[NET ] IP: 192.168.4.1");
     } else {
-        Serial.printf("[BASE] Conectado ao WiFi: %s | IP: %s\n", wifiConfig.getSSID().c_str(), wifiConfig.getIPAddress().c_str());
-        setRgbColor(0, 30, 0);  // Green / STA connected
+        printLog("[BASE] WiFi Conectado! SSID: %s | IP: %s\n", wifiConfig.getSSID().c_str(), wifiConfig.getIPAddress().c_str());
+        setRgbColor(0, 30, 0); // Verde / STA Conectado
         display.bootLogf(UI_GREEN, 90, "[NET ] IP: %s", wifiConfig.getIPAddress().c_str());
     }
 
-    // 7. Iniciar Servidor HTTP Web
+    // 7. Configurar Callback de Comandos Web e Iniciar Servidor Web
     webServer.setLoraReadyPtr(&loraReady);
+    webServer.setCommandQueueCallback([](const char* cmd) {
+        if (cmd && strlen(cmd) > 0) {
+            if (strncmp(cmd, "CMD:OTA:", 8) == 0) {
+                // Envio imediato repetido (x3) para garantir receção do comando de OTA pelo C6
+                for (int i = 0; i < 3; i++) {
+                    interSerial.println(cmd);
+                    interSerial.flush();
+                    delay(25);
+                }
+                printLog("[BASE LAFVIN] >>> DISPARO OTA DIRETO UART C6 (x3): %s\n", cmd);
+            } else {
+                interSerial.println(cmd);
+                interSerial.flush();
+                printLog("[BASE LAFVIN] >>> COMANDO UART DIRETO: %s\n", cmd);
+            }
+            strncpy(queuedWebCommand, cmd, sizeof(queuedWebCommand) - 1);
+            queuedWebCommand[sizeof(queuedWebCommand) - 1] = '\0';
+        }
+    });
     webServer.begin();
     display.bootLogf(UI_GREEN, 95, "[HTTP] Servidor Web OK");
 
-    // 8. Iniciar sincronizacao Cloud
+    // 8. Iniciar sincronização Cloud
     network.begin();
     display.bootLogf(UI_CYAN, 98, "[SYNC] Sincronizacao Cloud");
 
-    // Carregar configuração do ecrã LCD (Teste Joystick e Brilho)
+    // 9. Configurações de display
     Preferences dispPrefs;
     if (dispPrefs.begin("base_display", true)) {
         bool joyScr = dispPrefs.getBool("joy_scr", false);
@@ -217,121 +212,144 @@ void setup() {
 
     // Finalizar ecrã de arranque
     display.endBootScreen(1200);
-
-    // Arrancar no 1º Ecrã (Identificação da Estação, MAC e Estado)
     display.setPage(BASE_PAGE_STATION);
 
-    // Configure BOOT button interrupt for runtime page cycling (Station -> WiFi -> Rover -> [Joy])
+    // Interrupção no botão BOOT (GPIO 9) para navegação de ecrãs
     pinMode(PIN_BTN_BOOT, INPUT_PULLUP);
     attachInterrupt(digitalPinToInterrupt(PIN_BTN_BOOT), isrBootButton, FALLING);
 #ifdef PIN_BTN_SW1
     pinMode(PIN_BTN_SW1, INPUT_PULLUP);
     attachInterrupt(digitalPinToInterrupt(PIN_BTN_SW1), isrBootButton, FALLING);
 #endif
-    flagPageChange = false; // ensure clean start on Page 0
+    flagPageChange = false;
 }
 
 void transmitControlOrCommand() {
-#if ENABLE_LORA
-    if (!loraReady) return;
-
-    // Priority 1: Transmit any pending cloud or local action command (e.g. DROP_ANCHOR)
+    // Prioridade 1: Comandos de Ação pendentes (da Cloud ou Web, ex: DROP_ANCHOR)
     if (fleet.hasPendingCommand()) {
         QueuedCommand qCmd = fleet.popPendingCommand();
-        PacketActionCommand packet;
-        memset(&packet, 0, sizeof(packet));
-
-        packet.magic           = LORA_MAGIC_BYTE;
-        packet.msg_type        = MSG_ACTION_COMMAND;
-        packet.target_rover_id = qCmd.target_rover_id;
-        packet.command_id      = qCmd.command_id;
-        packet.action          = qCmd.action;
-        packet.target_depth_cm = qCmd.depth_cm;
-        packet.duration_s      = qCmd.duration_s;
-        packet.target_lat_deg7 = qCmd.target_lat;
-        packet.target_lng_deg7 = qCmd.target_lng;
-
-        packet.checksum = calculate_checksum(reinterpret_cast<const uint8_t*>(&packet),
-                                             sizeof(packet) - sizeof(packet.checksum));
-
-        radio.standby();
-        radio.transmit(reinterpret_cast<uint8_t*>(&packet), sizeof(packet));
-        radio.startReceive();
-
-        Serial.printf("[BASE] Dispatched LoRa Action Command #%u (%s) to Rover #%u\n", 
-                      qCmd.command_id, get_action_str(qCmd.action), qCmd.target_rover_id);
+        // Encaminhar para o Coprocessador C6 via UART:
+        // CMD:ACTION:<target_id>:<action>:<cmd_id>:<depth>:<dur>:<lat7>:<lng7>
+        char cmdBuf[128];
+        snprintf(cmdBuf, sizeof(cmdBuf), "CMD:ACTION:%u:%u:%u:%u:%u:%ld:%ld\n",
+                 qCmd.target_rover_id, qCmd.action, qCmd.command_id,
+                 qCmd.depth_cm, qCmd.duration_s,
+                 (long)qCmd.target_lat, (long)qCmd.target_lng);
+        interSerial.print(cmdBuf);
+        interSerial.flush();
+        printLog("[BASE LAFVIN] >>> Disparado Comando de Acao #%u (%s) -> Rover #%u via UART C6\n",
+                 qCmd.command_id, get_action_str(qCmd.action), qCmd.target_rover_id);
         return;
     }
 
-    // Em modo STORAGE, não emite controlo contínuo de joystick para os rovers (poupança de energia e canal rádio)
+    // Em modo STORAGE, não emite controlo contínuo de joystick para os rovers
     if (fleet.getOperationState() == BASE_OP_STORAGE && !webServer.isWebControlActive()) {
         return;
     }
 
-    // Priority 2: Transmit manual joystick control to selected active rover
+    // Prioridade 2: Transmissão de controlo manual ao rover selecionado
     if (!fleet.hasSelectedRover()) {
-        return; // Nenhum rover selecionado -> Não transmite comandos contínuos
+        return;
     }
 
-    PacketManualControl packet;
-    memset(&packet, 0, sizeof(packet));
+    int8_t thr = 0;
+    int8_t rud = 0;
+    int8_t jog = 0;
 
-    packet.magic           = LORA_MAGIC_BYTE;
-    packet.msg_type        = MSG_MANUAL_CONTROL;
-    packet.target_rover_id = fleet.getSelectedRoverId();
-
-    // In menu browsing or non-control pages, zero throttle & rudder to prevent boat movement
+    // Em páginas de menu ou não-controlo, envia neutro
     if (currentScreen == SCREEN_MENU || display.getCurrentPage() != BASE_PAGE_ROVER) {
-        packet.throttle = 0;
-        packet.rudder   = 0;
-        packet.anchor_jog = 0;
+        thr = 0;
+        rud = 0;
+        jog = 0;
     } else if (webServer.isWebControlActive()) {
-        // Priority to Web commands from browser
-        packet.throttle = webServer.getWebThrottle();
-        packet.rudder   = webServer.getWebRudder();
-        packet.anchor_jog = webServer.getWebAnchorJog();
+        thr = webServer.getWebThrottle();
+        rud = webServer.getWebRudder();
+        jog = webServer.getWebAnchorJog();
     } else {
-        packet.throttle = joystick.getThrottle();
-        packet.rudder   = joystick.getRudder();
-        packet.anchor_jog = joystick.getAnchorJog();
+        thr = joystick.getThrottle();
+        rud = joystick.getRudder();
+        jog = joystick.getAnchorJog();
     }
-    packet.mode_request = currentNavMode;
 
-    packet.checksum = calculate_checksum(reinterpret_cast<const uint8_t*>(&packet),
-                                         sizeof(packet) - sizeof(packet.checksum));
-
-    radio.standby();
-    radio.transmit(reinterpret_cast<uint8_t*>(&packet), sizeof(packet));
-    radio.startReceive();
-#endif
+    // Encaminhar para o Coprocessador C6 via UART:
+    // CMD:CTRL:<target_id>:<thr>:<rud>:<jog>:<mode>
+    char ctrlBuf[64];
+    snprintf(ctrlBuf, sizeof(ctrlBuf), "CMD:CTRL:%d:%d:%d:%d:%d\n",
+             fleet.getSelectedRoverId(), thr, rud, jog, currentNavMode);
+    interSerial.print(ctrlBuf);
 }
 
-void checkIncomingTelemetry() {
-#if ENABLE_LORA
-    if (!loraReady) return;
+void handleUartFromC6() {
+    uint32_t now = millis();
+    while (interSerial.available()) {
+        char c = (char)interSerial.read();
+        static char rxBuf[256];
+        static size_t rxIdx = 0;
 
-    int packetLen = radio.getPacketLength();
-    if (packetLen > 0) {
-        uint8_t buffer[64];
-        int readState = radio.readData(buffer, packetLen);
-        if (readState == RADIOLIB_ERR_NONE) {
-            if (packetLen == sizeof(PacketTelemetry) && buffer[0] == LORA_MAGIC_BYTE && buffer[1] == MSG_TELEMETRY) {
-                PacketTelemetry *pkt = reinterpret_cast<PacketTelemetry*>(buffer);
-                uint16_t calc = calculate_checksum(buffer, sizeof(PacketTelemetry) - sizeof(pkt->checksum));
-                if (calc == pkt->checksum) {
-                    int16_t rssi = static_cast<int16_t>(radio.getRSSI());
-                    fleet.updateTelemetry(*pkt, rssi);
+        if (c == '\n' || c == '\r') {
+            if (rxIdx > 0) {
+                rxBuf[rxIdx] = '\0';
+                lastUartRxTime = now;
+
+                if (strncmp(rxBuf, "TELEM:", 6) == 0) {
+                    // Formato: TELEM:<id>:<voltMv>:<pct>:<lat7>:<lng7>:<spdCmS>:<head10>:<sats>:<fix>:<motSt>:<ancSt>:<depthCm>:<cmdId>:<rssi>:<snr>
+                    uint32_t roverId = 0, batMv = 0, batPct = 0, spdCmS = 0, head10 = 0;
+                    uint32_t sats = 0, fix = 0, motSt = 0, ancSt = 0, depthCm = 0, cmdId = 0;
+                    long lat7 = 0, lng7 = 0;
+                    float rssi = 0.0f, snr = 0.0f;
+
+                    int parsed = sscanf(rxBuf + 6,
+                                        "%u:%u:%u:%ld:%ld:%u:%u:%u:%u:%u:%u:%u:%u:%f:%f",
+                                        &roverId, &batMv, &batPct,
+                                        &lat7, &lng7, &spdCmS, &head10,
+                                        &sats, &fix, &motSt, &ancSt,
+                                        &depthCm, &cmdId, &rssi, &snr);
+                    if (parsed >= 12 && roverId > 0) {
+                        PacketTelemetry pkt;
+                        memset(&pkt, 0, sizeof(pkt));
+                        pkt.magic           = LORA_MAGIC_BYTE;
+                        pkt.msg_type        = MSG_TELEMETRY;
+                        pkt.rover_id        = (uint8_t)roverId;
+                        pkt.battery_mv      = (uint16_t)batMv;
+                        pkt.battery_pct     = (uint8_t)batPct;
+                        pkt.lat_deg7        = lat7;
+                        pkt.lng_deg7        = lng7;
+                        pkt.speed_cm_s      = (uint16_t)spdCmS;
+                        pkt.heading_deg10   = (uint16_t)head10;
+                        pkt.satellites      = (uint8_t)sats;
+                        pkt.fix_quality     = (uint8_t)fix;
+                        pkt.motor_status    = (uint8_t)motSt;
+                        pkt.anchor_status   = (uint8_t)ancSt;
+                        pkt.anchor_depth_cm = (uint16_t)depthCm;
+                        pkt.last_cmd_id     = (uint16_t)cmdId;
+
+                        loraReady = true;
+                        fleet.updateTelemetry(pkt, (int16_t)rssi);
+                        printLog("[BASE LAFVIN] <<< Telemetria Rover #%u (Bat: %.2fV %u%% | RSSI: %.1f dBm)\n",
+                                 roverId, batMv / 1000.0f, batPct, rssi);
+                    }
+                } else if (strncmp(rxBuf, "PONG:OTA:", 9) == 0) {
+                    printLog("[BASE LAFVIN] ★ C6 OTA: %s\n", rxBuf + 9);
+                    webServer.setC6OtaStatus(rxBuf + 9);
+                } else if (strncmp(rxBuf, "PONG:VER:", 9) == 0) {
+                    printLog("[BASE LAFVIN] ★ Versao Coprocessador C6: %s\n", rxBuf + 9);
+                    webServer.setC6Version(rxBuf + 9);
+                    display.setC6Version(rxBuf + 9);
+                } else if (strncmp(rxBuf, "PONG:", 5) == 0) {
+                    loraReady = true;
                 }
+                rxIdx = 0;
+            }
+        } else {
+            if (rxIdx < sizeof(rxBuf) - 1) {
+                rxBuf[rxIdx++] = c;
             }
         }
-        radio.startReceive();
     }
-#endif
 }
 
 void handleInputsAndMenu(uint32_t now) {
     joystick.update();
-
     bool btnModePressed = (digitalRead(PIN_BTN_MODE) == LOW);
 
     if (currentScreen == SCREEN_PAGES) {
@@ -339,12 +357,12 @@ void handleInputsAndMenu(uint32_t now) {
 
         if (page == BASE_PAGE_STATION) {
             // 1º Ecrã: Nome da Estação, MAC, Estado
-            // Clique curto no joystick: avança o estado da operação (STORAGE -> WAITING -> IDLE -> GO)
+            // Clique curto: avança o estado da operação (STORAGE -> WAITING -> IDLE -> GO)
             if (joystick.wasShortClicked()) {
                 BaseOperationState cur = fleet.getOperationState();
                 BaseOperationState nxt = static_cast<BaseOperationState>((cur + 1) % 4);
                 fleet.setOperationState(nxt);
-                Serial.printf("[BASE] Estado de operacao alterado para: %s\n", fleet.getOperationStateStr());
+                printLog("[BASE] Estado de operacao alterado para: %s\n", fleet.getOperationStateStr());
             }
             // Long Press (>700ms) ou botão MODE: Abre Menu de Controlo
             else if (joystick.wasLongClicked() || btnModePressed) {
@@ -352,60 +370,50 @@ void handleInputsAndMenu(uint32_t now) {
                 menuSelectedIndex = 0;
                 lastMenuActivityMs = now;
                 menuFeedback = nullptr;
-                Serial.println("[BASE] Abriu Menu de Controlo");
+                printLog("[BASE] Abriu Menu de Controlo\n");
             }
         }
         else if (page == BASE_PAGE_WIFI) {
             // 2º Ecrã: Conectividade WiFi
-            // Long Press (>700ms): Abre Menu
             if (joystick.wasLongClicked()) {
                 currentScreen = SCREEN_MENU;
                 menuSelectedIndex = 0;
                 lastMenuActivityMs = now;
                 menuFeedback = nullptr;
-            }
-            // Botão MODE ou clique curto: Avança para o 3º ecrã (Rover)
-            else if (btnModePressed || joystick.wasShortClicked()) {
+            } else if (btnModePressed || joystick.wasShortClicked()) {
                 display.setPage(BASE_PAGE_ROVER);
             }
         }
         else if (page == BASE_PAGE_ROVER) {
             // 3º Ecrã: Rover Selecionado (Comando e Telemetria)
-            // Nota: A seleção do rover é efetuada exclusivamente através do Website.
             if (fleet.hasSelectedRover()) {
-                // Clique curto no joystick: Alterna modo MANUAL vs HOLD STATION
                 if (joystick.wasShortClicked()) {
                     currentNavMode = (currentNavMode == 0) ? 1 : 0;
-                    Serial.printf("[BASE] Modo alterado para: %s\n", (currentNavMode == 1) ? "HOLD STATION" : "MANUAL");
+                    printLog("[BASE] Modo alterado para: %s\n", (currentNavMode == 1) ? "HOLD STATION" : "MANUAL");
                 }
             }
-
-            // Long Press (>700ms) ou botão MODE: Abre Menu de Controlo
             if (joystick.wasLongClicked() || btnModePressed) {
                 currentScreen = SCREEN_MENU;
                 menuSelectedIndex = 0;
                 lastMenuActivityMs = now;
                 menuFeedback = nullptr;
-                Serial.println("[BASE] Abriu Menu de Controlo");
+                printLog("[BASE] Abriu Menu de Controlo\n");
             }
         }
         else if (page == BASE_PAGE_JOYSTICK) {
             // 4º Ecrã (Opcional): Teste do Joystick
-            // Botão MODE ou clique longo: Volta ao 1º Ecrã (Estação)
             if (btnModePressed || joystick.wasLongClicked()) {
                 display.setPage(BASE_PAGE_STATION);
             }
         }
     } 
     else if (currentScreen == SCREEN_MENU) {
-        // Step UP / DOWN with joystick
         int8_t step = joystick.getMenuNavStep();
         if (step != 0) {
             menuSelectedIndex = (menuSelectedIndex + step + MENU_COUNT) % MENU_COUNT;
             lastMenuActivityMs = now;
         }
 
-        // Joystick Click: CONFIRM selected item
         if (joystick.wasShortClicked() || joystick.wasLongClicked()) {
             lastMenuActivityMs = now;
             switch (menuSelectedIndex) {
@@ -460,17 +468,15 @@ void handleInputsAndMenu(uint32_t now) {
             }
 
             if (currentScreen == SCREEN_MENU) {
-                menuFeedbackUntilMs = now + 800; // Show confirmation banner for 800ms
+                menuFeedbackUntilMs = now + 800;
             }
         }
 
-        // Auto-dismiss confirmation banner
         if (menuFeedback && now > menuFeedbackUntilMs) {
             currentScreen = SCREEN_PAGES;
             menuFeedback = nullptr;
         }
 
-        // Inactivity timeout: 8 seconds
         if (now - lastMenuActivityMs > 8000) {
             currentScreen = SCREEN_PAGES;
             menuFeedback = nullptr;
@@ -481,7 +487,7 @@ void handleInputsAndMenu(uint32_t now) {
 void loop() {
     uint32_t now = millis();
 
-    // 0. Polling debounce para o botão BOOT (GPIO 9 e GPIO 18) como garantia extra
+    // 0. Polling debounce para o botão BOOT
     static bool lastBootRaw = HIGH;
     bool currentBootRaw = (digitalRead(PIN_BTN_BOOT) == LOW);
 #ifdef PIN_BTN_SW1
@@ -493,12 +499,11 @@ void loop() {
     }
     lastBootRaw = currentBootRaw ? LOW : HIGH;
 
-    // 1. Screen Navigation Button (Instant Hardware Interrupt on BOOT / GPIO 9)
+    // 1. Navegação de Ecrãs (Botão BOOT / GPIO 9)
     bool forceDisplay = false;
     static uint32_t joyHoldStartMs = 0;
 
     if (display.getCurrentPage() == BASE_PAGE_JOYSTICK && currentScreen == SCREEN_PAGES) {
-        // No ecrã de teste do joystick, manter premido o botão BOOT / JOYSTICK SW (GPIO 9) por > 1s sai da página
         bool btnBootDown = (digitalRead(PIN_BTN_BOOT) == LOW);
         if (btnBootDown) {
             if (joyHoldStartMs == 0) {
@@ -508,13 +513,12 @@ void loop() {
                 forceDisplay = true;
                 joyHoldStartMs = 0;
                 flagPageChange = false;
-                Serial.println("[BASE] Saiu do ecrã de teste do joystick por pressão longa (>1s)");
+                printLog("[BASE] Saiu do ecrã de teste do joystick por pressão longa (>1s)\n");
             }
         } else {
             joyHoldStartMs = 0;
         }
 
-        // Se houve clique simples em GPIO 9 na página de teste, consome a flag e refresca o ecrã
         if (flagPageChange) {
             flagPageChange = false;
             forceDisplay = true;
@@ -528,32 +532,59 @@ void loop() {
                 display.nextPage();
             }
             forceDisplay = true;
-            Serial.printf("[BASE] Ecrã alterado para página %d (0:ESTAÇÃO, 1:WIFI, 2:ROVER, 3:TESTE JOYSTICK)\n", display.getCurrentPage());
+            printLog("[BASE] Ecrã alterado para página %d\n", display.getCurrentPage());
         }
     }
 
-    // 2. Process local inputs & menu state machine
+    // 2. Processar entradas locais e máquina de estados de menu
     handleInputsAndMenu(now);
 
-    // 3. Handle HTTP Web Server requests (WiFi / AP)
+    // 3. Processar clientes HTTP Web
     webServer.handleClient();
 
-    // 4. Receive LoRa telemetry from fleet rovers
-    checkIncomingTelemetry();
+    // 4. Receber telemetria e respostas do Coprocessador C6 via UART
+    handleUartFromC6();
 
-    // 5. Send LoRa commands to Rover (10Hz)
+    // Consulta periódica da versão do Coprocessador C6 se ainda desconhecida
+    static uint32_t lastVerCheck = 0;
+    if (strcmp(queuedWebCommand, "NONE") == 0 && strcmp(display.getC6Version(), "Desconhecido") == 0) {
+        if (now - lastVerCheck >= 3000) {
+            lastVerCheck = now;
+            interSerial.println("CMD:GET_VER");
+        }
+    }
+
+    // Ping periódico de heartbeat ao C6 a cada 200ms
+    bool hasPendingCmd = (strcmp(queuedWebCommand, "NONE") != 0);
+    if ((now - lastUartPingTime >= 200) || (hasPendingCmd && (now - lastUartPingTime >= 50))) {
+        lastUartPingTime = now;
+        uartSeq++;
+
+        if (hasPendingCmd) {
+            interSerial.println(queuedWebCommand);
+            interSerial.flush();
+            printLog("[BASE LAFVIN] >>> COMANDO PENDENTE UART: %s\n", queuedWebCommand);
+            strncpy(queuedWebCommand, "NONE", sizeof(queuedWebCommand) - 1);
+        }
+
+        char pingMsg[48];
+        snprintf(pingMsg, sizeof(pingMsg), "PING:%u:1\n", uartSeq);
+        interSerial.print(pingMsg);
+    }
+
+    // 5. Transmitir comandos de controlo ao C6 via UART (10Hz)
     if (now - lastControlTxTime >= CONTROL_TX_INTERVAL_MS) {
         lastControlTxTime = now;
         transmitControlOrCommand();
     }
 
-    // 6. Update WiFi & sync with Winddragons Cloud API (only in STA mode)
+    // 6. Atualizar WiFi & Sincronização Cloud
     network.update();
 
-    // 7. Update Rover online/offline status
+    // 7. Atualizar estado online/offline dos rovers
     fleet.checkOnlineStatus();
 
-    // 8. Update LCD screen (Menu or Active Page: Control, Fleet, Network, Cloud, Joystick)
+    // 8. Atualizar ecrã LCD ST7789
     if (currentScreen == SCREEN_MENU) {
         display.renderMenu(MENU_ITEMS, MENU_COUNT, menuSelectedIndex, menuFeedback);
     } else {
@@ -572,7 +603,7 @@ void loop() {
                        joystick.getJoyClickCount());
     }
 
-    // 9. Atualizar LED NeoPixel de acordo com o estado operacional da Base
+    // 9. Atualizar LED NeoPixel conforme o estado operacional da Base
     static BaseOperationState lastOpLedState = (BaseOperationState)255;
     BaseOperationState curOp = fleet.getOperationState();
     if (curOp != lastOpLedState) {

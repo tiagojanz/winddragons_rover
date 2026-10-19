@@ -9,6 +9,7 @@
 #include "logo_bmp.h"
 #include "network_config.h"
 #include "qrcode_helper.h"
+#include "base_version.h"
 #include <WiFi.h>
 
 // Standard 16-bit RGB565 color definitions
@@ -18,6 +19,7 @@
 #define UI_GREEN     0x07E0
 #define UI_BLUE      0x001F
 #define UI_CYAN      0x07FF
+#define UI_MAGENTA   0xF81F
 #define UI_YELLOW    0xFFE0
 #define UI_ORANGE    0xFD20
 #define UI_LIGHTGREY 0xC618
@@ -48,7 +50,10 @@ class BaseDisplay {
 public:
     BaseDisplay() 
         : canvas(nullptr), currentPage(BASE_PAGE_STATION), lastRender(0),
-          _bootLogCount(0), _bootProgress(0), _brightness(85), _joyScreenEnabled(false) {}
+          _bootLogCount(0), _bootProgress(0), _brightness(85), _joyScreenEnabled(false),
+          _otaActive(false) {
+        strncpy(_c6Version, "Desconhecido", sizeof(_c6Version));
+    }
 
     void begin(uint8_t initialBrightness = 85) {
         // Desativar CS do cartão MicroSD onboard para evitar colisão SPI
@@ -289,6 +294,8 @@ public:
                 int rawX = 2048, int rawY = 2048, int deadband = 180,
                 bool btnJoy = false, bool btnMode = false,
                 bool btnUp = false, bool btnDown = false, uint16_t joyClicks = 0) {
+        if (_otaActive) return; // Ecrã dedicado de OTA ativo - não sobrescrever
+
         uint32_t now = millis();
         uint32_t minInterval = (currentPage == BASE_PAGE_JOYSTICK) ? 60 : 200;
         if (!force && (now - lastRender < minInterval)) return;
@@ -1093,7 +1100,7 @@ private:
         canvas->setTextColor(UI_LIGHTGREY);
         canvas->setTextSize(1);
         canvas->setCursor(8, 156);
-        canvas->print("BOOT: Prox Ecra | JOY CLIQUE: Mudar Estado");
+        canvas->printf("BOOT: Prox | M:%s C6:%s", BASE_LAFVIN_VERSION, _c6Version);
     }
 
     // =========================================================================
@@ -1499,6 +1506,146 @@ private:
         canvas->print("JOY: Mudar Rover | CLIQUE: Comandar Rover");
     }
 
+public:
+    void showOtaScreen(const char* targetModule, const char* stepTitle, uint8_t progressPct, const char* detailMsg, uint16_t accentColor = UI_CYAN) {
+        if (!canvas) return;
+        _otaActive = true;
+
+        // Deselecionar MicroSD TF (GPIO 4) para manter o barramento SPI livre para o LCD
+        pinMode(PIN_SD_CS, OUTPUT);
+        digitalWrite(PIN_SD_CS, HIGH);
+
+        // Limpar ecrã
+        canvas->fillScreen(UI_BLACK);
+
+        // 1. Barra de Topo (Altura: 24px)
+        canvas->fillRect(0, 0, SCREEN_W, 24, UI_NAVY);
+        canvas->setTextColor(UI_CYAN);
+        canvas->setTextSize(1);
+        canvas->setCursor(8, 8);
+        canvas->print("WINDDRAGONS");
+        canvas->setTextColor(UI_WHITE);
+        canvas->print(" BASE");
+
+        // Nome da página ao centro
+        canvas->setTextSize(2);
+        canvas->setTextColor(accentColor);
+        canvas->setCursor(140, 4);
+        canvas->print("MODO OTA");
+
+        // Indicador circular a pulsar
+        static bool pulseDot = false;
+        pulseDot = !pulseDot;
+        canvas->fillCircle(304, 12, 5, pulseDot ? accentColor : UI_DARKGREY);
+
+        // 2. Card Superior: Alvo e Passo (x=4..316, w=312, h=50)
+        int card1Y = 28;
+        int card1H = 50;
+        canvas->fillRect(4, card1Y, 312, card1H, UI_PANEL_BG);
+        canvas->drawRect(4, card1Y, 312, card1H, UI_CARD_BG);
+
+        // Título do Alvo
+        canvas->setTextSize(1);
+        canvas->setTextColor(UI_LIGHTGREY);
+        canvas->setCursor(10, card1Y + 6);
+        canvas->print("ALVO EM ATUALIZACAO:");
+
+        canvas->setTextSize(2);
+        canvas->setTextColor(accentColor);
+        canvas->setCursor(10, card1Y + 18);
+        canvas->printf("%s", targetModule ? targetModule : "BASE STATION");
+
+        // Passo atual
+        canvas->setTextSize(1);
+        canvas->setTextColor(UI_YELLOW);
+        canvas->setCursor(10, card1Y + 36);
+        canvas->printf("%s", stepTitle ? stepTitle : "A processar...");
+
+        // 3. Card Inferior: Barra de Progresso e Detalhes (x=4..316, w=312, h=64)
+        int card2Y = 82;
+        int card2H = 64;
+        canvas->fillRect(4, card2Y, 312, card2H, UI_PANEL_BG);
+        canvas->drawRect(4, card2Y, 312, card2H, UI_CARD_BG);
+
+        // Percentagem em destaque
+        canvas->setTextSize(1);
+        canvas->setTextColor(UI_LIGHTGREY);
+        canvas->setCursor(10, card2Y + 8);
+        canvas->print("PROGRESSO:");
+
+        canvas->setTextSize(2);
+        canvas->setTextColor(UI_WHITE);
+        canvas->setCursor(256, card2Y + 6);
+        canvas->printf("%3d%%", progressPct > 100 ? 100 : progressPct);
+
+        // Moldura e preenchimento da Barra de Progresso (w=292, h=14)
+        int barX = 10;
+        int barY = card2Y + 24;
+        int barW = 292;
+        int barH = 14;
+        canvas->drawRect(barX, barY, barW, barH, UI_CARD_BG);
+        canvas->fillRect(barX + 2, barY + 2, barW - 4, barH - 4, UI_BLACK);
+
+        int fillW = map(constrain((int)progressPct, 0, 100), 0, 100, 0, barW - 4);
+        if (fillW > 0) {
+            uint16_t barCol = (progressPct >= 100) ? UI_GREEN : accentColor;
+            canvas->fillRect(barX + 2, barY + 2, fillW, barH - 4, barCol);
+        }
+
+        // Linha de Detalhes
+        canvas->setTextSize(1);
+        canvas->setTextColor(UI_LIGHTGREY);
+        canvas->setCursor(10, card2Y + 46);
+        if (detailMsg && strlen(detailMsg) > 0) {
+            canvas->printf("%.44s", detailMsg);
+        } else {
+            canvas->printf("Lafvin: %s | C6: %s", BASE_LAFVIN_VERSION, _c6Version);
+        }
+
+        // 4. Footer Inferior de Aviso (h=22)
+        canvas->fillRect(0, 150, SCREEN_W, 22, (accentColor == UI_RED) ? UI_RED : UI_NAVY);
+        canvas->setTextSize(1);
+        if (accentColor == UI_RED) {
+            canvas->setTextColor(UI_WHITE);
+            canvas->setCursor(12, 156);
+            canvas->print("! ERRO NO OTA - VERIFICAR LOGS DA CONSOLA !");
+        } else if (progressPct >= 100) {
+            canvas->setTextColor(UI_GREEN);
+            canvas->setCursor(12, 156);
+            canvas->print("* CONCLUIDO COM SUCESSO! A REINICIAR BASE *");
+        } else {
+            canvas->setTextColor(UI_YELLOW);
+            canvas->setCursor(10, 156);
+            canvas->print("! ATENCAO: NAO DESLIGAR A ALIMENTACAO !");
+        }
+
+        // Enviar buffer para o display LCD ST7789
+        display.drawPixelBuffer(0, 0, LCD_WIDTH - 1, LCD_HEIGHT - 1, canvas->getFramebuffer());
+    }
+
+    void setOtaActive(bool active) {
+        _otaActive = active;
+        if (!_otaActive) {
+            lastRender = 0;
+        }
+    }
+
+    bool isOtaActive() const {
+        return _otaActive;
+    }
+
+    void setC6Version(const char* ver) {
+        if (ver && strlen(ver) > 0) {
+            strncpy(_c6Version, ver, sizeof(_c6Version) - 1);
+            _c6Version[sizeof(_c6Version) - 1] = '\0';
+        }
+    }
+
+    const char* getC6Version() const {
+        return _c6Version;
+    }
+
+private:
     ST7789Display display;
     Arduino_Canvas *canvas;
     BaseScreenPage currentPage;
@@ -1508,4 +1655,6 @@ private:
     uint8_t _bootProgress;
     uint8_t _brightness;
     bool _joyScreenEnabled;
+    bool _otaActive;
+    char _c6Version[24];
 };

@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <WebServer.h>
+#include <Update.h>
 #include <ArduinoJson.h>
 #include "wifi_config_manager.h"
 #include "fleet_manager.h"
@@ -13,6 +14,7 @@
 #include <esp_mac.h>
 #include <Preferences.h>
 #include "base_display.h"
+#include "base_version.h"
 
 class BaseWebServer {
 public:
@@ -52,6 +54,84 @@ public:
             _webAnchorJog = 0;
             _webControlActive = false;
         }
+
+        if (_restartScheduled > 0 && millis() >= _restartScheduled) {
+            _restartScheduled = 0;
+            delay(300);
+            ESP.restart();
+        }
+    }
+
+    typedef std::function<void(const char*)> CommandQueueCallback;
+    void setCommandQueueCallback(CommandQueueCallback cb) {
+        _commandQueueCb = cb;
+    }
+
+    void setC6OtaStatus(const char* status) {
+        if (!status) return;
+        _c6OtaTimestamp = millis();
+        Serial.printf("[BASE HTTP] C6 OTA Estado: %s\n", status);
+
+        if (strncmp(status, "PROGRESS:", 9) == 0) {
+            int pct = atoi(status + 9);
+            _c6OtaProgress = pct;
+            _c6OtaState = "FLASHING";
+            char detail[48];
+            snprintf(detail, sizeof(detail), "A gravar Flash C6 (%d%%)...", pct);
+            _c6OtaDetail = String(detail);
+            if (_display) {
+                _display->showOtaScreen("COPROCESSADOR C6", "PASSO 1/2: A GRAVAR FLASH", pct, detail, UI_BLUE);
+            }
+        } else if (strcmp(status, "STARTING") == 0) {
+            _c6OtaState = "STARTING";
+            _c6OtaProgress = 20;
+            _c6OtaDetail = "C6 a inicializar modo OTA...";
+            if (_display) {
+                _display->showOtaScreen("COPROCESSADOR C6", "PASSO 1/2: PREPARACAO C6", 20, _c6OtaDetail.c_str(), UI_MAGENTA);
+            }
+        } else if (strcmp(status, "WIFI_CONNECTING") == 0) {
+            _c6OtaState = "WIFI_CONNECTING";
+            _c6OtaProgress = 25;
+            _c6OtaDetail = "C6 a ligar ao WiFi...";
+            if (_display) {
+                _display->showOtaScreen("COPROCESSADOR C6", "PASSO 1/2: LIGAR AO WIFI", 25, _c6OtaDetail.c_str(), UI_ORANGE);
+            }
+        } else if (strcmp(status, "DOWNLOADING") == 0 || strcmp(status, "FLASH_START") == 0) {
+            _c6OtaState = "DOWNLOADING";
+            _c6OtaProgress = 30;
+            _c6OtaDetail = "C6 a descarregar e a gravar Flash...";
+            if (_display) {
+                _display->showOtaScreen("COPROCESSADOR C6", "PASSO 1/2: A DESCARREGAR", 30, _c6OtaDetail.c_str(), UI_CYAN);
+            }
+        } else if (strcmp(status, "SUCCESS") == 0) {
+            _c6OtaState = "SUCCESS";
+            _c6OtaProgress = 100;
+            _c6OtaDetail = "Coprocessador C6 atualizado com 100% de sucesso!";
+            if (_display) {
+                _display->showOtaScreen("COPROCESSADOR C6", "PASSO 1/2: SUCESSO!", 100, "C6 OK! A aguardar Master Lafvin...", UI_GREEN);
+            }
+        } else if (strncmp(status, "FAIL", 4) == 0) {
+            _c6OtaState = String(status);
+            _c6OtaDetail = "Falha na gravacao do Coprocessador C6";
+            if (_display) {
+                _display->showOtaScreen("COPROCESSADOR C6", "PASSO 1/2: FALHA NO C6", 0, status, UI_RED);
+            }
+        } else {
+            _c6OtaState = String(status);
+            if (_display) {
+                _display->showOtaScreen("COPROCESSADOR C6", "PASSO 1/2: ESTADO", _c6OtaProgress, status, UI_CYAN);
+            }
+        }
+    }
+
+    void setC6Version(const char* ver) {
+        if (ver && strlen(ver) > 0) {
+            _c6Version = String(ver);
+        }
+    }
+
+    String getC6Version() const {
+        return _c6Version;
     }
 
     void setSD(SDCardManager *sd) { _sd = sd; }
@@ -83,6 +163,15 @@ private:
     bool _isBusy;
     bool _uploadSuccess;
     String _uploadCurrentPath;
+
+    CommandQueueCallback _commandQueueCb = nullptr;
+    String _c6Version = "Desconhecido";
+    String _c6OtaState = "IDLE";
+    String _c6OtaDetail = "";
+    uint8_t _c6OtaProgress = 0;
+    uint32_t _c6OtaTimestamp = 0;
+    size_t _lafvinOtaBytes = 0;
+    uint32_t _restartScheduled = 0;
 
     bool handleStaticFile(String path = "") {
         if (!_sd || !_sd->isReady()) return false;
@@ -273,6 +362,30 @@ private:
         _server.on("/api/sd/upload", HTTP_POST, 
             [this]() { handleApiSdUploadFinish(); },
             [this]() { handleApiSdUploadData(); }
+        );
+
+        // Servir binário c6.bin para o Coprocessador C6 via HTTP
+        _server.on("/firmware/c6.bin", HTTP_GET, [this]() {
+            if (_sd && _sd->isReady() && _sd->fileExists("/firmware/c6.bin")) {
+                File f = _sd->openFile("/firmware/c6.bin", FILE_READ);
+                if (f) {
+                    _server.streamFile(f, "application/octet-stream");
+                    f.close();
+                    return;
+                }
+            }
+            _server.send(404, "text/plain", "Firmware c6.bin nao encontrado no cartao SD");
+        });
+
+        // Endpoints de atualizacao Dual OTA da Base (C6 + Lafvin)
+        _server.on("/api/ota/c6", HTTP_POST, 
+            [this]() { handleOtaC6UploadFinish(); },
+            [this]() { handleOtaC6UploadData(); }
+        );
+        _server.on("/api/ota/c6/status", HTTP_GET, [this]() { handleApiOtaC6Status(); });
+        _server.on("/api/ota/lafvin", HTTP_POST, 
+            [this]() { handleApiOtaLafvinFinish(); },
+            [this]() { handleApiOtaLafvinData(); }
         );
 
         // Servir fontes Font Awesome do SD se disponíveis
@@ -1069,6 +1182,12 @@ private:
         doc["display"]["joy_screen"] = _display ? _display->isJoystickScreenEnabled() : false;
         doc["lora_ready"] = _loraReady ? *_loraReady : false;
         doc["lora_enabled"] = (bool)ENABLE_LORA;
+
+        JsonObject ver = doc["version"].to<JsonObject>();
+        ver["bundle"] = BASE_FIRMWARE_VERSION_STR;
+        ver["lafvin"] = BASE_LAFVIN_VERSION;
+        ver["c6"] = _c6Version.isEmpty() ? "Desconhecido" : _c6Version;
+        ver["build_date"] = BASE_BUILD_DATE;
 
         if (_network) {
             JsonObject cObj = doc["cloud"].to<JsonObject>();
@@ -1960,5 +2079,153 @@ private:
         }
         _server.sendHeader("Location", "/sd");
         _server.send(303, "text/plain", _uploadSuccess ? "Upload concluído com sucesso" : "Erro no upload");
+    }
+
+    void handleOtaC6UploadData() {
+        HTTPUpload& upload = _server.upload();
+        if (upload.status == UPLOAD_FILE_START) {
+            _server.client().setTimeout(30000);
+            _uploadSuccess = false;
+            _isBusy = true;
+            _c6OtaProgress = 5;
+            _c6OtaState = "UPLOADING";
+            _c6OtaDetail = "A receber binario c6.bin no cartao SD da Base...";
+            Serial.printf("[BASE OTA C6] Recebendo firmware: %s\n", upload.filename.c_str());
+            if (_display) _display->showOtaScreen("COPROCESSADOR C6", "PASSO 1/2: RECEBER FICHEIRO", 5, _c6OtaDetail.c_str(), UI_CYAN);
+
+            if (_sd && _sd->isReady()) {
+                if (!_sd->fileExists("/firmware")) {
+                    _sd->createDir("/firmware");
+                }
+                if (_sd->fileExists("/firmware/c6.bin")) {
+                    _sd->deleteFile("/firmware/c6.bin");
+                }
+                _uploadFile = _sd->openFile("/firmware/c6.bin", FILE_WRITE);
+            }
+        } else if (upload.status == UPLOAD_FILE_WRITE) {
+            yield();
+            if (_uploadFile && _sd) {
+                _sd->prepareBus();
+                _uploadFile.write(upload.buf, upload.currentSize);
+            }
+        } else if (upload.status == UPLOAD_FILE_END) {
+            if (_uploadFile) {
+                _uploadFile.flush();
+                _uploadFile.close();
+                _uploadSuccess = true;
+                _c6OtaProgress = 15;
+                _c6OtaState = "SAVED";
+                _c6OtaDetail = String("Ficheiro guardado no SD (") + (upload.totalSize / 1024) + " KB)";
+                Serial.printf("[BASE OTA C6] Firmware gravado no SD: %u bytes\n", upload.totalSize);
+                if (_display) _display->showOtaScreen("COPROCESSADOR C6", "PASSO 1/2: FICHEIRO GUARDADO", 15, _c6OtaDetail.c_str(), UI_YELLOW);
+            }
+            _isBusy = false;
+        } else if (upload.status == UPLOAD_FILE_ABORTED) {
+            _uploadSuccess = false;
+            _c6OtaState = "ERROR";
+            _c6OtaDetail = "Upload abortado";
+            if (_uploadFile) _uploadFile.close();
+            _isBusy = false;
+            if (_display) _display->showOtaScreen("COPROCESSADOR C6", "PASSO 1/2: FALHA NO UPLOAD", 0, "Envio do ficheiro c6.bin abortado", UI_RED);
+        }
+    }
+
+    void handleOtaC6UploadFinish() {
+        if (!_uploadSuccess) {
+            _server.send(500, "application/json", "{\"success\":false,\"error\":\"Falha ao receber c6.bin no cartao SD\"}");
+            return;
+        }
+
+        // Obter credenciais de rede
+        String ssid = _wifi.getSSID();
+        String pass = _wifi.getConnectedPassword();
+        String ip   = _wifi.getIPAddress();
+
+        if (_wifi.isAPMode() || ip == "0.0.0.0" || ssid == "Desconectado" || ssid.isEmpty()) {
+            ssid = (_wifi.getSSID() != "Desconectado" && !_wifi.getSSID().isEmpty()) ? _wifi.getSSID() : "WindDragons-Base";
+            pass = _wifi.getAPPassword();
+            if (pass.isEmpty()) pass = "12345678";
+            ip = "192.168.4.1";
+        }
+
+        String otaUrl = "http://" + ip + "/firmware/c6.bin";
+        String cmd = "CMD:OTA:" + ssid + "|" + pass + "|" + otaUrl;
+
+        Serial.printf("[BASE OTA C6] Disparando OTA para C6: %s\n", cmd.c_str());
+        if (_commandQueueCb) {
+            _commandQueueCb(cmd.c_str());
+        }
+
+        _c6OtaProgress = 20;
+        _c6OtaState = "STARTING";
+        _c6OtaDetail = "A aguardar ligacao do Coprocessador C6...";
+        if (_display) _display->showOtaScreen("COPROCESSADOR C6", "PASSO 1/2: DOWNLOAD C6", 20, _c6OtaDetail.c_str(), UI_YELLOW);
+
+        _server.send(200, "application/json", "{\"success\":true,\"state\":\"STARTING\",\"url\":\"" + otaUrl + "\"}");
+    }
+
+    void handleApiOtaC6Status() {
+        JsonDocument doc;
+        doc["state"] = _c6OtaState;
+        doc["detail"] = _c6OtaDetail;
+        doc["progress"] = _c6OtaProgress;
+        doc["time"] = millis();
+        String res;
+        serializeJson(doc, res);
+        _server.send(200, "application/json", res);
+    }
+
+    void handleApiOtaLafvinData() {
+        HTTPUpload& upload = _server.upload();
+        if (upload.status == UPLOAD_FILE_START) {
+            _server.client().setTimeout(40000);
+            _isBusy = true;
+            _lafvinOtaBytes = 0;
+            Serial.printf("[BASE OTA LAFVIN] A iniciar gravacao: %s\n", upload.filename.c_str());
+            if (_display) _display->showOtaScreen("MASTER LAFVIN", "PASSO 2/2: INICIO GRAVACAO", 0, "A preparar particao Flash OTA...", UI_YELLOW);
+            if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
+                Update.printError(Serial);
+                if (_display) _display->showOtaScreen("MASTER LAFVIN", "FALHA NA FLASH", 0, "Erro ao iniciar Update OTA", UI_RED);
+            }
+        } else if (upload.status == UPLOAD_FILE_WRITE) {
+            yield();
+            if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
+                Update.printError(Serial);
+                if (_display) _display->showOtaScreen("MASTER LAFVIN", "FALHA NA FLASH", 0, "Erro ao gravar bloco Flash", UI_RED);
+            } else {
+                _lafvinOtaBytes += upload.currentSize;
+                size_t totalExpected = _server.header("Content-Length").toInt();
+                uint8_t pct = (totalExpected > 0) ? (uint8_t)((_lafvinOtaBytes * 100) / totalExpected) : 50;
+                char d[48];
+                snprintf(d, sizeof(d), "%u KB gravados na particao Flash", (unsigned)(_lafvinOtaBytes / 1024));
+                if (_display) _display->showOtaScreen("MASTER LAFVIN", "PASSO 2/2: A GRAVAR FLASH", pct, d, UI_CYAN);
+            }
+        } else if (upload.status == UPLOAD_FILE_END) {
+            if (Update.end(true)) {
+                Serial.printf("[BASE OTA LAFVIN] Gravacao concluida: %u bytes\n", upload.totalSize);
+                if (_display) _display->showOtaScreen("MASTER LAFVIN", "CONCLUIDO COM SUCESSO", 100, "100% OK! A reiniciar Base...", UI_GREEN);
+            } else {
+                Update.printError(Serial);
+                if (_display) _display->showOtaScreen("MASTER LAFVIN", "FALHA NA VERIFICACAO", 0, "Erro de integridade na Flash", UI_RED);
+            }
+            _isBusy = false;
+        } else if (upload.status == UPLOAD_FILE_ABORTED) {
+            Update.end();
+            _isBusy = false;
+            Serial.println("[BASE OTA LAFVIN] Gravacao abortada");
+            if (_display) _display->showOtaScreen("MASTER LAFVIN", "FALHA NA GRAVACAO", 0, "Upload abortado", UI_RED);
+        }
+    }
+
+    void handleApiOtaLafvinFinish() {
+        _server.sendHeader("Connection", "close");
+        if (Update.hasError()) {
+            if (_display) _display->showOtaScreen("MASTER LAFVIN", "FALHA NA GRAVACAO", 0, "Erro ao gravar firmware", UI_RED);
+            _server.send(500, "application/json", "{\"success\":false,\"error\":\"Erro ao gravar firmware do Master Lafvin\"}");
+        } else {
+            if (_display) _display->showOtaScreen("MASTER LAFVIN", "ATUALIZACAO CONCLUIDA", 100, "Master OK! A reiniciar em 2 segundos...", UI_GREEN);
+            _server.send(200, "application/json", "{\"success\":true,\"message\":\"Master Lafvin atualizado com sucesso! A reiniciar em 2 segundos...\"}");
+            _restartScheduled = millis() + 1500;
+        }
     }
 };
