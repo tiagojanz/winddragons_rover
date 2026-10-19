@@ -22,3 +22,14 @@ env.AddCustomTarget(
     description="Package dual C6 + Lafvin firmwares into dist/rover_firmware.zip",
     always_build=True
 )
+
+env.AddCustomTarget(
+    name="bundle_base",
+    dependencies=None,
+    actions=[
+        "python3 scripts/bundle_base_firmware.py"
+    ],
+    title="Bundle Base Firmware",
+    description="Package dual Base C6 + Base Lafvin firmwares into dist/base_firmware.zip",
+    always_build=True
+)
