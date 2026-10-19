@@ -5,6 +5,7 @@
 #include <canvas/Arduino_Canvas.h>
 #include "Display_ST7789.h"
 #include "config_common.h"
+#include "rover_version.h"
 #include "lora_protocol.h"
 #include "gps_tracker.h"
 #include "battery_monitor.h"
@@ -21,6 +22,8 @@
 #define UI_CYAN      0x07FF
 #define UI_YELLOW    0xFFE0
 #define UI_ORANGE    0xFD20
+#define UI_MAGENTA   0xF81F
+#define UI_PURPLE    0x780F
 #define UI_LIGHTGREY 0xC618
 #define UI_DARKGREY  0x4208
 #define UI_NAVY      0x0841
@@ -46,7 +49,9 @@ static const uint8_t BOOT_VISIBLE_LINES = 13;
 
 class RoverDisplay {
 public:
-    RoverDisplay() : canvas(nullptr), currentPage(ROVER_PAGE_NAV), lastRender(0), _bootLogCount(0), _bootProgress(0), _brightness(85) {}
+    RoverDisplay() : canvas(nullptr), currentPage(ROVER_PAGE_NAV), lastRender(0), _bootLogCount(0), _bootProgress(0), _brightness(85), _roverId(1), _otaActive(false) {
+        strncpy(_c6Version, "--", sizeof(_c6Version));
+    }
 
     void begin(uint8_t initialBrightness = 85) {
         // Disable onboard TF/MicroSD card CS (GPIO 4) to prevent SPI bus collision
@@ -78,6 +83,7 @@ public:
 
     void showBootScreen(uint8_t roverId = 1) {
         if (!canvas) return;
+        _roverId = roverId;
         _bootLogCount = 0;
         _bootProgress = 0;
 
@@ -110,8 +116,8 @@ public:
         canvas->setCursor(16, 126);
         canvas->print("AUTONOMOUS");
         canvas->setTextColor(UI_LIGHTGREY);
-        canvas->setCursor(24, 136);
-        canvas->print("BUOY v2");
+        canvas->setCursor(14, 136);
+        canvas->printf("FW %s", ROVER_LAFVIN_VERSION);
 
         // Moldura da barra de progresso no fundo do painel esquerdo
         canvas->drawRect(12, 150, 85, 10, UI_CARD_BG);
@@ -222,6 +228,9 @@ public:
                 int16_t lastRssi, bool failsafeActive, bool force = false, bool sdOk = false,
                 bool isApMode = false, const char* ip = nullptr, const char* ssid = nullptr,
                 int8_t wifiRssi = 0, uint8_t apClients = 0, const char* apPassword = nullptr) {
+        _roverId = roverId;
+        if (_otaActive) return; // Ecran dedicado de OTA ativo - nao sobrescrever
+
         uint32_t now = millis();
         if (!force && (now - lastRender < 200)) return; // 5Hz UI refresh unless forced
         lastRender = now;
@@ -293,6 +302,142 @@ public:
 
         // 4. Push complete frame to physical ST7789 display
         display.drawPixelBuffer(0, 0, LCD_WIDTH - 1, LCD_HEIGHT - 1, canvas->getFramebuffer());
+    }
+
+    void showOtaScreen(const char* targetModule, const char* stepTitle, uint8_t progressPct, const char* detailMsg, uint16_t accentColor = UI_CYAN) {
+        if (!canvas) return;
+        _otaActive = true;
+
+        // Deselecionar MicroSD TF (GPIO 4) para manter o barramento SPI livre para o LCD
+        pinMode(PIN_SD_CS, OUTPUT);
+        digitalWrite(PIN_SD_CS, HIGH);
+
+        // Limpar ecran
+        canvas->fillScreen(UI_BLACK);
+
+        // 1. Top Header Bar (Height: 24px)
+        canvas->fillRect(0, 0, SCREEN_W, 24, UI_NAVY);
+        canvas->setTextColor(UI_WHITE);
+        canvas->setTextSize(2);
+        canvas->setCursor(8, 4);
+        canvas->printf("ROVER-%02d", _roverId);
+
+        // Current page label in center
+        canvas->setTextSize(2);
+        canvas->setTextColor(accentColor);
+        canvas->setCursor(112, 4);
+        canvas->print("MODO OTA");
+
+        // Indicador circular a pulsar
+        static bool pulseDot = false;
+        pulseDot = !pulseDot;
+        canvas->fillCircle(304, 12, 5, pulseDot ? accentColor : UI_DARKGREY);
+
+        // 2. Card Superior: Alvo e Passo (x=4..316, w=312, h=50)
+        int card1Y = 28;
+        int card1H = 50;
+        canvas->fillRect(4, card1Y, 312, card1H, UI_PANEL_BG);
+        canvas->drawRect(4, card1Y, 312, card1H, UI_CARD_BG);
+
+        // Titulo do Alvo
+        canvas->setTextSize(1);
+        canvas->setTextColor(UI_LIGHTGREY);
+        canvas->setCursor(10, card1Y + 6);
+        canvas->print("ALVO EM ATUALIZACAO:");
+
+        canvas->setTextSize(2);
+        canvas->setTextColor(accentColor);
+        canvas->setCursor(10, card1Y + 18);
+        canvas->printf("%s", targetModule ? targetModule : "SISTEMA ROVER");
+
+        // Passo atual
+        canvas->setTextSize(1);
+        canvas->setTextColor(UI_YELLOW);
+        canvas->setCursor(10, card1Y + 36);
+        canvas->printf("%s", stepTitle ? stepTitle : "A processar...");
+
+        // 3. Card Inferior: Barra de Progresso e Detalhes (x=4..316, w=312, h=64)
+        int card2Y = 82;
+        int card2H = 64;
+        canvas->fillRect(4, card2Y, 312, card2H, UI_PANEL_BG);
+        canvas->drawRect(4, card2Y, 312, card2H, UI_CARD_BG);
+
+        // Percentagem em destaque
+        canvas->setTextSize(1);
+        canvas->setTextColor(UI_LIGHTGREY);
+        canvas->setCursor(10, card2Y + 8);
+        canvas->print("PROGRESSO:");
+
+        canvas->setTextSize(2);
+        canvas->setTextColor(UI_WHITE);
+        canvas->setCursor(256, card2Y + 6);
+        canvas->printf("%3d%%", progressPct > 100 ? 100 : progressPct);
+
+        // Moldura e preenchimento da Barra de Progresso (w=292, h=14)
+        int barX = 10;
+        int barY = card2Y + 24;
+        int barW = 292;
+        int barH = 14;
+        canvas->drawRect(barX, barY, barW, barH, UI_CARD_BG);
+        canvas->fillRect(barX + 2, barY + 2, barW - 4, barH - 4, UI_BLACK);
+
+        int fillW = map(constrain((int)progressPct, 0, 100), 0, 100, 0, barW - 4);
+        if (fillW > 0) {
+            uint16_t barCol = (progressPct >= 100) ? UI_GREEN : accentColor;
+            canvas->fillRect(barX + 2, barY + 2, fillW, barH - 4, barCol);
+        }
+
+        // Linha de Detalhes
+        canvas->setTextSize(1);
+        canvas->setTextColor(UI_LIGHTGREY);
+        canvas->setCursor(10, card2Y + 46);
+        if (detailMsg && strlen(detailMsg) > 0) {
+            canvas->printf("%.44s", detailMsg);
+        } else {
+            canvas->printf("Master: %s | C6: %s", ROVER_LAFVIN_VERSION, _c6Version);
+        }
+
+        // 4. Footer Inferior de Aviso (h=22)
+        canvas->fillRect(0, 150, SCREEN_W, 22, (accentColor == UI_RED) ? UI_RED : UI_NAVY);
+        canvas->setTextSize(1);
+        if (accentColor == UI_RED) {
+            canvas->setTextColor(UI_WHITE);
+            canvas->setCursor(12, 156);
+            canvas->print("! ERRO NO OTA - VERIFICAR LOGS DA CONSOLA !");
+        } else if (progressPct >= 100) {
+            canvas->setTextColor(UI_GREEN);
+            canvas->setCursor(12, 156);
+            canvas->print("* CONCLUIDO COM SUCESSO! A REINICIAR ROVER *");
+        } else {
+            canvas->setTextColor(UI_YELLOW);
+            canvas->setCursor(10, 156);
+            canvas->print("! ATENCAO: NAO DESLIGAR A ALIMENTACAO !");
+        }
+
+        // Enviar buffer para o display LCD ST7789
+        display.drawPixelBuffer(0, 0, LCD_WIDTH - 1, LCD_HEIGHT - 1, canvas->getFramebuffer());
+    }
+
+    void setOtaActive(bool active) {
+        _otaActive = active;
+        if (!_otaActive) {
+            lastRender = 0; // Forçar atualização imediata ao sair do modo OTA
+        }
+    }
+
+    bool isOtaActive() const {
+        return _otaActive;
+    }
+
+    void setC6Version(const char* ver) {
+        if (ver && strlen(ver) > 0) {
+            strncpy(_c6Version, ver, sizeof(_c6Version) - 1);
+            _c6Version[sizeof(_c6Version) - 1] = '\0';
+        }
+    }
+
+    const char* getC6Version() const {
+        return _c6Version;
     }
 
 private:
@@ -630,30 +775,56 @@ private:
         // Desenhar QR Code centrado
         drawQrCode(canvas, mac.c_str(), 8, cardY + 4, 116, cardH - 8);
 
-        // --- Card Direito: Endereço MAC em Tamanho Gigante (x=132..316, w=184, h=122) ---
+        // --- Card Direito: Endereço MAC & Versões de Firmware (x=132..316, w=184, h=122) ---
         canvas->fillRect(132, cardY, 184, cardH, UI_PANEL_BG);
         canvas->drawRect(132, cardY, 184, cardH, UI_CARD_BG);
 
-        // MAC em TAMANHO GIGANTE (Size 4 = 24x32px por caractere) sem textos secundários
-        canvas->setTextSize(4);
+        // Barra de Título do Card
+        canvas->fillRect(133, cardY + 1, 182, 16, UI_NAVY);
+        canvas->setTextSize(1);
+        canvas->setTextColor(UI_CYAN);
+        canvas->setCursor(140, cardY + 5);
+        canvas->print("IDENTIFICACAO & FW");
+
+        // Endereço MAC em 2 linhas
+        canvas->setTextSize(2);
         canvas->setTextColor(UI_YELLOW);
-
         if (mac.length() >= 17) {
-            // 3 linhas alinhadas à esquerda (2 octetos por linha):
-            // x = 152 para todas as linhas para ficarem perfeitamente alinhadas
-            // Altura total = 32*3 + 4*2 = 104px -> y = 26 + (122 - 104)/2 = 35
-            canvas->setCursor(152, 35);
-            canvas->print(mac.substring(0, 6));
-
-            canvas->setCursor(152, 71);
-            canvas->print(mac.substring(6, 12));
-
-            canvas->setCursor(152, 107);
-            canvas->print(mac.substring(12));
+            canvas->setCursor(140, cardY + 22);
+            canvas->print(mac.substring(0, 8)); // ex: AA:BB:CC
+            canvas->setCursor(140, cardY + 39);
+            canvas->print(mac.substring(8));    // ex: :DD:EE:FF
         } else {
-            canvas->setCursor(142, 60);
+            canvas->setCursor(140, cardY + 28);
             canvas->print(mac);
         }
+
+        // Divisória sutil
+        canvas->drawFastHLine(138, cardY + 58, 172, UI_CARD_BG);
+
+        // Versões de cada módulo
+        canvas->setTextSize(1);
+        canvas->setTextColor(UI_LIGHTGREY);
+        canvas->setCursor(140, cardY + 64);
+        canvas->print("MASTER : ");
+        canvas->setTextColor(UI_GREEN);
+        canvas->print(ROVER_LAFVIN_VERSION);
+
+        canvas->setTextColor(UI_LIGHTGREY);
+        canvas->setCursor(140, cardY + 77);
+        canvas->print("COPROC : ");
+        canvas->setTextColor(UI_CYAN);
+        canvas->print(_c6Version);
+
+        canvas->setTextColor(UI_LIGHTGREY);
+        canvas->setCursor(140, cardY + 90);
+        canvas->print("PACOTE : ");
+        canvas->setTextColor(UI_WHITE);
+        canvas->print(ROVER_FIRMWARE_VERSION_STR);
+
+        canvas->setTextColor(UI_DARKGREY);
+        canvas->setCursor(140, cardY + 104);
+        canvas->printf("COMPIL : %.11s", __DATE__);
     }
 
     ST7789Display display;
@@ -664,4 +835,7 @@ private:
     uint8_t _bootLogCount;
     uint8_t _bootProgress;
     uint8_t _brightness;
+    uint8_t _roverId;
+    bool _otaActive;
+    char _c6Version[24];
 };

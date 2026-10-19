@@ -634,6 +634,41 @@ function pollGlobalStatus() {
         if (opBadge) {
           opBadge.style.background = colors[data.operation_state] || '#64748b';
         }
+      if (data.version) {
+        const laf = data.version.lafvin || 'v2.1.0';
+        const c6 = data.version.c6 || '--';
+        const bun = data.version.bundle || 'v2.1.0';
+
+        const navLaf = document.getElementById('navLafvinVer');
+        if (navLaf) navLaf.innerText = 'Lafvin ' + laf;
+        const navC6 = document.getElementById('navC6Ver');
+        if (navC6) {
+          navC6.innerText = 'C6 ' + c6;
+          navC6.style.color = (c6 !== '--' && !c6.includes('detetar')) ? 'var(--yellow)' : 'var(--muted)';
+        }
+
+        const footLaf = document.getElementById('footerLafvinVer');
+        if (footLaf) footLaf.innerText = laf;
+        const footC6 = document.getElementById('footerC6Ver');
+        if (footC6) footC6.innerText = c6;
+        const footBun = document.getElementById('footerBundleVer');
+        if (footBun) footBun.innerText = bun;
+
+        const mainLaf = document.getElementById('mainLafvinVer');
+        if (mainLaf) mainLaf.innerText = laf;
+        const mainC6 = document.getElementById('mainC6Ver');
+        if (mainC6) {
+          mainC6.innerText = c6;
+          mainC6.style.color = (c6 !== '--' && !c6.includes('detetar')) ? 'var(--yellow)' : 'var(--muted)';
+        }
+
+        const cfgLaf = document.getElementById('fwLafvinVer');
+        if (cfgLaf) cfgLaf.innerText = laf;
+        const cfgC6 = document.getElementById('fwC6Ver');
+        if (cfgC6) {
+          cfgC6.innerText = c6;
+          cfgC6.style.color = (c6 !== '--' && !c6.includes('detetar')) ? 'var(--yellow)' : 'var(--muted)';
+        }
       }
     })
     .catch(() => {});
@@ -677,7 +712,10 @@ def generate_html_page(title, active_tab, body_content):
     <nav class="nav-links">
       {nav_links}
     </nav>
-    <div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <a href="/config" id="navVersionBadge" class="badge" style="background:rgba(6,182,212,0.12);border:1px solid rgba(6,182,212,0.3);color:var(--primary);text-decoration:none;font-size:0.75rem;display:inline-flex;align-items:center;gap:6px;" title="Ver detalhes de firmware nas Configurações">
+        <i class="fa-solid fa-code-branch"></i> <span id="navLafvinVer">Lafvin: v2.1.0</span> &bull; <span id="navC6Ver">C6: ...</span>
+      </a>
       <span id="navWifiBadge" class="badge badge-sta">
         <i class="fa-solid fa-wifi"></i> A carregar...
       </span>
@@ -688,8 +726,14 @@ def generate_html_page(title, active_tab, body_content):
     {body_content}
   </main>
 
-  <footer style="text-align:center;color:var(--muted);font-size:0.75rem;margin-top:24px;">
-    WindDragons Autonomous Surface Rover / Buoy &copy; 2026 &bull; MicroSD /www/rover/ Frontend
+  <footer style="text-align:center;color:var(--muted);font-size:0.75rem;margin-top:24px;display:flex;justify-content:center;align-items:center;gap:12px;flex-wrap:wrap;padding:0 16px;">
+    <span>WindDragons Autonomous Surface Rover / Buoy &copy; 2026</span>
+    <span>&bull;</span>
+    <span>Master Lafvin: <b style="color:var(--green);" id="footerLafvinVer">v2.1.0</b></span>
+    <span>&bull;</span>
+    <span>Coprocessador C6: <b style="color:var(--yellow);" id="footerC6Ver">--</b></span>
+    <span>&bull;</span>
+    <span>Pacote Bundle: <b style="color:var(--primary);" id="footerBundleVer">v2.1.0</b></span>
   </footer>
 </body>
 </html>
@@ -758,6 +802,37 @@ def generate_base_html_page(title, active_tab, body_content):
 
 # GPS Page (index.html & gps.html)
 GPS_CONTENT = """
+<style>
+.rate-btn { flex: 1; min-width: 60px; padding: 10px 6px; border-radius: 8px; border: 1px solid var(--card-border); background: rgba(15,23,42,0.6); color: var(--muted); cursor: pointer; font-weight: 600; transition: all 0.2s ease; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.rate-btn.active { background: rgba(6,182,212,0.15); border-color: var(--primary); color: var(--text); box-shadow: 0 0 12px rgba(6,182,212,0.25); }
+.rate-btn:hover:not(.active) { border-color: var(--muted); color: var(--text); }
+.rate-btn .sub { font-size: 0.72rem; font-weight: normal; color: var(--muted); }
+.rate-btn.active .sub { color: var(--primary); }
+</style>
+
+<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;background:rgba(15,23,42,0.65);padding:10px 14px;border-radius:10px;border:1px solid var(--card-border);margin-bottom:16px;font-size:0.83rem;">
+  <div style="display:flex;align-items:center;gap:8px;">
+    <i class="fa-solid fa-microchip" style="color:var(--primary);"></i>
+    <span style="color:var(--muted);">Master Lafvin:</span>
+    <strong style="color:var(--green);" id="mainLafvinVer">v2.1.0</strong>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;">
+    <i class="fa-solid fa-satellite-dish" style="color:var(--yellow);"></i>
+    <span style="color:var(--muted);">Coprocessador C6:</span>
+    <strong style="color:var(--yellow);" id="mainC6Ver">A detetar...</strong>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;">
+    <i class="fa-solid fa-box-archive" style="color:var(--primary);"></i>
+    <span style="color:var(--muted);">Pacote OTA:</span>
+    <strong style="color:var(--primary);" id="mainBundleVer">v2.1.0</strong>
+  </div>
+  <div>
+    <a href="/config" class="badge" style="background:rgba(6,182,212,0.15);color:var(--primary);border:1px solid rgba(6,182,212,0.3);text-decoration:none;font-size:0.75rem;padding:4px 10px;">
+      <i class="fa-solid fa-cloud-arrow-up"></i> Atualizar Firmware
+    </a>
+  </div>
+</div>
+
 <div class="card">
   <div class="card-title">
     <span><i class="fa-solid fa-location-dot"></i> Posicionamento e Navegação Quectel LC29H</span>
@@ -803,7 +878,91 @@ GPS_CONTENT = """
   </div>
 </div>
 
+<!-- Painel de Configuração Quectel LC29H -->
+<div class="card" style="margin-top:20px;">
+  <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+    <span><i class="fa-solid fa-satellite-dish"></i> Configuração Quectel LC29H (Dual-Band L1/L5)</span>
+    <span id="gpsSaveBadge" class="badge" style="display:none;background:rgba(16,185,129,0.2);color:var(--green);border:1px solid var(--green);">
+      <i class="fa-solid fa-check"></i> Aplicado
+    </span>
+  </div>
+
+  <div style="margin:12px 0;background:rgba(0,0,0,0.25);padding:14px;border-radius:10px;border:1px solid var(--card-border);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:6px;">
+      <span class="stat-label" style="font-weight:600;color:var(--text);font-size:0.9rem;">
+        <i class="fa-solid fa-gauge-high"></i> Taxa de Atualização de Navegação:
+      </span>
+      <span id="rateLabel" style="font-size:0.8rem;color:var(--primary);font-weight:600;">1 Hz &bull; 1000 ms</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;">
+      <button type="button" class="rate-btn active" id="btnRate1" onclick="selectRate(1)"><span style="font-size:1.1rem;font-weight:bold;">1 Hz</span><span class="sub">1000 ms</span></button>
+      <button type="button" class="rate-btn" id="btnRate2" onclick="selectRate(2)"><span style="font-size:1.1rem;font-weight:bold;">2 Hz</span><span class="sub">500 ms</span></button>
+      <button type="button" class="rate-btn" id="btnRate5" onclick="selectRate(5)"><span style="font-size:1.1rem;font-weight:bold;">5 Hz</span><span class="sub">200 ms &bull; Rec.</span></button>
+      <button type="button" class="rate-btn" id="btnRate10" onclick="selectRate(10)"><span style="font-size:1.1rem;font-weight:bold;">10 Hz</span><span class="sub">100 ms &bull; Max</span></button>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.06);">
+      <label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;color:var(--text);cursor:pointer;">
+        <input type="checkbox" id="chkSaveFlash" checked style="accent-color:var(--primary);width:16px;height:16px;">
+        <span>Gravar na Flash NVRAM ($PAIR513)</span>
+      </label>
+      <button type="button" class="btn btn-primary" onclick="applyGpsRate()"><i class="fa-solid fa-bolt"></i> Aplicar ao GPS</button>
+    </div>
+  </div>
+
+  <div style="margin-top:12px;background:rgba(0,0,0,0.2);padding:12px;border-radius:8px;border:1px solid var(--card-border);">
+    <div style="font-size:0.85rem;color:var(--muted);margin-bottom:8px;font-weight:600;"><i class="fa-solid fa-terminal"></i> Envio Direto de Comandos ($PAIR / NMEA):</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <input type="text" id="gpsCustomCmd" placeholder="Ex: PAIR004 ou PAIR067 ou PAIR051" style="flex:1;min-width:180px;background:rgba(15,23,42,0.8);border:1px solid var(--card-border);border-radius:6px;padding:8px 12px;color:var(--text);font-family:monospace;font-size:0.85rem;">
+      <button type="button" class="btn btn-secondary" onclick="sendCustomGpsCmd()"><i class="fa-solid fa-paper-plane"></i> Enviar</button>
+    </div>
+    <div id="cmdFeedback" style="font-size:0.78rem;color:var(--muted);margin-top:6px;font-family:monospace;"></div>
+  </div>
+</div>
+
 <script>
+let selectedRate = 1, rateInitialized = false;
+function selectRate(hz) {
+  selectedRate = hz;
+  [1, 2, 5, 10].forEach(h => {
+    const el = document.getElementById('btnRate' + h);
+    if (el) el.classList.toggle('active', h === hz);
+  });
+  const lbl = document.getElementById('rateLabel');
+  if (lbl) {
+    const desc = hz === 1 ? '1000 ms • Económico' : (hz === 2 ? '500 ms • Moderado' : (hz === 5 ? '200 ms • Recomendado' : '100 ms • Alta Taxa'));
+    lbl.innerText = hz + ' Hz • ' + desc;
+  }
+}
+function applyGpsRate() {
+  const saveFlash = document.getElementById('chkSaveFlash').checked;
+  const badge = document.getElementById('gpsSaveBadge');
+  fetch('/api/gps/rate', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({rate_hz: selectedRate, save_flash: saveFlash})
+  }).then(r => r.json()).then(res => {
+    if (badge) {
+      badge.style.display = 'inline-flex';
+      badge.innerHTML = '<i class="fa-solid fa-check"></i> ' + (res.msg || (selectedRate + ' Hz Ativo'));
+      setTimeout(() => { badge.style.display = 'none'; }, 4000);
+    }
+  }).catch(e => { alert('Erro ao comunicar com o Rover: ' + e); });
+}
+function sendCustomGpsCmd() {
+  const input = document.getElementById('gpsCustomCmd');
+  const fb = document.getElementById('cmdFeedback');
+  const val = input.value.trim();
+  if (!val) return;
+  fetch('/api/gps/command', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({cmd: val})
+  }).then(r => r.json()).then(res => {
+    if (fb) fb.innerText = res.msg || 'Instrução enviada!';
+    input.value = '';
+    setTimeout(() => { if (fb) fb.innerText = ''; }, 5000);
+  }).catch(e => { if (fb) fb.innerText = 'Falha: ' + e; });
+}
 setInterval(() => {
   fetch('/api/status')
     .then(r => r.json())
@@ -819,6 +978,10 @@ setInterval(() => {
       document.getElementById('gpsLng').innerText = (g.lng || 0).toFixed(6);
       document.getElementById('osmLink').href = 'https://www.openstreetmap.org/?mlat=' + g.lat + '&mlon=' + g.lng + '#map=18/' + g.lat + '/' + g.lng;
       document.getElementById('gmapsLink').href = 'https://maps.google.com/?q=' + g.lat + ',' + g.lng;
+      if (g.rate_hz && !rateInitialized) {
+        selectRate(g.rate_hz);
+        rateInitialized = true;
+      }
     }).catch(() => {});
 }, 1000);
 </script>
@@ -1325,6 +1488,24 @@ CONFIG_CONTENT = """
     A atualização é sequencial e à prova de falhas: o <strong>Coprocessador C6</strong> é atualizado e validado primeiro, seguido pelo <strong>Master Lafvin</strong>.
   </p>
 
+  <!-- Informações de Versão Ativa dos Módulos -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+    <div style="background:rgba(15,23,42,0.7);padding:14px;border-radius:8px;border:1px solid var(--card-border);">
+      <div style="color:var(--muted);font-size:0.75rem;text-transform:uppercase;font-weight:600;margin-bottom:4px;">
+        <i class="fa-solid fa-microchip" style="color:var(--primary);margin-right:6px;"></i>Master Lafvin (LCD+SD+WiFi)
+      </div>
+      <div id="fwLafvinVer" style="font-size:1.3rem;font-weight:700;color:var(--green);">v2.1.0</div>
+      <div style="color:var(--muted);font-size:0.7rem;margin-top:2px;">ST7789 Display & Servidor Web</div>
+    </div>
+    <div style="background:rgba(15,23,42,0.7);padding:14px;border-radius:8px;border:1px solid var(--card-border);">
+      <div style="color:var(--muted);font-size:0.75rem;text-transform:uppercase;font-weight:600;margin-bottom:4px;">
+        <i class="fa-solid fa-satellite-dish" style="color:var(--yellow);margin-right:6px;"></i>Coprocessador C6 (LoRa+Nav)
+      </div>
+      <div id="fwC6Ver" style="font-size:1.3rem;font-weight:700;color:var(--yellow);">A detetar...</div>
+      <div style="color:var(--muted);font-size:0.7rem;margin-top:2px;">LoRa SX1278, GPS, ADC & Atuadores</div>
+    </div>
+  </div>
+
   <div id="otaDropZone" style="background:rgba(0,0,0,0.25);padding:24px;border-radius:12px;border:2px dashed var(--card-border);text-align:center;transition:all 0.3s;"
        ondragover="event.preventDefault();this.style.borderColor='var(--primary)';"
        ondragleave="this.style.borderColor='var(--card-border)';"
@@ -1408,6 +1589,8 @@ function loadConfig() {
       document.getElementById('cfg_pass').value = data.ap_password || '12345678';
       document.getElementById('summaryId').innerText = 'Rover-' + (data.rover_id || 1);
       document.getElementById('summarySsid').innerText = data.ap_ssid || 'WindDragon-AP';
+      if (data.version_lafvin && document.getElementById('fwLafvinVer')) document.getElementById('fwLafvinVer').innerText = data.version_lafvin;
+      if (data.version_c6 && document.getElementById('fwC6Ver')) document.getElementById('fwC6Ver').innerText = data.version_c6;
     })
     .catch(() => {});
 }
@@ -1507,6 +1690,7 @@ async function onOtaFileSelected(file) {
 
   let c6Blob = null;
   let lafvinBlob = null;
+  const webFiles = [];
 
   try {
     if (file.name.toLowerCase().endsWith('.zip')) {
@@ -1515,12 +1699,19 @@ async function onOtaFileSelected(file) {
       const files = await parseZipBuffer(buf);
       
       for (const k in files) {
-        otaLog('  -> Detetado no ZIP: ' + files[k].name + ' (' + Math.round(files[k].size/1024) + ' KB)');
-        if (k.includes('c6') && k.endsWith('.bin')) {
-          c6Blob = new Blob([files[k].data], { type: 'application/octet-stream' });
-        } else if ((k.includes('lafvin') || k.includes('master')) && k.endsWith('.bin')) {
-          lafvinBlob = new Blob([files[k].data], { type: 'application/octet-stream' });
+        const item = files[k];
+        if (k.endsWith('c6.bin') || (k.includes('c6') && k.endsWith('.bin'))) {
+          c6Blob = new Blob([item.data], { type: 'application/octet-stream' });
+          otaLog('  -> Firmware C6: ' + item.name + ' (' + Math.round(item.size/1024) + ' KB)');
+        } else if (k.endsWith('lafvin.bin') || ((k.includes('lafvin') || k.includes('master')) && k.endsWith('.bin'))) {
+          lafvinBlob = new Blob([item.data], { type: 'application/octet-stream' });
+          otaLog('  -> Firmware Master Lafvin: ' + item.name + ' (' + Math.round(item.size/1024) + ' KB)');
+        } else if (k.startsWith('www/') || k.startsWith('system/')) {
+          webFiles.push({ path: item.name, data: item.data, size: item.size });
         }
+      }
+      if (webFiles.length > 0) {
+        otaLog('  -> Ficheiros Web & Sistema detetados no ZIP: ' + webFiles.length + ' ficheiros', '#06b6d4');
       }
     } else if (file.name.toLowerCase().endsWith('.bin')) {
       if (file.name.toLowerCase().includes('c6')) {
@@ -1535,13 +1726,46 @@ async function onOtaFileSelected(file) {
     return;
   }
 
-  if (!c6Blob && !lafvinBlob) {
-    otaLog('ERRO: Nenhum ficheiro c6.bin ou lafvin.bin encontrado no pacote!', '#ef4444');
-    setOtaProgress(0, 'Nenhum firmware compatível detetado', false);
+  if (!c6Blob && !lafvinBlob && webFiles.length === 0) {
+    otaLog('ERRO: Nenhum firmware ou ficheiro web compatível encontrado no pacote!', '#ef4444');
+    setOtaProgress(0, 'Nenhum item compatível detetado', false);
     return;
   }
 
-  // Sequência segura: Coprocessador C6 primeiro, Master Lafvin depois!
+  // PASSO 1: Atualização dos ficheiros Web no Cartão MicroSD (se presentes)
+  if (webFiles.length > 0) {
+    setOtaProgress(5, 'A atualizar frontend no Cartão SD (0/' + webFiles.length + ')...');
+    otaLog('★ [Passo 1] A atualizar ' + webFiles.length + ' ficheiros web no Cartão MicroSD...', '#06b6d4');
+    let okCount = 0;
+    for (let i = 0; i < webFiles.length; i++) {
+      const wf = webFiles[i];
+      const parts = wf.path.split('/');
+      const fileName = parts.pop();
+      const dirPath = '/' + parts.join('/');
+      
+      const pct = 5 + Math.round((i / webFiles.length) * 15); // 5% a 20%
+      setOtaProgress(pct, 'A gravar /' + wf.path + ' (' + (i + 1) + '/' + webFiles.length + ')...');
+      
+      const blob = new Blob([wf.data], { type: 'application/octet-stream' });
+      const formData = new FormData();
+      formData.append('file', blob, fileName);
+      try {
+        const uploadUrl = '/api/sd/upload?dir=' + encodeURIComponent(dirPath) + '&ajax=1';
+        const res = await fetch(uploadUrl, { method: 'POST', body: formData });
+        const resJson = await res.json();
+        if (resJson && resJson.success) {
+          okCount++;
+        } else {
+          otaLog('  ⚠ Falha ao gravar /' + wf.path, '#f59e0b');
+        }
+      } catch (err) {
+        otaLog('  ⚠ Erro de rede em /' + wf.path + ': ' + err.message, '#f59e0b');
+      }
+    }
+    otaLog('✔ ' + okCount + '/' + webFiles.length + ' ficheiros web atualizados com sucesso no MicroSD!', '#10b981');
+  }
+
+  // PASSO 2: Atualização do Coprocessador C6
   if (c6Blob) {
     const ok = await performC6Ota(c6Blob);
     if (!ok) {
@@ -1550,11 +1774,12 @@ async function onOtaFileSelected(file) {
     }
   }
 
+  // PASSO 3: Atualização do Master Lafvin
   if (lafvinBlob) {
     await performLafvinOta(lafvinBlob);
   } else {
-    setOtaProgress(100, 'Atualização do Coprocessador C6 concluída!', false);
-    otaLog('★ Coprocessador C6 atualizado com sucesso!', '#10b981');
+    setOtaProgress(100, 'Atualização concluída com sucesso!', false);
+    otaLog('★ Todas as operações de atualização foram concluídas!', '#10b981');
   }
 }
 
@@ -1589,6 +1814,10 @@ async function performC6Ota(blob) {
       const sRes = await fetch('/api/ota/c6/status');
       const sJson = await sRes.json();
       otaLog('  -> C6 Status: ' + sJson.state + (sJson.detail ? ' (' + sJson.detail + ')' : ''));
+      if (sJson.progress !== undefined && sJson.progress > 0) {
+        const pct = 15 + Math.round(sJson.progress * 0.35); // 15% -> 50%
+        setOtaProgress(pct, '[Passo 1/2] Coprocessador C6 a gravar Flash (' + sJson.progress + '%)...');
+      }
       if (sJson.state === 'SUCCESS') {
         setOtaProgress(50, '[Passo 1/2] Coprocessador C6 atualizado com sucesso!', false);
         otaLog('✔ Coprocessador C6 gravado e reiniciado com sucesso!', '#10b981');

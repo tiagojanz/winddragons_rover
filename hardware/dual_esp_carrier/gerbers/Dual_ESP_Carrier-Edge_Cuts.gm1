@@ -1,22 +1,26 @@
 %TF.GenerationSoftware,KiCad,Pcbnew,10.0.6*%
-%TF.CreationDate,2026-10-19T10:35:48+01:00*%
+%TF.CreationDate,2026-10-19T14:48:17+01:00*%
 %TF.ProjectId,Dual_ESP_Carrier,4475616c-5f45-4535-905f-436172726965,V1.0 - Dual-C6 100x100mm*%
 %TF.SameCoordinates,Original*%
 %TF.FileFunction,Profile,NP*%
 %FSLAX46Y46*%
 G04 Gerber Fmt 4.6, Leading zero omitted, Abs format (unit mm)*
-G04 Created by KiCad (PCBNEW 10.0.6) date 2026-10-19 10:35:48*
+G04 Created by KiCad (PCBNEW 10.0.6) date 2026-10-19 14:48:17*
 %MOMM*%
 %LPD*%
 G01*
 G04 APERTURE LIST*
 %TA.AperFunction,Profile*%
-%ADD10C,0.150000*%
+%ADD10C,0.153000*%
+%TD*%
+%TA.AperFunction,Profile*%
+%ADD11C,0.150000*%
 %TD*%
 G04 APERTURE END LIST*
 D10*
 X0Y0D02*
 X100000000Y0D01*
+D11*
 X0Y-100000000D02*
 X0Y0D01*
 X48500000Y-91600000D02*

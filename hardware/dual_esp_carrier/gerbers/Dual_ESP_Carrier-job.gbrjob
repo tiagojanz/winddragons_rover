@@ -5,7 +5,7 @@
       "Application": "Pcbnew",
       "Version": "10.0.6"
     },
-    "CreationDate": "2026-10-19T10:35:48+01:00"
+    "CreationDate": "2026-10-19T14:48:17+01:00"
   },
   "GeneralSpecs": {
     "ProjectId": {
@@ -14,8 +14,8 @@
       "Revision": "V1.0 - Dual-C6 100x100mm"
     },
     "Size": {
-      "X": 100.15,
-      "Y": 100.15
+      "X": 100.153,
+      "Y": 100.1515
     },
     "LayerNumber": 2,
     "BoardThickness": 1.6,
@@ -111,11 +111,6 @@
     {
       "Path": "Dual_ESP_Carrier-F_Fab.gbr",
       "FileFunction": "AssemblyDrawing,Top",
-      "FilePolarity": "Positive"
-    },
-    {
-      "Path": "Dual_ESP_Carrier-B_Fab.gbr",
-      "FileFunction": "AssemblyDrawing,Bot",
       "FilePolarity": "Positive"
     }
   ],

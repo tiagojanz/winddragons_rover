@@ -21,7 +21,10 @@
 <a href="/sd" class="nav-item "><i class="fa-solid fa-folder"></i> Cartão SD</a>
 
     </nav>
-    <div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <a href="/config" id="navVersionBadge" class="badge" style="background:rgba(6,182,212,0.12);border:1px solid rgba(6,182,212,0.3);color:var(--primary);text-decoration:none;font-size:0.75rem;display:inline-flex;align-items:center;gap:6px;" title="Ver detalhes de firmware nas Configurações">
+        <i class="fa-solid fa-code-branch"></i> <span id="navLafvinVer">Lafvin: v2.1.0</span> &bull; <span id="navC6Ver">C6: ...</span>
+      </a>
       <span id="navWifiBadge" class="badge badge-sta">
         <i class="fa-solid fa-wifi"></i> A carregar...
       </span>
@@ -30,6 +33,37 @@
 
   <main class="container">
     
+<style>
+.rate-btn { flex: 1; min-width: 60px; padding: 10px 6px; border-radius: 8px; border: 1px solid var(--card-border); background: rgba(15,23,42,0.6); color: var(--muted); cursor: pointer; font-weight: 600; transition: all 0.2s ease; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.rate-btn.active { background: rgba(6,182,212,0.15); border-color: var(--primary); color: var(--text); box-shadow: 0 0 12px rgba(6,182,212,0.25); }
+.rate-btn:hover:not(.active) { border-color: var(--muted); color: var(--text); }
+.rate-btn .sub { font-size: 0.72rem; font-weight: normal; color: var(--muted); }
+.rate-btn.active .sub { color: var(--primary); }
+</style>
+
+<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;background:rgba(15,23,42,0.65);padding:10px 14px;border-radius:10px;border:1px solid var(--card-border);margin-bottom:16px;font-size:0.83rem;">
+  <div style="display:flex;align-items:center;gap:8px;">
+    <i class="fa-solid fa-microchip" style="color:var(--primary);"></i>
+    <span style="color:var(--muted);">Master Lafvin:</span>
+    <strong style="color:var(--green);" id="mainLafvinVer">v2.1.0</strong>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;">
+    <i class="fa-solid fa-satellite-dish" style="color:var(--yellow);"></i>
+    <span style="color:var(--muted);">Coprocessador C6:</span>
+    <strong style="color:var(--yellow);" id="mainC6Ver">A detetar...</strong>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;">
+    <i class="fa-solid fa-box-archive" style="color:var(--primary);"></i>
+    <span style="color:var(--muted);">Pacote OTA:</span>
+    <strong style="color:var(--primary);" id="mainBundleVer">v2.1.0</strong>
+  </div>
+  <div>
+    <a href="/config" class="badge" style="background:rgba(6,182,212,0.15);color:var(--primary);border:1px solid rgba(6,182,212,0.3);text-decoration:none;font-size:0.75rem;padding:4px 10px;">
+      <i class="fa-solid fa-cloud-arrow-up"></i> Atualizar Firmware
+    </a>
+  </div>
+</div>
+
 <div class="card">
   <div class="card-title">
     <span><i class="fa-solid fa-location-dot"></i> Posicionamento e Navegação Quectel LC29H</span>
@@ -75,7 +109,91 @@
   </div>
 </div>
 
+<!-- Painel de Configuração Quectel LC29H -->
+<div class="card" style="margin-top:20px;">
+  <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+    <span><i class="fa-solid fa-satellite-dish"></i> Configuração Quectel LC29H (Dual-Band L1/L5)</span>
+    <span id="gpsSaveBadge" class="badge" style="display:none;background:rgba(16,185,129,0.2);color:var(--green);border:1px solid var(--green);">
+      <i class="fa-solid fa-check"></i> Aplicado
+    </span>
+  </div>
+
+  <div style="margin:12px 0;background:rgba(0,0,0,0.25);padding:14px;border-radius:10px;border:1px solid var(--card-border);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:6px;">
+      <span class="stat-label" style="font-weight:600;color:var(--text);font-size:0.9rem;">
+        <i class="fa-solid fa-gauge-high"></i> Taxa de Atualização de Navegação:
+      </span>
+      <span id="rateLabel" style="font-size:0.8rem;color:var(--primary);font-weight:600;">1 Hz &bull; 1000 ms</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;">
+      <button type="button" class="rate-btn active" id="btnRate1" onclick="selectRate(1)"><span style="font-size:1.1rem;font-weight:bold;">1 Hz</span><span class="sub">1000 ms</span></button>
+      <button type="button" class="rate-btn" id="btnRate2" onclick="selectRate(2)"><span style="font-size:1.1rem;font-weight:bold;">2 Hz</span><span class="sub">500 ms</span></button>
+      <button type="button" class="rate-btn" id="btnRate5" onclick="selectRate(5)"><span style="font-size:1.1rem;font-weight:bold;">5 Hz</span><span class="sub">200 ms &bull; Rec.</span></button>
+      <button type="button" class="rate-btn" id="btnRate10" onclick="selectRate(10)"><span style="font-size:1.1rem;font-weight:bold;">10 Hz</span><span class="sub">100 ms &bull; Max</span></button>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.06);">
+      <label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;color:var(--text);cursor:pointer;">
+        <input type="checkbox" id="chkSaveFlash" checked style="accent-color:var(--primary);width:16px;height:16px;">
+        <span>Gravar na Flash NVRAM ($PAIR513)</span>
+      </label>
+      <button type="button" class="btn btn-primary" onclick="applyGpsRate()"><i class="fa-solid fa-bolt"></i> Aplicar ao GPS</button>
+    </div>
+  </div>
+
+  <div style="margin-top:12px;background:rgba(0,0,0,0.2);padding:12px;border-radius:8px;border:1px solid var(--card-border);">
+    <div style="font-size:0.85rem;color:var(--muted);margin-bottom:8px;font-weight:600;"><i class="fa-solid fa-terminal"></i> Envio Direto de Comandos ($PAIR / NMEA):</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <input type="text" id="gpsCustomCmd" placeholder="Ex: PAIR004 ou PAIR067 ou PAIR051" style="flex:1;min-width:180px;background:rgba(15,23,42,0.8);border:1px solid var(--card-border);border-radius:6px;padding:8px 12px;color:var(--text);font-family:monospace;font-size:0.85rem;">
+      <button type="button" class="btn btn-secondary" onclick="sendCustomGpsCmd()"><i class="fa-solid fa-paper-plane"></i> Enviar</button>
+    </div>
+    <div id="cmdFeedback" style="font-size:0.78rem;color:var(--muted);margin-top:6px;font-family:monospace;"></div>
+  </div>
+</div>
+
 <script>
+let selectedRate = 1, rateInitialized = false;
+function selectRate(hz) {
+  selectedRate = hz;
+  [1, 2, 5, 10].forEach(h => {
+    const el = document.getElementById('btnRate' + h);
+    if (el) el.classList.toggle('active', h === hz);
+  });
+  const lbl = document.getElementById('rateLabel');
+  if (lbl) {
+    const desc = hz === 1 ? '1000 ms • Económico' : (hz === 2 ? '500 ms • Moderado' : (hz === 5 ? '200 ms • Recomendado' : '100 ms • Alta Taxa'));
+    lbl.innerText = hz + ' Hz • ' + desc;
+  }
+}
+function applyGpsRate() {
+  const saveFlash = document.getElementById('chkSaveFlash').checked;
+  const badge = document.getElementById('gpsSaveBadge');
+  fetch('/api/gps/rate', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({rate_hz: selectedRate, save_flash: saveFlash})
+  }).then(r => r.json()).then(res => {
+    if (badge) {
+      badge.style.display = 'inline-flex';
+      badge.innerHTML = '<i class="fa-solid fa-check"></i> ' + (res.msg || (selectedRate + ' Hz Ativo'));
+      setTimeout(() => { badge.style.display = 'none'; }, 4000);
+    }
+  }).catch(e => { alert('Erro ao comunicar com o Rover: ' + e); });
+}
+function sendCustomGpsCmd() {
+  const input = document.getElementById('gpsCustomCmd');
+  const fb = document.getElementById('cmdFeedback');
+  const val = input.value.trim();
+  if (!val) return;
+  fetch('/api/gps/command', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({cmd: val})
+  }).then(r => r.json()).then(res => {
+    if (fb) fb.innerText = res.msg || 'Instrução enviada!';
+    input.value = '';
+    setTimeout(() => { if (fb) fb.innerText = ''; }, 5000);
+  }).catch(e => { if (fb) fb.innerText = 'Falha: ' + e; });
+}
 setInterval(() => {
   fetch('/api/status')
     .then(r => r.json())
@@ -91,14 +209,24 @@ setInterval(() => {
       document.getElementById('gpsLng').innerText = (g.lng || 0).toFixed(6);
       document.getElementById('osmLink').href = 'https://www.openstreetmap.org/?mlat=' + g.lat + '&mlon=' + g.lng + '#map=18/' + g.lat + '/' + g.lng;
       document.getElementById('gmapsLink').href = 'https://maps.google.com/?q=' + g.lat + ',' + g.lng;
+      if (g.rate_hz && !rateInitialized) {
+        selectRate(g.rate_hz);
+        rateInitialized = true;
+      }
     }).catch(() => {});
 }, 1000);
 </script>
 
   </main>
 
-  <footer style="text-align:center;color:var(--muted);font-size:0.75rem;margin-top:24px;">
-    WindDragons Autonomous Surface Rover / Buoy &copy; 2026 &bull; MicroSD /www/rover/ Frontend
+  <footer style="text-align:center;color:var(--muted);font-size:0.75rem;margin-top:24px;display:flex;justify-content:center;align-items:center;gap:12px;flex-wrap:wrap;padding:0 16px;">
+    <span>WindDragons Autonomous Surface Rover / Buoy &copy; 2026</span>
+    <span>&bull;</span>
+    <span>Master Lafvin: <b style="color:var(--green);" id="footerLafvinVer">v2.1.0</b></span>
+    <span>&bull;</span>
+    <span>Coprocessador C6: <b style="color:var(--yellow);" id="footerC6Ver">--</b></span>
+    <span>&bull;</span>
+    <span>Pacote Bundle: <b style="color:var(--primary);" id="footerBundleVer">v2.1.0</b></span>
   </footer>
 </body>
 </html>

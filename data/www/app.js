@@ -66,6 +66,41 @@ function pollGlobalStatus() {
         if (opBadge) {
           opBadge.style.background = colors[data.operation_state] || '#64748b';
         }
+      if (data.version) {
+        const laf = data.version.lafvin || 'v2.1.0';
+        const c6 = data.version.c6 || '--';
+        const bun = data.version.bundle || 'v2.1.0';
+
+        const navLaf = document.getElementById('navLafvinVer');
+        if (navLaf) navLaf.innerText = 'Lafvin ' + laf;
+        const navC6 = document.getElementById('navC6Ver');
+        if (navC6) {
+          navC6.innerText = 'C6 ' + c6;
+          navC6.style.color = (c6 !== '--' && !c6.includes('detetar')) ? 'var(--yellow)' : 'var(--muted)';
+        }
+
+        const footLaf = document.getElementById('footerLafvinVer');
+        if (footLaf) footLaf.innerText = laf;
+        const footC6 = document.getElementById('footerC6Ver');
+        if (footC6) footC6.innerText = c6;
+        const footBun = document.getElementById('footerBundleVer');
+        if (footBun) footBun.innerText = bun;
+
+        const mainLaf = document.getElementById('mainLafvinVer');
+        if (mainLaf) mainLaf.innerText = laf;
+        const mainC6 = document.getElementById('mainC6Ver');
+        if (mainC6) {
+          mainC6.innerText = c6;
+          mainC6.style.color = (c6 !== '--' && !c6.includes('detetar')) ? 'var(--yellow)' : 'var(--muted)';
+        }
+
+        const cfgLaf = document.getElementById('fwLafvinVer');
+        if (cfgLaf) cfgLaf.innerText = laf;
+        const cfgC6 = document.getElementById('fwC6Ver');
+        if (cfgC6) {
+          cfgC6.innerText = c6;
+          cfgC6.style.color = (c6 !== '--' && !c6.includes('detetar')) ? 'var(--yellow)' : 'var(--muted)';
+        }
       }
     })
     .catch(() => {});

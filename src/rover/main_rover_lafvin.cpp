@@ -14,6 +14,7 @@
 #include "wifi_config_manager.h"
 #include "rover_config_manager.h"
 #include "rover_web_server.h"
+#include "rover_version.h"
 
 // =========================================================================
 // WINDDRAGONS ROVER - LAFVIN MASTER FIRMWARE
@@ -53,7 +54,7 @@ HardwareSerial interSerial(1);
 uint32_t uartSeq = 0;
 uint32_t lastUartPingTime = 0;
 uint32_t lastUartRxTime = 0;
-char queuedWebCommand[64] = "NONE";
+char queuedWebCommand[256] = "NONE";
 
 // Controlo do ecrã e botão de navegação
 volatile bool flagPageChange = false;
@@ -92,6 +93,7 @@ void setup() {
 
     printLog("\n=======================================================\n");
     printLog("  WINDDRAGONS ROVER-%02d: LAFVIN MASTER (LCD+SD+WIFI)\n", ROVER_ID);
+    printLog("  Firmware: Master Lafvin %s (%s)\n", ROVER_LAFVIN_VERSION, ROVER_BUILD_DATE);
     printLog("=======================================================\n");
 
     // Desativar CS do SD durante boot
@@ -100,6 +102,7 @@ void setup() {
 
     // 1. Inicializar LCD ST7789
     roverDisplay.begin();
+    roverDisplay.bootLogf(UI_CYAN, 10, "[SYS ] Master Lafvin %s", ROVER_LAFVIN_VERSION);
 
     // 2. LED RGB NeoPixel
     rgbLed.begin();
@@ -123,6 +126,19 @@ void setup() {
     actuators.setAnchorCalibration(roverConfig.getAnchorDrumDiamMm(), roverConfig.getAnchorPulsesPerRev());
     webServer.setCommandQueueCallback([](const char* cmd) {
         if (cmd && strlen(cmd) > 0) {
+            if (strncmp(cmd, "CMD:OTA:", 8) == 0) {
+                // Envio imediato repetido para máxima fiabilidade no início do OTA
+                for (int i = 0; i < 3; i++) {
+                    interSerial.println(cmd);
+                    interSerial.flush();
+                    delay(25);
+                }
+                printLog("[LAFVIN] >>> DISPARO OTA DIRETO UART C6 (x3): %s\n", cmd);
+            } else {
+                interSerial.println(cmd);
+                interSerial.flush();
+                printLog("[LAFVIN] >>> COMANDO UART DIRETO: %s\n", cmd);
+            }
             strncpy(queuedWebCommand, cmd, sizeof(queuedWebCommand) - 1);
             queuedWebCommand[sizeof(queuedWebCommand) - 1] = '\0';
         }
@@ -287,23 +303,37 @@ void loop() {
         }
     }
 
+    // Consulta periódica da versão do Coprocessador C6 até obter resposta
+    static uint32_t lastVerCheck = 0;
+    if (strcmp(queuedWebCommand, "NONE") == 0 && strcmp(roverDisplay.getC6Version(), "--") == 0) {
+        if (now - lastVerCheck >= 2000) {
+            lastVerCheck = now;
+            strncpy(queuedWebCommand, "CMD:GET_VER", sizeof(queuedWebCommand) - 1);
+        }
+    }
+
     // 4. Comunicação Inter-ESP UART (Ping periódico a cada 200ms ou rápido a cada 50ms se houver comando pendente)
     bool hasPendingCmd = (strcmp(queuedWebCommand, "NONE") != 0);
     if ((now - lastUartPingTime >= 200) || (hasPendingCmd && (now - lastUartPingTime >= 50))) {
         lastUartPingTime = now;
         uartSeq++;
 
+        // Se houver comando pendente, envia-o como linha direta dedicada CMD:...
+        if (hasPendingCmd) {
+            interSerial.println(queuedWebCommand);
+            interSerial.flush();
+            printLog("[LAFVIN] >>> COMANDO PENDENTE UART: %s\n", queuedWebCommand);
+            strncpy(queuedWebCommand, "NONE", sizeof(queuedWebCommand) - 1);
+        }
+
+        // PING de telemetria periódico limpo (sem colidir colons em scansets)
         char pingMsg[160];
-        snprintf(pingMsg, sizeof(pingMsg), "PING:%u:%u:%s:%ld:%ld:%.1f:%.1f:%u:%u\n",
-                 uartSeq, roverConfig.getRoverId(), queuedWebCommand,
+        snprintf(pingMsg, sizeof(pingMsg), "PING:%u:%u:NONE:%ld:%ld:%.1f:%.1f:%u:%u\n",
+                 uartSeq, roverConfig.getRoverId(),
                  (long)gps.getLatDeg7(), (long)gps.getLngDeg7(),
                  gps.getSpeedKnots(), gps.getHeading(),
                  gps.getSatellites(), gps.hasFix() ? 1 : 0);
         interSerial.print(pingMsg);
-        if (hasPendingCmd) {
-            printLog("[LAFVIN] >>> %s", pingMsg);
-        }
-        strncpy(queuedWebCommand, "NONE", sizeof(queuedWebCommand) - 1);
     }
 
     // 4. Receção e interpretação de respostas PONG do C6 Coprocessador
@@ -320,6 +350,11 @@ void loop() {
                     lastUartRxTime = now;
                     printLog("[LAFVIN ROVER] ★ C6 OTA: %s\n", rxBuf + 9);
                     webServer.setC6OtaStatus(rxBuf + 9);
+                } else if (strncmp(rxBuf, "PONG:VER:", 9) == 0) {
+                    lastUartRxTime = now;
+                    printLog("[LAFVIN ROVER] ★ Versao Coprocessador C6: %s\n", rxBuf + 9);
+                    webServer.setC6Version(rxBuf + 9);
+                    roverDisplay.setC6Version(rxBuf + 9);
                 } else if (strncmp(rxBuf, "PONG:", 5) == 0) {
                     lastUartRxTime = now;
                     uint32_t seq = 0, batMv = 0, batPct = 0, sats = 0, fix = 0, motSt = 0, depth = 0;
@@ -370,9 +405,9 @@ void loop() {
                             wifiConfig.getAPPassword().c_str());
     }
 
-    // 6. Gravação de log no cartão MicroSD (a cada 5000ms)
+    // 6. Gravação de log no cartão MicroSD (a cada 5000ms se o servidor web não estiver ocupado)
     static uint32_t lastSdLogTime = 0;
-    if (sdCard.isReady() && (now - lastSdLogTime >= 5000)) {
+    if (sdCard.isReady() && !webServer.isBusy() && (now - lastSdLogTime >= 5000)) {
         lastSdLogTime = now;
         char logBuf[160];
         snprintf(logBuf, sizeof(logBuf),

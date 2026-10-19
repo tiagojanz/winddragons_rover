@@ -74,10 +74,10 @@ def upload_file(ip, local_path, remote_dir):
         "--connect-timeout", "4",
         "--max-time", str(timeout_sec),
         "-F", f"file=@{local_path}",
-        f"http://{ip}/api/sd/upload?dir={encoded_dir}"
+        f"http://{ip}/api/sd/upload?dir={encoded_dir}&ajax=1"
     ]
     res = subprocess.run(cmd, capture_output=True, text=True)
-    if res.returncode == 0 and ("sucesso" in res.stdout.lower() or "success" in res.stdout.lower() or res.stdout == ""):
+    if res.returncode == 0 and ("true" in res.stdout.lower() or "sucesso" in res.stdout.lower() or "success" in res.stdout.lower()):
         print(" [OK]")
         return True
     else:

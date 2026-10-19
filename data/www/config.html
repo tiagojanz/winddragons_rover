@@ -21,7 +21,10 @@
 <a href="/sd" class="nav-item "><i class="fa-solid fa-folder"></i> Cartão SD</a>
 
     </nav>
-    <div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <a href="/config" id="navVersionBadge" class="badge" style="background:rgba(6,182,212,0.12);border:1px solid rgba(6,182,212,0.3);color:var(--primary);text-decoration:none;font-size:0.75rem;display:inline-flex;align-items:center;gap:6px;" title="Ver detalhes de firmware nas Configurações">
+        <i class="fa-solid fa-code-branch"></i> <span id="navLafvinVer">Lafvin: v2.1.0</span> &bull; <span id="navC6Ver">C6: ...</span>
+      </a>
       <span id="navWifiBadge" class="badge badge-sta">
         <i class="fa-solid fa-wifi"></i> A carregar...
       </span>
@@ -156,6 +159,24 @@
     A atualização é sequencial e à prova de falhas: o <strong>Coprocessador C6</strong> é atualizado e validado primeiro, seguido pelo <strong>Master Lafvin</strong>.
   </p>
 
+  <!-- Informações de Versão Ativa dos Módulos -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+    <div style="background:rgba(15,23,42,0.7);padding:14px;border-radius:8px;border:1px solid var(--card-border);">
+      <div style="color:var(--muted);font-size:0.75rem;text-transform:uppercase;font-weight:600;margin-bottom:4px;">
+        <i class="fa-solid fa-microchip" style="color:var(--primary);margin-right:6px;"></i>Master Lafvin (LCD+SD+WiFi)
+      </div>
+      <div id="fwLafvinVer" style="font-size:1.3rem;font-weight:700;color:var(--green);">v2.1.0</div>
+      <div style="color:var(--muted);font-size:0.7rem;margin-top:2px;">ST7789 Display & Servidor Web</div>
+    </div>
+    <div style="background:rgba(15,23,42,0.7);padding:14px;border-radius:8px;border:1px solid var(--card-border);">
+      <div style="color:var(--muted);font-size:0.75rem;text-transform:uppercase;font-weight:600;margin-bottom:4px;">
+        <i class="fa-solid fa-satellite-dish" style="color:var(--yellow);margin-right:6px;"></i>Coprocessador C6 (LoRa+Nav)
+      </div>
+      <div id="fwC6Ver" style="font-size:1.3rem;font-weight:700;color:var(--yellow);">A detetar...</div>
+      <div style="color:var(--muted);font-size:0.7rem;margin-top:2px;">LoRa SX1278, GPS, ADC & Atuadores</div>
+    </div>
+  </div>
+
   <div id="otaDropZone" style="background:rgba(0,0,0,0.25);padding:24px;border-radius:12px;border:2px dashed var(--card-border);text-align:center;transition:all 0.3s;"
        ondragover="event.preventDefault();this.style.borderColor='var(--primary)';"
        ondragleave="this.style.borderColor='var(--card-border)';"
@@ -239,6 +260,8 @@ function loadConfig() {
       document.getElementById('cfg_pass').value = data.ap_password || '12345678';
       document.getElementById('summaryId').innerText = 'Rover-' + (data.rover_id || 1);
       document.getElementById('summarySsid').innerText = data.ap_ssid || 'WindDragon-AP';
+      if (data.version_lafvin && document.getElementById('fwLafvinVer')) document.getElementById('fwLafvinVer').innerText = data.version_lafvin;
+      if (data.version_c6 && document.getElementById('fwC6Ver')) document.getElementById('fwC6Ver').innerText = data.version_c6;
     })
     .catch(() => {});
 }
@@ -338,6 +361,7 @@ async function onOtaFileSelected(file) {
 
   let c6Blob = null;
   let lafvinBlob = null;
+  const webFiles = [];
 
   try {
     if (file.name.toLowerCase().endsWith('.zip')) {
@@ -346,12 +370,19 @@ async function onOtaFileSelected(file) {
       const files = await parseZipBuffer(buf);
       
       for (const k in files) {
-        otaLog('  -> Detetado no ZIP: ' + files[k].name + ' (' + Math.round(files[k].size/1024) + ' KB)');
-        if (k.includes('c6') && k.endsWith('.bin')) {
-          c6Blob = new Blob([files[k].data], { type: 'application/octet-stream' });
-        } else if ((k.includes('lafvin') || k.includes('master')) && k.endsWith('.bin')) {
-          lafvinBlob = new Blob([files[k].data], { type: 'application/octet-stream' });
+        const item = files[k];
+        if (k.endsWith('c6.bin') || (k.includes('c6') && k.endsWith('.bin'))) {
+          c6Blob = new Blob([item.data], { type: 'application/octet-stream' });
+          otaLog('  -> Firmware C6: ' + item.name + ' (' + Math.round(item.size/1024) + ' KB)');
+        } else if (k.endsWith('lafvin.bin') || ((k.includes('lafvin') || k.includes('master')) && k.endsWith('.bin'))) {
+          lafvinBlob = new Blob([item.data], { type: 'application/octet-stream' });
+          otaLog('  -> Firmware Master Lafvin: ' + item.name + ' (' + Math.round(item.size/1024) + ' KB)');
+        } else if (k.startsWith('www/') || k.startsWith('system/')) {
+          webFiles.push({ path: item.name, data: item.data, size: item.size });
         }
+      }
+      if (webFiles.length > 0) {
+        otaLog('  -> Ficheiros Web & Sistema detetados no ZIP: ' + webFiles.length + ' ficheiros', '#06b6d4');
       }
     } else if (file.name.toLowerCase().endsWith('.bin')) {
       if (file.name.toLowerCase().includes('c6')) {
@@ -366,13 +397,46 @@ async function onOtaFileSelected(file) {
     return;
   }
 
-  if (!c6Blob && !lafvinBlob) {
-    otaLog('ERRO: Nenhum ficheiro c6.bin ou lafvin.bin encontrado no pacote!', '#ef4444');
-    setOtaProgress(0, 'Nenhum firmware compatível detetado', false);
+  if (!c6Blob && !lafvinBlob && webFiles.length === 0) {
+    otaLog('ERRO: Nenhum firmware ou ficheiro web compatível encontrado no pacote!', '#ef4444');
+    setOtaProgress(0, 'Nenhum item compatível detetado', false);
     return;
   }
 
-  // Sequência segura: Coprocessador C6 primeiro, Master Lafvin depois!
+  // PASSO 1: Atualização dos ficheiros Web no Cartão MicroSD (se presentes)
+  if (webFiles.length > 0) {
+    setOtaProgress(5, 'A atualizar frontend no Cartão SD (0/' + webFiles.length + ')...');
+    otaLog('★ [Passo 1] A atualizar ' + webFiles.length + ' ficheiros web no Cartão MicroSD...', '#06b6d4');
+    let okCount = 0;
+    for (let i = 0; i < webFiles.length; i++) {
+      const wf = webFiles[i];
+      const parts = wf.path.split('/');
+      const fileName = parts.pop();
+      const dirPath = '/' + parts.join('/');
+      
+      const pct = 5 + Math.round((i / webFiles.length) * 15); // 5% a 20%
+      setOtaProgress(pct, 'A gravar /' + wf.path + ' (' + (i + 1) + '/' + webFiles.length + ')...');
+      
+      const blob = new Blob([wf.data], { type: 'application/octet-stream' });
+      const formData = new FormData();
+      formData.append('file', blob, fileName);
+      try {
+        const uploadUrl = '/api/sd/upload?dir=' + encodeURIComponent(dirPath) + '&ajax=1';
+        const res = await fetch(uploadUrl, { method: 'POST', body: formData });
+        const resJson = await res.json();
+        if (resJson && resJson.success) {
+          okCount++;
+        } else {
+          otaLog('  ⚠ Falha ao gravar /' + wf.path, '#f59e0b');
+        }
+      } catch (err) {
+        otaLog('  ⚠ Erro de rede em /' + wf.path + ': ' + err.message, '#f59e0b');
+      }
+    }
+    otaLog('✔ ' + okCount + '/' + webFiles.length + ' ficheiros web atualizados com sucesso no MicroSD!', '#10b981');
+  }
+
+  // PASSO 2: Atualização do Coprocessador C6
   if (c6Blob) {
     const ok = await performC6Ota(c6Blob);
     if (!ok) {
@@ -381,11 +445,12 @@ async function onOtaFileSelected(file) {
     }
   }
 
+  // PASSO 3: Atualização do Master Lafvin
   if (lafvinBlob) {
     await performLafvinOta(lafvinBlob);
   } else {
-    setOtaProgress(100, 'Atualização do Coprocessador C6 concluída!', false);
-    otaLog('★ Coprocessador C6 atualizado com sucesso!', '#10b981');
+    setOtaProgress(100, 'Atualização concluída com sucesso!', false);
+    otaLog('★ Todas as operações de atualização foram concluídas!', '#10b981');
   }
 }
 
@@ -420,6 +485,10 @@ async function performC6Ota(blob) {
       const sRes = await fetch('/api/ota/c6/status');
       const sJson = await sRes.json();
       otaLog('  -> C6 Status: ' + sJson.state + (sJson.detail ? ' (' + sJson.detail + ')' : ''));
+      if (sJson.progress !== undefined && sJson.progress > 0) {
+        const pct = 15 + Math.round(sJson.progress * 0.35); // 15% -> 50%
+        setOtaProgress(pct, '[Passo 1/2] Coprocessador C6 a gravar Flash (' + sJson.progress + '%)...');
+      }
       if (sJson.state === 'SUCCESS') {
         setOtaProgress(50, '[Passo 1/2] Coprocessador C6 atualizado com sucesso!', false);
         otaLog('✔ Coprocessador C6 gravado e reiniciado com sucesso!', '#10b981');
@@ -490,8 +559,14 @@ document.addEventListener('DOMContentLoaded', loadConfig);
 
   </main>
 
-  <footer style="text-align:center;color:var(--muted);font-size:0.75rem;margin-top:24px;">
-    WindDragons Autonomous Surface Rover / Buoy &copy; 2026 &bull; MicroSD /www/rover/ Frontend
+  <footer style="text-align:center;color:var(--muted);font-size:0.75rem;margin-top:24px;display:flex;justify-content:center;align-items:center;gap:12px;flex-wrap:wrap;padding:0 16px;">
+    <span>WindDragons Autonomous Surface Rover / Buoy &copy; 2026</span>
+    <span>&bull;</span>
+    <span>Master Lafvin: <b style="color:var(--green);" id="footerLafvinVer">v2.1.0</b></span>
+    <span>&bull;</span>
+    <span>Coprocessador C6: <b style="color:var(--yellow);" id="footerC6Ver">--</b></span>
+    <span>&bull;</span>
+    <span>Pacote Bundle: <b style="color:var(--primary);" id="footerBundleVer">v2.1.0</b></span>
   </footer>
 </body>
 </html>

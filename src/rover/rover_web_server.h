@@ -13,6 +13,7 @@
 #include "actuators.h"
 #include "rover_display.h"
 #include "qrcode_helper.h"
+#include "rover_version.h"
 
 class RoverWebServer {
 public:
@@ -40,12 +41,69 @@ public:
 
     void setC6OtaStatus(const char* status) {
         if (!status) return;
-        _c6OtaState = String(status);
         _c6OtaTimestamp = millis();
         Serial.printf("[ROVER HTTP] C6 OTA Estado: %s\n", status);
-        if (_display) {
-            _display->bootLogf(UI_CYAN, 50, "[OTA] C6: %s", status);
+
+        if (strncmp(status, "PROGRESS:", 9) == 0) {
+            int pct = atoi(status + 9);
+            _c6OtaProgress = pct;
+            _c6OtaState = "FLASHING";
+            char detail[48];
+            snprintf(detail, sizeof(detail), "A gravar Flash C6 (%d%%)...", pct);
+            _c6OtaDetail = String(detail);
+            if (_display) {
+                _display->showOtaScreen("COPROCESSADOR C6", "PASSO 1/2: A GRAVAR FLASH", pct, detail, UI_BLUE);
+            }
+        } else if (strcmp(status, "STARTING") == 0) {
+            _c6OtaState = "STARTING";
+            _c6OtaProgress = 20;
+            _c6OtaDetail = "C6 a inicializar modo OTA...";
+            if (_display) {
+                _display->showOtaScreen("COPROCESSADOR C6", "PASSO 1/2: PREPARACAO C6", 20, _c6OtaDetail.c_str(), UI_MAGENTA);
+            }
+        } else if (strcmp(status, "WIFI_CONNECTING") == 0) {
+            _c6OtaState = "WIFI_CONNECTING";
+            _c6OtaProgress = 25;
+            _c6OtaDetail = "C6 a ligar ao WiFi...";
+            if (_display) {
+                _display->showOtaScreen("COPROCESSADOR C6", "PASSO 1/2: LIGAR AO WIFI", 25, _c6OtaDetail.c_str(), UI_ORANGE);
+            }
+        } else if (strcmp(status, "DOWNLOADING") == 0 || strcmp(status, "FLASH_START") == 0) {
+            _c6OtaState = "DOWNLOADING";
+            _c6OtaProgress = 30;
+            _c6OtaDetail = "C6 a descarregar e a gravar Flash...";
+            if (_display) {
+                _display->showOtaScreen("COPROCESSADOR C6", "PASSO 1/2: A DESCARREGAR", 30, _c6OtaDetail.c_str(), UI_CYAN);
+            }
+        } else if (strcmp(status, "SUCCESS") == 0) {
+            _c6OtaState = "SUCCESS";
+            _c6OtaProgress = 100;
+            _c6OtaDetail = "Coprocessador C6 atualizado com 100% de sucesso!";
+            if (_display) {
+                _display->showOtaScreen("COPROCESSADOR C6", "PASSO 1/2: SUCESSO!", 100, "C6 OK! A aguardar Master Lafvin...", UI_GREEN);
+            }
+        } else if (strncmp(status, "FAIL", 4) == 0) {
+            _c6OtaState = String(status);
+            _c6OtaDetail = "Falha na gravacao do Coprocessador C6";
+            if (_display) {
+                _display->showOtaScreen("COPROCESSADOR C6", "PASSO 1/2: FALHA NO C6", 0, status, UI_RED);
+            }
+        } else {
+            _c6OtaState = String(status);
+            if (_display) {
+                _display->showOtaScreen("COPROCESSADOR C6", "PASSO 1/2: ESTADO", _c6OtaProgress, status, UI_CYAN);
+            }
         }
+    }
+
+    void setC6Version(const char* ver) {
+        if (ver && strlen(ver) > 0) {
+            _c6Version = String(ver);
+        }
+    }
+
+    String getC6Version() const {
+        return _c6Version;
     }
 
     void setRoverId(uint8_t id) {
@@ -84,6 +142,9 @@ private:
     String _uploadCurrentPath = "";
     String _c6OtaState = "IDLE";
     String _c6OtaDetail = "";
+    uint8_t _c6OtaProgress = 0;
+    size_t _lafvinOtaBytes = 0;
+    String _c6Version = "--";
     uint32_t _c6OtaTimestamp = 0;
     uint32_t _restartScheduled = 0;
 
@@ -159,6 +220,9 @@ private:
     }
 
     void setupRoutes() {
+        const char* headerKeys[] = {"Content-Length"};
+        _server.collectHeaders(headerKeys, 1);
+
         // Rotas principais (Prioridade ao Cartão SD /www/rover/... com fallback para /www/... e Flash)
         _server.on("/", [this]() {
             if (tryServeSdFile("/www/index.html") || tryServeSdFile("/www/gps.html")) return;
@@ -216,6 +280,10 @@ private:
         _server.on("/api/battery/config", HTTP_GET, [this]() { handleApiBatteryConfigGet(); });
         _server.on("/api/battery/config", HTTP_POST, [this]() { handleApiBatteryConfigSet(); });
         _server.on("/api/battery/reset", HTTP_POST, [this]() { handleApiBatteryReset(); });
+
+        // Configuração do GPS Quectel LC29H (Frequência Hz e Comandos NMEA/PAIR)
+        _server.on("/api/gps/rate", HTTP_POST, [this]() { handleApiGpsRate(); });
+        _server.on("/api/gps/command", HTTP_POST, [this]() { handleApiGpsCommand(); });
 
         // Controle de atuadores
         _server.on("/api/control/actuator", [this]() { handleApiActuator(); });
@@ -758,6 +826,14 @@ private:
     void handleGpsPage() {
         String html = getHtmlHeader("Telemetria GPS", "gps");
 
+        html += "<style>";
+        html += ".rate-btn { flex: 1; min-width: 60px; padding: 10px 6px; border-radius: 8px; border: 1px solid var(--card-border); background: rgba(15,23,42,0.6); color: var(--muted); cursor: pointer; font-weight: 600; transition: all 0.2s ease; display: flex; flex-direction: column; align-items: center; gap: 4px; }";
+        html += ".rate-btn.active { background: rgba(6,182,212,0.15); border-color: var(--primary); color: var(--text); box-shadow: 0 0 12px rgba(6,182,212,0.25); }";
+        html += ".rate-btn:hover:not(.active) { border-color: var(--muted); color: var(--text); }";
+        html += ".rate-btn .sub { font-size: 0.72rem; font-weight: normal; color: var(--muted); }";
+        html += ".rate-btn.active .sub { color: var(--primary); }";
+        html += "</style>";
+
         html += "<div class='card'>";
         html += "<div class='card-title'><span><i class='fa-solid fa-location-dot'></i> Posicionamento e Navegação Quectel LC29H</span></div>";
 
@@ -781,9 +857,87 @@ private:
         html += "<a id='gmapsLink' href='https://maps.google.com/?q=" + String(_gps.getLatitude(), 6) + "," + String(_gps.getLongitude(), 6) + "' target='_blank' class='btn btn-secondary'><i class='fa-solid fa-location-dot'></i> Google Maps</a>";
         html += "</div></div>";
 
+        // Painel de Configuração Quectel LC29H
+        html += "<div class='card' style='margin-top:20px;'>";
+        html += "<div class='card-title' style='display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;'>";
+        html += "  <span><i class='fa-solid fa-satellite-dish'></i> Configuração Quectel LC29H (Dual-Band L1/L5)</span>";
+        html += "  <span id='gpsSaveBadge' class='badge' style='display:none;background:rgba(16,185,129,0.2);color:var(--green);border:1px solid var(--green);'><i class='fa-solid fa-check'></i> Aplicado</span>";
+        html += "</div>";
+
+        html += "<div style='margin:12px 0;background:rgba(0,0,0,0.25);padding:14px;border-radius:10px;border:1px solid var(--card-border);'>";
+        html += "  <div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:6px;'>";
+        html += "    <span class='stat-label' style='font-weight:600;color:var(--text);font-size:0.9rem;'><i class='fa-solid fa-gauge-high'></i> Taxa de Atualização de Navegação:</span>";
+        html += "    <span id='rateLabel' style='font-size:0.8rem;color:var(--primary);font-weight:600;'>1 Hz &bull; 1000 ms</span>";
+        html += "  </div>";
+        html += "  <div style='display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;'>";
+        html += "    <button type='button' class='rate-btn active' id='btnRate1' onclick='selectRate(1)'><span style='font-size:1.1rem;font-weight:bold;'>1 Hz</span><span class='sub'>1000 ms</span></button>";
+        html += "    <button type='button' class='rate-btn' id='btnRate2' onclick='selectRate(2)'><span style='font-size:1.1rem;font-weight:bold;'>2 Hz</span><span class='sub'>500 ms</span></button>";
+        html += "    <button type='button' class='rate-btn' id='btnRate5' onclick='selectRate(5)'><span style='font-size:1.1rem;font-weight:bold;'>5 Hz</span><span class='sub'>200 ms &bull; Rec.</span></button>";
+        html += "    <button type='button' class='rate-btn' id='btnRate10' onclick='selectRate(10)'><span style='font-size:1.1rem;font-weight:bold;'>10 Hz</span><span class='sub'>100 ms &bull; Max</span></button>";
+        html += "  </div>";
+        html += "  <div style='display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.06);'>";
+        html += "    <label style='display:flex;align-items:center;gap:8px;font-size:0.85rem;color:var(--text);cursor:pointer;'><input type='checkbox' id='chkSaveFlash' checked style='accent-color:var(--primary);width:16px;height:16px;'><span>Gravar na Flash NVRAM ($PAIR513)</span></label>";
+        html += "    <button type='button' class='btn btn-primary' onclick='applyGpsRate()'><i class='fa-solid fa-bolt'></i> Aplicar ao GPS</button>";
+        html += "  </div>";
+        html += "</div>";
+
+        html += "<div style='margin-top:12px;background:rgba(0,0,0,0.2);padding:12px;border-radius:8px;border:1px solid var(--card-border);'>";
+        html += "  <div style='font-size:0.85rem;color:var(--muted);margin-bottom:8px;font-weight:600;'><i class='fa-solid fa-terminal'></i> Envio Direto de Comandos ($PAIR / NMEA):</div>";
+        html += "  <div style='display:flex;gap:8px;flex-wrap:wrap;'>";
+        html += "    <input type='text' id='gpsCustomCmd' placeholder='Ex: PAIR004 ou PAIR067 ou PAIR051' style='flex:1;min-width:180px;background:rgba(15,23,42,0.8);border:1px solid var(--card-border);border-radius:6px;padding:8px 12px;color:var(--text);font-family:monospace;font-size:0.85rem;'>";
+        html += "    <button type='button' class='btn btn-secondary' onclick='sendCustomGpsCmd()'><i class='fa-solid fa-paper-plane'></i> Enviar</button>";
+        html += "  </div>";
+        html += "  <div id='cmdFeedback' style='font-size:0.78rem;color:var(--muted);margin-top:6px;font-family:monospace;'></div>";
+        html += "</div>";
+        html += "</div>";
+
         html += "<script>";
+        html += "let selectedRate=1,rateInitialized=false;";
+        html += "function selectRate(hz){";
+        html += "  selectedRate=hz;";
+        html += "  [1,2,5,10].forEach(h=>{";
+        html += "    const el=document.getElementById('btnRate'+h);";
+        html += "    if(el)el.classList.toggle('active',h===hz);";
+        html += "  });";
+        html += "  const lbl=document.getElementById('rateLabel');";
+        html += "  if(lbl){";
+        html += "    const desc=hz===1?'1000 ms • Económico':(hz===2?'500 ms • Moderado':(hz===5?'200 ms • Recomendado':'100 ms • Alta Taxa'));";
+        html += "    lbl.innerText=hz+' Hz • '+desc;";
+        html += "  }";
+        html += "}";
+        html += "function applyGpsRate(){";
+        html += "  const saveFlash=document.getElementById('chkSaveFlash').checked;";
+        html += "  const badge=document.getElementById('gpsSaveBadge');";
+        html += "  fetch('/api/gps/rate',{";
+        html += "    method:'POST',";
+        html += "    headers:{'Content-Type':'application/json'},";
+        html += "    body:JSON.stringify({rate_hz:selectedRate,save_flash:saveFlash})";
+        html += "  }).then(r=>r.json()).then(res=>{";
+        html += "    if(badge){";
+        html += "      badge.style.display='inline-flex';";
+        html += "      badge.innerHTML='<i class=\"fa-solid fa-check\"></i> '+(res.msg||(selectedRate+' Hz Ativo'));";
+        html += "      setTimeout(()=>{badge.style.display='none';},4000);";
+        html += "    }";
+        html += "  }).catch(e=>{alert('Erro ao comunicar com o Rover: '+e);});";
+        html += "}";
+        html += "function sendCustomGpsCmd(){";
+        html += "  const input=document.getElementById('gpsCustomCmd');";
+        html += "  const fb=document.getElementById('cmdFeedback');";
+        html += "  const val=input.value.trim();";
+        html += "  if(!val)return;";
+        html += "  fetch('/api/gps/command',{";
+        html += "    method:'POST',";
+        html += "    headers:{'Content-Type':'application/json'},";
+        html += "    body:JSON.stringify({cmd:val})";
+        html += "  }).then(r=>r.json()).then(res=>{";
+        html += "    if(fb)fb.innerText=res.msg||'Instrução enviada!';";
+        html += "    input.value='';";
+        html += "    setTimeout(()=>{if(fb)fb.innerText='';},5000);";
+        html += "  }).catch(e=>{if(fb)fb.innerText='Falha: '+e;});";
+        html += "}";
         html += "setInterval(()=>{fetch('/api/status').then(r=>r.json()).then(data=>{";
         html += "const g=data.gps;";
+        html += "if(!g)return;";
         html += "document.getElementById('gpsFix').innerText=g.fix?('FIX ('+g.satellites+' sats)'):'SEM FIX';";
         html += "document.getElementById('gpsFix').style.color=g.fix?'var(--green)':'var(--red)';";
         html += "document.getElementById('gpsSpeed').innerText=g.speed_kn.toFixed(1)+' kn';";
@@ -793,6 +947,7 @@ private:
         html += "document.getElementById('gpsLng').innerText=g.lng.toFixed(6);";
         html += "document.getElementById('osmLink').href='https://www.openstreetmap.org/?mlat='+g.lat+'&mlon='+g.lng+'#map=18/'+g.lat+'/'+g.lng;";
         html += "document.getElementById('gmapsLink').href='https://maps.google.com/?q='+g.lat+','+g.lng;";
+        html += "if(g.rate_hz&&!rateInitialized){selectRate(g.rate_hz);rateInitialized=true;}";
         html += "});},1000);";
         html += "</script>";
 
@@ -1531,6 +1686,7 @@ private:
         g["baud"] = _gps.getBaud();
         g["bytes"] = _gps.getTotalBytes();
         g["raw"] = _gps.getRawSentence();
+        g["rate_hz"] = _gps.getRateHz();
 
         JsonObject b = doc["battery"].to<JsonObject>();
         b["pct"] = _battery.getPercentage();
@@ -1572,9 +1728,83 @@ private:
         sd["ready"] = _sd.isReady();
         sd["card_type"] = _sd.getCardTypeStr();
 
+        JsonObject v = doc["version"].to<JsonObject>();
+        v["lafvin"] = ROVER_LAFVIN_VERSION;
+        v["c6"] = _c6Version;
+        v["bundle"] = ROVER_FIRMWARE_VERSION_STR;
+        v["build_date"] = __DATE__;
+
         String res;
         serializeJson(doc, res);
         _server.send(200, "application/json", res);
+    }
+
+    void handleApiGpsRate() {
+        uint8_t rateHz = 1;
+        bool saveFlash = true;
+
+        if (_server.hasArg("plain")) {
+            JsonDocument doc;
+            DeserializationError err = deserializeJson(doc, _server.arg("plain"));
+            if (!err) {
+                rateHz = doc["rate_hz"] | doc["hz"] | 1;
+                saveFlash = doc["save_flash"] | true;
+            }
+        } else if (_server.hasArg("rate_hz") || _server.hasArg("hz")) {
+            rateHz = _server.hasArg("rate_hz") ? _server.arg("rate_hz").toInt() : _server.arg("hz").toInt();
+            if (_server.hasArg("save_flash")) {
+                saveFlash = (_server.arg("save_flash") == "1" || _server.arg("save_flash") == "true");
+            }
+        }
+
+        if (rateHz != 1 && rateHz != 2 && rateHz != 5 && rateHz != 10) {
+            _server.send(400, "application/json", "{\"error\":\"Taxa inválida. Use 1, 2, 5 ou 10 Hz\"}");
+            return;
+        }
+
+        bool ok = _gps.setUpdateRate(rateHz, saveFlash);
+        if (_display) {
+            _display->bootLogf(UI_CYAN, 50, "[GPS] Taxa: %d Hz %s", rateHz, saveFlash ? "(gravado)" : "");
+        }
+
+        JsonDocument res;
+        res["success"] = ok;
+        res["rate_hz"] = rateHz;
+        res["interval_ms"] = 1000 / rateHz;
+        res["saved_flash"] = saveFlash;
+        res["msg"] = String("Taxa do GPS Quectel LC29H atualizada para ") + rateHz + " Hz" + (saveFlash ? " e gravada na Flash!" : "!");
+
+        String out;
+        serializeJson(res, out);
+        _server.send(200, "application/json", out);
+    }
+
+    void handleApiGpsCommand() {
+        String cmd = "";
+        if (_server.hasArg("plain")) {
+            JsonDocument doc;
+            DeserializationError err = deserializeJson(doc, _server.arg("plain"));
+            if (!err) {
+                cmd = doc["cmd"].as<String>();
+            }
+        } else if (_server.hasArg("cmd")) {
+            cmd = _server.arg("cmd");
+        }
+
+        if (cmd.length() == 0) {
+            _server.send(400, "application/json", "{\"error\":\"Comando vazio\"}");
+            return;
+        }
+
+        bool ok = _gps.sendNmeaCommand(cmd.c_str());
+        JsonDocument res;
+        res["success"] = ok;
+        res["cmd"] = cmd;
+        res["msg"] = ok ? "Instrução enviada ao Quectel LC29H com sucesso!" : "Erro ao enviar instrução.";
+
+        String out;
+        serializeJson(res, out);
+        _server.send(200, "application/json", out);
     }
 
     void handleApiScan() {
@@ -1604,6 +1834,10 @@ private:
         doc["battery_capacity_mah"] = _config.getBatteryCapacityMah();
         doc["sd_ready"] = _sd.isReady();
         doc["has_config_file"] = (_sd.isReady() && _sd.fileExists("/config.json"));
+        doc["version_lafvin"] = ROVER_LAFVIN_VERSION;
+        doc["version_c6"] = _c6Version;
+        doc["version_bundle"] = ROVER_FIRMWARE_VERSION_STR;
+        doc["build_date"] = __DATE__;
         String out;
         serializeJson(doc, out);
         _server.send(200, "application/json", out);
@@ -2434,10 +2668,11 @@ private:
             _server.client().setTimeout(30000);
             _uploadSuccess = false;
             _isBusy = true;
+            _c6OtaProgress = 5;
             _c6OtaState = "UPLOADING";
-            _c6OtaDetail = "A receber binario c6.bin...";
+            _c6OtaDetail = "A receber binario c6.bin no cartao SD...";
             Serial.printf("[OTA C6] Recebendo firmware: %s\n", upload.filename.c_str());
-            if (_display) _display->bootLogf(UI_CYAN, 30, "[OTA] A receber C6...");
+            if (_display) _display->showOtaScreen("COPROCESSADOR C6", "PASSO 1/2: RECEBER FICHEIRO", 5, _c6OtaDetail.c_str(), UI_CYAN);
 
             if (_sd.isReady()) {
                 if (!_sd.fileExists("/firmware")) {
@@ -2459,9 +2694,11 @@ private:
                 _uploadFile.flush();
                 _uploadFile.close();
                 _uploadSuccess = true;
+                _c6OtaProgress = 15;
                 _c6OtaState = "SAVED";
-                _c6OtaDetail = String("Ficheiro gravado: ") + upload.totalSize + " bytes";
+                _c6OtaDetail = String("Ficheiro guardado no SD (") + (upload.totalSize / 1024) + " KB)";
                 Serial.printf("[OTA C6] Firmware gravado no SD: %u bytes\n", upload.totalSize);
+                if (_display) _display->showOtaScreen("COPROCESSADOR C6", "PASSO 1/2: FICHEIRO GUARDADO", 15, _c6OtaDetail.c_str(), UI_YELLOW);
             }
             _isBusy = false;
         } else if (upload.status == UPLOAD_FILE_ABORTED) {
@@ -2470,6 +2707,7 @@ private:
             _c6OtaDetail = "Upload abortado";
             if (_uploadFile) _uploadFile.close();
             _isBusy = false;
+            if (_display) _display->showOtaScreen("COPROCESSADOR C6", "PASSO 1/2: FALHA NO UPLOAD", 0, "Envio do ficheiro c6.bin abortado", UI_RED);
         }
     }
 
@@ -2484,10 +2722,13 @@ private:
         String pass = _wifi.getConnectedPassword();
         String ip   = _wifi.getIPAddress();
 
-        // Se IP estiver a 0.0.0.0 ou SSID invalido, recorrer a credenciais de AP
-        if (ip == "0.0.0.0" || ssid.isEmpty()) {
-            ssid = _wifi.getSSID();
+        // Se estiver em modo AP, IP for 0.0.0.0 ou SSID desconectado, garantir credenciais do AP
+        if (_wifi.isAPMode() || ip == "0.0.0.0" || ssid == "Desconectado" || ssid.isEmpty()) {
+            char apName[32];
+            snprintf(apName, sizeof(apName), "WINDDRAGONS-ROVER-%02d", _roverId);
+            ssid = (_wifi.getSSID() != "Desconectado" && !_wifi.getSSID().isEmpty()) ? _wifi.getSSID() : String(apName);
             pass = _wifi.getAPPassword();
+            if (pass.isEmpty()) pass = "winddragon";
             ip = "192.168.4.1";
         }
 
@@ -2499,9 +2740,10 @@ private:
             _commandQueueCb(cmd.c_str());
         }
 
+        _c6OtaProgress = 20;
         _c6OtaState = "STARTING";
-        _c6OtaDetail = "Comando de download enviado ao Coprocessador C6";
-        if (_display) _display->bootLogf(UI_CYAN, 50, "[OTA] C6 a atualizar...");
+        _c6OtaDetail = "A aguardar ligacao do Coprocessador C6...";
+        if (_display) _display->showOtaScreen("COPROCESSADOR C6", "PASSO 1/2: DOWNLOAD C6", 20, _c6OtaDetail.c_str(), UI_YELLOW);
 
         _server.send(200, "application/json", "{\"success\":true,\"state\":\"STARTING\",\"url\":\"" + otaUrl + "\"}");
     }
@@ -2510,6 +2752,7 @@ private:
         JsonDocument doc;
         doc["state"] = _c6OtaState;
         doc["detail"] = _c6OtaDetail;
+        doc["progress"] = _c6OtaProgress;
         doc["time"] = millis();
         String res;
         serializeJson(doc, res);
@@ -2521,36 +2764,50 @@ private:
         if (upload.status == UPLOAD_FILE_START) {
             _server.client().setTimeout(40000);
             _isBusy = true;
+            _lafvinOtaBytes = 0;
             Serial.printf("[OTA LAFVIN] A iniciar gravacao: %s\n", upload.filename.c_str());
-            if (_display) _display->bootLogf(UI_CYAN, 70, "[OTA] A gravar Master...");
+            if (_display) _display->showOtaScreen("MASTER LAFVIN", "PASSO 2/2: INICIO GRAVACAO", 0, "A preparar particao Flash OTA...", UI_YELLOW);
             if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
                 Update.printError(Serial);
+                if (_display) _display->showOtaScreen("MASTER LAFVIN", "FALHA NA FLASH", 0, "Erro ao iniciar Update OTA", UI_RED);
             }
         } else if (upload.status == UPLOAD_FILE_WRITE) {
             yield();
             if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
                 Update.printError(Serial);
+                if (_display) _display->showOtaScreen("MASTER LAFVIN", "FALHA NA FLASH", 0, "Erro ao gravar bloco Flash", UI_RED);
+            } else {
+                _lafvinOtaBytes += upload.currentSize;
+                size_t totalExpected = _server.header("Content-Length").toInt();
+                uint8_t pct = (totalExpected > 0) ? (uint8_t)((_lafvinOtaBytes * 100) / totalExpected) : 50;
+                char d[48];
+                snprintf(d, sizeof(d), "%u KB gravados na particao Flash", (unsigned)(_lafvinOtaBytes / 1024));
+                if (_display) _display->showOtaScreen("MASTER LAFVIN", "PASSO 2/2: A GRAVAR FLASH", pct, d, UI_CYAN);
             }
         } else if (upload.status == UPLOAD_FILE_END) {
             if (Update.end(true)) {
                 Serial.printf("[OTA LAFVIN] Gravacao concluida: %u bytes\n", upload.totalSize);
-                if (_display) _display->bootLogf(UI_GREEN, 100, "[OTA] Master OK! A reiniciar...");
+                if (_display) _display->showOtaScreen("MASTER LAFVIN", "CONCLUIDO COM SUCESSO", 100, "100% OK! A reiniciar Rover...", UI_GREEN);
             } else {
                 Update.printError(Serial);
+                if (_display) _display->showOtaScreen("MASTER LAFVIN", "FALHA NA VERIFICACAO", 0, "Erro de integridade na Flash", UI_RED);
             }
             _isBusy = false;
         } else if (upload.status == UPLOAD_FILE_ABORTED) {
             Update.end();
             _isBusy = false;
             Serial.println("[OTA LAFVIN] Gravacao abortada");
+            if (_display) _display->showOtaScreen("MASTER LAFVIN", "FALHA NA GRAVACAO", 0, "Upload abortado", UI_RED);
         }
     }
 
     void handleApiOtaLafvinFinish() {
         _server.sendHeader("Connection", "close");
         if (Update.hasError()) {
+            if (_display) _display->showOtaScreen("MASTER LAFVIN", "FALHA NA GRAVACAO", 0, "Erro ao gravar firmware", UI_RED);
             _server.send(500, "application/json", "{\"success\":false,\"error\":\"Erro ao gravar firmware do Master Lafvin\"}");
         } else {
+            if (_display) _display->showOtaScreen("MASTER LAFVIN", "ATUALIZACAO CONCLUIDA", 100, "Master OK! A reiniciar em 2 segundos...", UI_GREEN);
             _server.send(200, "application/json", "{\"success\":true,\"message\":\"Master Lafvin atualizado com sucesso! A reiniciar em 2 segundos...\"}");
             _restartScheduled = millis() + 1500;
         }

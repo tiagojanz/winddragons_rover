@@ -20,6 +20,18 @@ C6_BIN = os.path.join(BUILD_DIR, "rover_c6", "firmware.bin")
 LAFVIN_BIN = os.path.join(BUILD_DIR, "rover_lafvin", "firmware.bin")
 OUTPUT_ZIP = os.path.join(DIST_DIR, "rover_firmware.zip")
 
+DATA_DIR = os.path.join(PROJECT_DIR, "data")
+WWW_DIR = os.path.join(DATA_DIR, "www")
+SYSTEM_DIR = os.path.join(DATA_DIR, "system")
+
+def ensure_web_assets():
+    script = os.path.join(PROJECT_DIR, "scripts", "build_web_assets.py")
+    if os.path.isfile(script):
+        print("[BUNDLE] A gerar/atualizar ficheiros web frontend (build_web_assets.py)...")
+        res = subprocess.run([sys.executable, script], cwd=PROJECT_DIR, capture_output=True, text=True)
+        if res.returncode != 0:
+            print(f"[BUNDLE] AVISO ao gerar ficheiros web: {res.stderr}")
+
 def ensure_binaries():
     needs_build = []
     if not os.path.isfile(C6_BIN):
@@ -37,6 +49,17 @@ def ensure_binaries():
             print("[BUNDLE] ERRO: Falha na compilação do firmware.")
             sys.exit(1)
 
+def get_rover_version():
+    ver_file = os.path.join(PROJECT_DIR, "include", "rover_version.h")
+    if os.path.isfile(ver_file):
+        with open(ver_file, "r", encoding="utf-8") as f:
+            for line in f:
+                if "#define ROVER_VERSION_STR" in line:
+                    parts = line.split('"')
+                    if len(parts) >= 2:
+                        return parts[1]
+    return "2.1.0"
+
 def format_size(bytes_num):
     for unit in ['B', 'KB', 'MB']:
         if bytes_num < 1024.0:
@@ -45,10 +68,12 @@ def format_size(bytes_num):
     return f"{bytes_num:.1f} GB"
 
 def main():
+    version_str = get_rover_version()
     print("\n=======================================================")
-    print("  WINDDRAGONS ROVER - DUAL FIRMWARE BUNDLER (OTA)")
+    print(f"  WINDDRAGONS ROVER - FULL BUNDLER (FW + WEB v{version_str})")
     print("=======================================================")
     
+    ensure_web_assets()
     ensure_binaries()
 
     if not os.path.isfile(C6_BIN) or not os.path.isfile(LAFVIN_BIN):
@@ -62,33 +87,78 @@ def main():
 
     manifest = {
         "project": "WindDragons Rover",
+        "version": f"v{version_str}",
         "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
         "timestamp": int(time.time()),
         "firmwares": {
             "c6": {
                 "file": "c6.bin",
+                "version": f"v{version_str}",
                 "role": "Coprocessor (LoRa, Actuators, GPS, Power)",
                 "size_bytes": c6_size
             },
             "lafvin": {
                 "file": "lafvin.bin",
+                "version": f"v{version_str}",
                 "role": "Master (LCD ST7789, MicroSD, WebServer, WiFi)",
                 "size_bytes": lafvin_size
             }
+        },
+        "web_assets": {
+            "version": f"v{version_str}",
+            "files_count": 0,
+            "total_bytes": 0
         }
     }
 
+    print(f"[BUNDLE] Versão Pacote    : v{version_str}")
     print(f"[BUNDLE] Coprocessador C6 : {C6_BIN} ({format_size(c6_size)})")
     print(f"[BUNDLE] Master Lafvin    : {LAFVIN_BIN} ({format_size(lafvin_size)})")
 
+    web_file_count = 0
+    web_total_bytes = 0
+
     with zipfile.ZipFile(OUTPUT_ZIP, "w", zipfile.ZIP_DEFLATED) as z:
+        # 1. Firmware Binaries
         z.write(C6_BIN, arcname="c6.bin")
         z.write(LAFVIN_BIN, arcname="lafvin.bin")
+
+        # 2. Web Assets (/www/)
+        if os.path.isdir(WWW_DIR):
+            for root, dirs, files in os.walk(WWW_DIR):
+                for f in files:
+                    if f.startswith("."):
+                        continue
+                    full_path = os.path.join(root, f)
+                    rel_to_www = os.path.relpath(full_path, WWW_DIR)
+                    arcname = "www/" + rel_to_www.replace("\\", "/")
+                    z.write(full_path, arcname=arcname)
+                    web_file_count += 1
+                    web_total_bytes += os.path.getsize(full_path)
+
+        # 3. System Assets (/system/)
+        if os.path.isdir(SYSTEM_DIR):
+            for root, dirs, files in os.walk(SYSTEM_DIR):
+                for f in files:
+                    if f.startswith("."):
+                        continue
+                    full_path = os.path.join(root, f)
+                    rel_to_sys = os.path.relpath(full_path, SYSTEM_DIR)
+                    arcname = "system/" + rel_to_sys.replace("\\", "/")
+                    z.write(full_path, arcname=arcname)
+                    web_file_count += 1
+                    web_total_bytes += os.path.getsize(full_path)
+
+        manifest["web_assets"]["files_count"] = web_file_count
+        manifest["web_assets"]["total_bytes"] = web_total_bytes
+
+        # 4. Manifest
         z.writestr("manifest.json", json.dumps(manifest, indent=2))
 
     zip_size = os.path.getsize(OUTPUT_ZIP)
+    print(f"[BUNDLE] Ficheiros Web    : {web_file_count} ficheiros ({format_size(web_total_bytes)})")
     print("-------------------------------------------------------")
-    print(f"[BUNDLE] ★ Pacote OTA gerado com sucesso!")
+    print(f"[BUNDLE] ★ Pacote completo OTA gerado com sucesso!")
     print(f"[BUNDLE] Destino  : {OUTPUT_ZIP}")
     print(f"[BUNDLE] Tamanho  : {format_size(zip_size)} (comprimido)")
     print("=======================================================\n")

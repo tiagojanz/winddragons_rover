@@ -171,6 +171,58 @@ public:
     int getTxPin() const { return currentTxPin; }
     uint32_t getBaud() const { return currentBaud; }
     const char* getRawSentence() const { return lastValidSentence; }
+    uint8_t getRateHz() const { return currentRateHz; }
+
+    // Envio de instrução NMEA / PAIR com cálculo automático de Checksum XOR
+    bool sendNmeaCommand(const char* payload) {
+        if (!isHwEnabled) return false;
+        const char* p = payload;
+        while (*p == ' ' || *p == '$') p++; // Ignora espaços e '$' inicial
+
+        // Remover asterisco e checksum antigo caso o utilizador já os tenha incluído
+        const char* star = strchr(p, '*');
+        char cleanCmd[96];
+        if (star) {
+            size_t len = star - p;
+            if (len >= sizeof(cleanCmd)) len = sizeof(cleanCmd) - 1;
+            strncpy(cleanCmd, p, len);
+            cleanCmd[len] = '\0';
+            p = cleanCmd;
+        }
+
+        // Calcula checksum XOR de todos os caracteres do payload
+        uint8_t cs = 0;
+        for (size_t i = 0; p[i] != '\0'; i++) {
+            cs ^= (uint8_t)p[i];
+        }
+
+        char formatted[128];
+        snprintf(formatted, sizeof(formatted), "$%s*%02X\r\n", p, cs);
+        gpsSerial.print(formatted);
+        gpsSerial.flush();
+        Serial.printf("[GPS CMD] Enviado ao LC29H: %s", formatted);
+        return true;
+    }
+
+    // Configura taxa de navegação (1, 2, 5 ou 10 Hz) e opcionalmente grava na Flash NVRAM
+    bool setUpdateRate(uint8_t hz, bool saveToFlash = true) {
+        if (hz < 1) hz = 1;
+        if (hz > 10) hz = 10;
+        uint32_t intervalMs = 1000 / hz;
+
+        char cmd[32];
+        snprintf(cmd, sizeof(cmd), "PAIR050,%lu", (unsigned long)intervalMs);
+        bool ok = sendNmeaCommand(cmd);
+
+        if (ok) {
+            currentRateHz = hz;
+            if (saveToFlash) {
+                delay(50);
+                sendNmeaCommand("PAIR513"); // Grava na Flash/NVRAM do Quectel LC29H
+            }
+        }
+        return ok;
+    }
 
     // Distância em metros entre o ponto atual e um ponto alvo
     double distanceTo(double targetLat, double targetLng) {
@@ -191,6 +243,7 @@ private:
     int currentRxPin;
     int currentTxPin;
     uint32_t currentBaud;
+    uint8_t currentRateHz = 1;
     bool isLocked;
     uint32_t lastScanTime;
     uint8_t scanStep;
@@ -207,3 +260,4 @@ private:
     bool manualFix;
     bool hasManualData;
 };
+
