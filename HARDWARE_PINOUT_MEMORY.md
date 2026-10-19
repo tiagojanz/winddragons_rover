@@ -4,15 +4,24 @@
 
 ---
 
-## 1. Visão Geral da Arquitetura Dual-ESP32-C6
+## 1. Visão Geral da Arquitetura Universal Dual-ESP32-C6 (Rover & Base Station)
 
-O sistema opera com dois microcontroladores **ESP32-C6** distribuídos entre tarefas de interface/armazenamento e controlo/telemetria:
+Tanto o **Rover** como a **Base Station** adotam de forma padronizada a **arquitetura Dual ESP32-C6** distribuída entre interface/armazenamento e telemetria/controlo de rádio:
 
-- **Master Board (Painel Frontal):** Módulo comercial **Lafvin ESP32-C6 LCD 1.47" IPS** com leitor de cartão MicroSD (TF Card) integrado.
-  - Responsabilidade: Ecrã ST7789, Leitura/Escrita no Cartão SD, Leitura do Joystick PS5 e Botões frontais, Interface de utilizador.
-- **Slave Board (Painel Traseiro):** Placa **ESP32-C6 DevKitC-1**.
-  - Responsabilidade: Rádio SX1278 LoRa 433 MHz, GPS, PWM para 4x Servos/ESC (Leme, Guincho, Vela/Rack, Motor), Sensores analógicos (Bateria, Corrente, Sensor de Água).
-- **Link Inter-ESP:** UART de alta velocidade a **921600 baud** (comunicação bidirecional contínua com verificação CRC / Heartbeat).
+### 1.1. Motivação e Raciocínio de Hardware
+Na placa comercial **Lafvin ESP32-C6 (LCD 1.47" IPS + Leitor MicroSD)**, o barramento SPI de hardware está fortemente acoplado entre o ecrã ST7789 (`GPIO 6, 7, 14, 15, 21, 22`) e o leitor de cartão MicroSD (`GPIO 4 = CS`, `GPIO 5 = MISO`, `GPIO 6 = MOSI`, `GPIO 7 = SCLK`). A tentativa de ligar o rádio LoRa diretamente ao Lafvin (seja por partilha de SPI ou por Soft-SPI) gera colisões de barramento, corrupção de cartões SD e perda de pacotes de rádio em alta taxa de polling.
+
+Por esta razão, **o rádio LoRa SX1278 (433 MHz) é delegado exclusivamente ao Coprocessador ESP32-C6 (DevKitC-1)**, com barramento SPI de hardware dedicado e livre de interferências, tanto no Rover como na Base Station.
+
+### 1.2. Divisão de Responsabilidades
+- **Master Board (Painel Frontal — Lafvin ESP32-C6 LCD 1.47" IPS + TF Card):**
+  - **No Rover:** Ecrã ST7789, Cartão MicroSD (logs e web assets), Servidor Web/WiFi (STA + AP), Leitura analógica do Joystick PS5 local, Coordenador de OTA Dual.
+  - **Na Base Station:** Ecrã ST7789 (estado da frota, menus, telemetria), Cartão MicroSD (web assets `/www/base/`, registo de missões/waypoints), Servidor Web/WiFi (Fleet Manager, Dashboard de Regata, Mapas de GPS), Joystick PS5 de controlo remoto da frota e botões de navegação, Coordenador de OTA Dual.
+- **Slave / Coprocessor Board (Painel Traseiro — ESP32-C6 DevKitC-1):**
+  - **No Rover:** Rádio SX1278 LoRa 433 MHz (FSPI de hardware), Módulo GNSS Quectel LC29H, Controlo PWM LEDC (ESC Motor, Leme, Guincho Âncora, Trinco da Cremalheira), Sensores (Bateria 6S LiPo, Sensor Hall DRV5032 do carretel, Fim de curso mecânico, Fita Strobe WS2812B).
+  - **Na Base Station:** Rádio SX1278 LoRa 433 MHz (FSPI de hardware dedicado), Escuta e Polling contínuo de pacotes LoRa de telemetria de toda a frota (Rovers 1 a 8), Transmissão de comandos de manobra, emergência e waypoints pelo ar.
+- **Link Inter-ESP:** UART bidirecional de alta velocidade a **921600 baud** (`8N1`), com verificação de integridade, telemetria contínua e canal transparente de atualização OTA.
+- **Sistema OTA Dual:** Tanto o Rover como a Base suportam atualização remota completa através de pacotes de firmware (`rover_firmware.zip` e `base_firmware.zip`), atualizando o Coprocessador C6 via UART e o Master Lafvin via partição OTA local.
 
 ---
 
@@ -139,6 +148,23 @@ Para ligação futura de sensores analógicos/digitais, atuadores ou barramentos
 
 - **Serigrafia Frontal (`F.SilkS`):** Caixa delimitadora retangular com identificadores em negrito: `EXPANSION`, `IO1  3V3`, `IO11  5V` e `GND  GND`.
 - **Validação DRC:** **0 erros DRC, 0 itens desconectados**.
+
+### 3.6. Arquitetura da Base Station (Dual ESP32-C6)
+A **Base Station** replica a arquitetura física e lógica do Rover para garantir total imunidade contra colisões no barramento SPI:
+- **Base Master (Lafvin ESP32-C6):**
+  - Ecrã IPS ST7789 1.47" (320x172) nos pinos dedicados (`GPIO 6, 7, 14, 15, 21, 22`).
+  - Leitor de Cartão MicroSD no SPI partilhado com CS no `GPIO 4` e MISO no `GPIO 5`. Armazena o frontend web `/www/base/`, ficheiros de rotas e registo de telemetria da frota.
+  - Joystick Analógico PS5 (`GPIO 3 = X`, `GPIO 0 = Y`) para comando manual das boias.
+  - Botão BOOT (`GPIO 9`) para alternar páginas e menus.
+  - WiFi AP (`WindDragons_Base_XX`) e STA para dashboard web local e sincronização cloud.
+  - Porta de telemetria e controlo: Envia comandos para o C6 Coprocessador e recebe telemetria dos rovers via UART.
+- **Base Coprocessor (ESP32-C6 DevKitC-1):**
+  - Módulo Ra-02 LoRa SX1278 (433 MHz) com barramento SPI de hardware exclusivo (`SCK=GPIO 5`, `MISO=GPIO 4`, `MOSI=GPIO 7`, `NSS=GPIO 6`, `DIO0=GPIO 0`).
+  - Escuta passiva contínua (RX) de telemetria dos rovers (1 a 8) e envio de pacotes de comando/polling via rádio.
+  - Comunicação com a placa Lafvin via Inter-ESP UART a 921600 baud (`TX=GPIO 13`, `RX=GPIO 22`).
+- **Firmwares Correspondentes:**
+  - `base_lafvin` (Master) e `base_c6` (Coprocessador LoRa).
+  - Ambos integrados no instalador e empacotador de OTA `base_firmware.zip`.
 
 ---
 

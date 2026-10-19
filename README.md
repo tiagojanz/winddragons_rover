@@ -1,46 +1,56 @@
 # WindDragons - Sistema de Telemetria e Controlo Náutico (Base & Rover)
 
-Projeto de automação e telemetria para boias robóticas náuticas (**Rovers**) e estação de controlo com ecrã (**Base**) baseado na placa **Lafvin ESP32-C6 com LCD 1.47" (ST7789)**.
+Projeto de automação e telemetria para boias robóticas náuticas autónomas (**Rovers**) e estação de controlo com ecrã (**Base Station**), baseado na **arquitetura universal Dual ESP32-C6** (Master Lafvin LCD 1.47" + Coprocessador DevKitC-1).
 
 ---
 
-## 🛰️ Arquitetura do Sistema
+## 🛰️ Arquitetura do Sistema (Dual ESP32-C6 em Ambos os Nós)
 
 ```
 [ WindDragons Portal (Cloud) ]
         ▲
         │ HTTPS REST API (JSON)
         ▼
-   [ BASE STATION (ESP32-C6) ]  <--- Joystick analógico (4 vias) + Ecrã LCD 1.47"
-        ▲                      <--- Botão BOOT: Cicla entre ROVER-01 .. ROVER-08
-        │ LoRa SX1278 (433MHz)
-        ▼
- ┌──────────────────────┬──────────────────────┐
- │                      │                      │
- ▼                      ▼                      ▼
-[ ROVER-01 (Boia) ]   [ ROVER-02 (Boia) ]    [ ROVER-03..08 ]
- - ESC Motor            - ESC Motor            - ...
- - Servo Leme           - Servo Leme
- - Guincho Âncora       - Guincho Âncora
- - GPS LC29H            - GPS LC29H
+┌────────────────────────────────────────────────────────┐
+│ BASE STATION (Dual ESP32-C6)                           │
+│  - Master Lafvin: LCD 1.47" IPS, MicroSD, Web/WiFi,   │
+│                   Joystick PS5 e Coordenador OTA Dual │
+│         ▲                                              │
+│         │ UART Inter-ESP (921600 baud)                │
+│         ▼                                              │
+│  - Coprocessador C6: Rádio LoRa SX1278 (433MHz)       │
+└──────────────────────────┬─────────────────────────────┘
+                           │
+                           │ LoRa 433 MHz (Ra-02 / SX1278)
+                           ▼
+┌────────────────────────────────────────────────────────┐
+│ ROVER (Boia Náutica - Dual ESP32-C6)                   │
+│  - Master Lafvin: LCD 1.47" IPS, MicroSD, Web/WiFi,   │
+│                   Joystick local e Coordenador OTA    │
+│         ▲                                              │
+│         │ UART Inter-ESP (921600 baud)                │
+│         ▼                                              │
+│  - Coprocessador C6: LoRa 433MHz, GPS LC29H, PWM     │
+│    (Motor, Leme, Guincho, Trinco) e Sensores          │
+└────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 🔌 Esquema de Ligações (Pinout)
+## 🔌 Esquema de Barramentos e Conexões
 
-Ambas as placas usam a mesma pinagem para o módulo **LoRa Ra-02 (SX1278 a 433MHz)** no barramento SPI:
+O módulo **LoRa Ra-02 (SX1278 a 433MHz)** é ligado exclusivamente ao **Coprocessador ESP32-C6** (evitando conflito com o barramento SPI partilhado entre o LCD e o MicroSD do Lafvin):
 
-### Módulo LoRa SX1278 (Ra-02 433MHz) — Em ambas as placas
+### Módulo LoRa SX1278 (433MHz) — Coprocessador ESP32-C6 DevKitC
 | Pino Ra-02 | Pino ESP32-C6 | Notas |
 | :--- | :--- | :--- |
-| **VCC** | `3.3V` | Nunca ligar a 5V |
-| **GND** | `GND` | Terra comum |
-| **SCK** | `IO2` | SPI SCLK (Top Header Pino 4) |
-| **MOSI**| `IO3` | SPI MOSI (Top Header Pino 3) |
-| **MISO**| `IO19`| SPI MISO (Bottom Header Pino 3) — Sem conflito com MicroSD |
-| **NSS / CS** | `IO20` | CS do LoRa (Bottom Header Pino 4) — Sem conflito com MicroSD |
-| **DIO0**| `IO23`| Interrupção de pacotes (Bottom Header Pino 5) — Sem conflito com USB |
+| **VCC** | `3.3V` | Barramento independente 3.3V_C6 |
+| **GND** | `GND` | Terra comum de referência |
+| **SCK** | `GPIO 5` | Hardware SPI SCLK |
+| **MOSI**| `GPIO 7` | Hardware SPI MOSI |
+| **MISO**| `GPIO 4` | Hardware SPI MISO |
+| **NSS / CS** | `GPIO 6` | Hardware SPI CS do LoRa |
+| **DIO0**| `GPIO 0` | Interrupção de receção de pacotes |
 
 ---
 
