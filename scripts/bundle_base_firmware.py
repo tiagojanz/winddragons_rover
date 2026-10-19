@@ -129,7 +129,7 @@ def main():
         if os.path.isdir(WWW_DIR):
             for root, dirs, files in os.walk(WWW_DIR):
                 for f in files:
-                    if f.startswith("."):
+                    if f.startswith(".") or "original" in f:
                         continue
                     full_path = os.path.join(root, f)
                     rel_to_www = os.path.relpath(full_path, WWW_DIR)

@@ -19,18 +19,127 @@ WWW_DIR.mkdir(parents=True, exist_ok=True)
 # ----------------------------------------------------------------------
 # 1. STYLE.CSS
 # ----------------------------------------------------------------------
-STYLE_CSS = """/* WindDragons Rover - Modern Marine Dark UI System */
+STYLE_CSS = """/* WindDragons Rover - Modern Marine UI System (Dual Dark & Light Theme) */
 :root {
+  color-scheme: dark;
   --bg: #0b1329;
+  --bg-subtle: #0f172a;
   --card: #16203c;
   --card-border: #233258;
+  --card-hover: #1e2c52;
   --primary: #06b6d4;
   --primary-hover: #0891b2;
+  --primary-rgb: 6, 182, 212;
   --text: #f8fafc;
+  --text-muted: #94a3b8;
   --muted: #94a3b8;
   --green: #10b981;
   --yellow: #f59e0b;
   --red: #ef4444;
+
+  --navbar-bg: linear-gradient(135deg, #0e1a38, #162348);
+  --navbar-border: #233258;
+  --navbar-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  --nav-links-bg: rgba(0, 0, 0, 0.25);
+  --nav-item-color: #94a3b8;
+  --nav-item-hover-bg: rgba(255, 255, 255, 0.06);
+  --nav-item-hover-color: #f8fafc;
+  --nav-item-active-bg: var(--primary);
+  --nav-item-active-color: #0f172a;
+
+  --stat-box-bg: rgba(0, 0, 0, 0.2);
+  --stat-box-border: rgba(255, 255, 255, 0.05);
+
+  --input-bg: #0f172a;
+  --input-border: #233258;
+  --input-text: #ffffff;
+
+  --btn-secondary-bg: #334155;
+  --btn-secondary-hover: #475569;
+  --btn-secondary-color: #ffffff;
+
+  --table-border: #233258;
+  --table-hover: rgba(255, 255, 255, 0.03);
+
+  --badge-ap-bg: #78350f;
+  --badge-ap-color: #fde68a;
+  --badge-ap-border: #b45309;
+
+  --badge-sta-bg: #064e3b;
+  --badge-sta-color: #a7f3d0;
+  --badge-sta-border: #059669;
+
+  --badge-ver-bg: rgba(6, 182, 212, 0.12);
+  --badge-ver-border: rgba(6, 182, 212, 0.3);
+  --badge-ver-color: var(--primary);
+
+  --badge-station-bg: rgba(2, 132, 199, 0.2);
+  --badge-station-border: rgba(56, 189, 248, 0.3);
+  --badge-station-color: #38bdf8;
+
+  --card-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+  --modal-overlay: rgba(0, 0, 0, 0.75);
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f8fafc;
+  --bg-subtle: #f1f5f9;
+  --card: #ffffff;
+  --card-border: #cbd5e1;
+  --card-hover: #f1f5f9;
+  --primary: #0284c7;
+  --primary-hover: #0369a1;
+  --primary-rgb: 2, 132, 199;
+  --text: #0f172a;
+  --text-muted: #64748b;
+  --muted: #64748b;
+  --green: #059669;
+  --yellow: #d97706;
+  --red: #dc2626;
+
+  --navbar-bg: linear-gradient(135deg, #ffffff, #f1f5f9);
+  --navbar-border: #cbd5e1;
+  --navbar-shadow: 0 2px 10px rgba(0, 0, 0, 0.07);
+  --nav-links-bg: #e2e8f0;
+  --nav-item-color: #475569;
+  --nav-item-hover-bg: rgba(2, 132, 199, 0.1);
+  --nav-item-hover-color: #0f172a;
+  --nav-item-active-bg: var(--primary);
+  --nav-item-active-color: #ffffff;
+
+  --stat-box-bg: #f8fafc;
+  --stat-box-border: #e2e8f0;
+
+  --input-bg: #ffffff;
+  --input-border: #cbd5e1;
+  --input-text: #0f172a;
+
+  --btn-secondary-bg: #e2e8f0;
+  --btn-secondary-hover: #cbd5e1;
+  --btn-secondary-color: #1e293b;
+
+  --table-border: #e2e8f0;
+  --table-hover: rgba(2, 132, 199, 0.05);
+
+  --badge-ap-bg: #fef3c7;
+  --badge-ap-color: #92400e;
+  --badge-ap-border: #fcd34d;
+
+  --badge-sta-bg: #d1fae5;
+  --badge-sta-color: #065f46;
+  --badge-sta-border: #a7f3d0;
+
+  --badge-ver-bg: rgba(2, 132, 199, 0.1);
+  --badge-ver-border: rgba(2, 132, 199, 0.25);
+  --badge-ver-color: var(--primary);
+
+  --badge-station-bg: rgba(2, 132, 199, 0.12);
+  --badge-station-border: rgba(2, 132, 199, 0.3);
+  --badge-station-color: #0284c7;
+
+  --card-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+  --modal-overlay: rgba(15, 23, 42, 0.45);
 }
 
 * {
@@ -46,13 +155,14 @@ body {
   padding-bottom: 40px;
   line-height: 1.5;
   min-height: 100vh;
+  transition: background 0.25s ease, color 0.25s ease;
 }
 
 /* Navbar */
 .navbar {
-  background: linear-gradient(135deg, #0e1a38, #162348);
-  border-bottom: 1px solid var(--card-border);
-  padding: 12px 20px;
+  background: var(--navbar-bg);
+  border-bottom: 1px solid var(--navbar-border);
+  padding: 10px 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -61,21 +171,122 @@ body {
   position: sticky;
   top: 0;
   z-index: 100;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  box-shadow: var(--navbar-shadow);
+  transition: background 0.25s ease, border-color 0.25s ease;
 }
 
+/* Brand & Logotipo Oficial */
 .brand {
   font-size: 1.25rem;
   font-weight: 700;
   color: var(--text);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   text-decoration: none;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.brand-logo {
+  height: 36px;
+  width: auto;
+  max-width: 40px;
+  object-fit: contain;
+  vertical-align: middle;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.25));
+  transition: transform 0.25s ease;
+}
+
+.brand:hover .brand-logo {
+  transform: scale(1.08) rotate(-2deg);
 }
 
 .brand span {
+  color: var(--text);
+}
+
+.brand span.brand-sub, .brand #navRoverId {
   color: var(--primary);
+  font-weight: 800;
+}
+
+/* Visibilidade do Logotipo Consoante o Tema */
+:root:not([data-theme="light"]) .brand-logo.logo-light {
+  display: none !important;
+}
+:root:not([data-theme="light"]) .brand-logo.logo-dark {
+  display: inline-block !important;
+}
+
+[data-theme="light"] .brand-logo.logo-light {
+  display: inline-block !important;
+}
+[data-theme="light"] .brand-logo.logo-dark {
+  display: none !important;
+}
+
+/* Contentor de Ações e Badges da Navbar */
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Botão Alternador de Tema (Light / Dark) */
+.theme-toggle {
+  background: var(--stat-box-bg);
+  border: 1px solid var(--card-border);
+  color: var(--text);
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  position: relative;
+  overflow: hidden;
+  padding: 0;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  flex-shrink: 0;
+}
+
+.theme-toggle:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+  transform: scale(1.08);
+}
+
+.theme-toggle .icon-sun,
+.theme-toggle .icon-moon {
+  font-size: 1.05rem;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+  position: absolute;
+}
+
+/* No tema escuro: mostra o sol âmbar brilhante (clique para alternar para tema claro) */
+:root:not([data-theme="light"]) .theme-toggle .icon-sun {
+  opacity: 1;
+  transform: scale(1) rotate(0deg);
+  color: #fbbf24;
+}
+:root:not([data-theme="light"]) .theme-toggle .icon-moon {
+  opacity: 0;
+  transform: scale(0.4) rotate(-90deg);
+}
+
+/* No tema claro: mostra a lua azul celeste (clique para alternar para tema escuro) */
+[data-theme="light"] .theme-toggle .icon-sun {
+  opacity: 0;
+  transform: scale(0.4) rotate(90deg);
+}
+[data-theme="light"] .theme-toggle .icon-moon {
+  opacity: 1;
+  transform: scale(1) rotate(0deg);
+  color: #0284c7;
 }
 
 .badge {
@@ -87,28 +298,44 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  transition: background 0.25s ease, border-color 0.25s ease;
 }
 
 .badge-ap {
-  background: #78350f;
-  color: #fde68a;
-  border: 1px solid #b45309;
+  background: var(--badge-ap-bg);
+  color: var(--badge-ap-color);
+  border: 1px solid var(--badge-ap-border);
 }
 
 .badge-sta {
-  background: #064e3b;
-  color: #a7f3d0;
-  border: 1px solid #059669;
+  background: var(--badge-sta-bg);
+  color: var(--badge-sta-color);
+  border: 1px solid var(--badge-sta-border);
+}
+
+.badge-ver {
+  background: var(--badge-ver-bg) !important;
+  border: 1px solid var(--badge-ver-border) !important;
+  color: var(--badge-ver-color) !important;
+  text-decoration: none;
+}
+
+.badge-station {
+  background: var(--badge-station-bg) !important;
+  border: 1px solid var(--badge-station-border) !important;
+  color: var(--badge-station-color) !important;
+  font-family: monospace;
 }
 
 .nav-links {
   display: flex;
   gap: 6px;
-  background: rgba(0, 0, 0, 0.25);
+  background: var(--nav-links-bg);
   padding: 4px;
   border-radius: 10px;
   border: 1px solid var(--card-border);
   overflow-x: auto;
+  transition: background 0.25s ease, border-color 0.25s ease;
 }
 
 .nav-item {
@@ -117,7 +344,7 @@ body {
   gap: 6px;
   padding: 8px 14px;
   border-radius: 8px;
-  color: var(--muted);
+  color: var(--nav-item-color);
   text-decoration: none;
   font-size: 0.875rem;
   font-weight: 600;
@@ -126,13 +353,13 @@ body {
 }
 
 .nav-item:hover {
-  color: var(--text);
-  background: rgba(255, 255, 255, 0.05);
+  color: var(--nav-item-hover-color);
+  background: var(--nav-item-hover-bg);
 }
 
 .nav-item.active {
-  background: var(--primary);
-  color: #0f172a;
+  background: var(--nav-item-active-bg);
+  color: var(--nav-item-active-color);
 }
 
 /* Layout */
@@ -148,7 +375,8 @@ body {
   border-radius: 14px;
   padding: 20px;
   margin-bottom: 20px;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--card-shadow);
+  transition: background 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
 }
 
 .card-title {
@@ -180,10 +408,11 @@ body {
 }
 
 .stat-box {
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--stat-box-bg);
   padding: 14px;
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--stat-box-border);
+  transition: background 0.25s ease, border-color 0.25s ease;
 }
 
 .stat-label {
@@ -218,6 +447,10 @@ body {
 
 .btn-primary {
   background: var(--primary);
+  color: #ffffff;
+}
+
+:root:not([data-theme="light"]) .btn-primary {
   color: #0f172a;
 }
 
@@ -235,12 +468,12 @@ body {
 }
 
 .btn-secondary {
-  background: #334155;
-  color: #fff;
+  background: var(--btn-secondary-bg);
+  color: var(--btn-secondary-color);
 }
 
 .btn-secondary:hover {
-  background: #475569;
+  background: var(--btn-secondary-hover);
 }
 
 .btn-group {
@@ -259,7 +492,7 @@ table {
 th, td {
   padding: 10px 12px;
   text-align: left;
-  border-bottom: 1px solid var(--card-border);
+  border-bottom: 1px solid var(--table-border);
   font-size: 0.875rem;
 }
 
@@ -269,22 +502,21 @@ th {
 }
 
 tr:hover td {
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--table-hover);
 }
 
 /* Inputs & Form Controls */
 input, select, textarea {
   width: 100%;
   padding: 10px 12px;
-  background: #0f172a;
-  border: 1px solid var(--card-border);
-  color: #fff;
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  color: var(--input-text);
   border-radius: 8px;
   margin-top: 6px;
   font-size: 0.9rem;
   outline: none;
-}
-
+  transition: background 0.25s ease, border-color 0.2s ease, color 0.25s ease;
 input:focus, select:focus, textarea:focus {
   border-color: var(--primary);
 }
@@ -296,7 +528,7 @@ input:focus, select:focus, textarea:focus {
 .progress-bg {
   width: 100%;
   height: 16px;
-  background: #0f172a;
+  background: var(--bg-subtle);
   border-radius: 8px;
   overflow: hidden;
   margin-top: 8px;
@@ -311,7 +543,7 @@ input:focus, select:focus, textarea:focus {
   width: 100%;
   -webkit-appearance: none;
   height: 10px;
-  background: #0f172a;
+  background: var(--bg-subtle);
   border-radius: 5px;
   outline: none;
 }
@@ -335,7 +567,7 @@ input:focus, select:focus, textarea:focus {
 }
 
 .explorer-card {
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--stat-box-bg);
   border: 1px solid var(--card-border);
   border-radius: 10px;
   padding: 14px 10px;
@@ -383,25 +615,26 @@ input:focus, select:focus, textarea:focus {
 }
 
 .explorer-card-actions button {
-  background: #334155;
+  background: var(--btn-secondary-bg);
   border: none;
-  color: #fff;
+  color: var(--btn-secondary-color);
   border-radius: 4px;
   padding: 4px 6px;
   font-size: 0.75rem;
   cursor: pointer;
+  transition: all 0.2s;
 }
 
 .explorer-card-actions button:hover {
   background: var(--primary);
-  color: #0f172a;
+  color: #fff;
 }
 
 .breadcrumb-bar {
   display: flex;
   align-items: center;
   gap: 6px;
-  background: rgba(0, 0, 0, 0.25);
+  background: var(--nav-links-bg);
   padding: 8px 12px;
   border-radius: 8px;
   border: 1px solid var(--card-border);
@@ -431,7 +664,7 @@ input:focus, select:focus, textarea:focus {
   display: none;
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: var(--modal-overlay);
   backdrop-filter: blur(4px);
   z-index: 200;
   align-items: center;
@@ -461,6 +694,44 @@ input:focus, select:focus, textarea:focus {
   display: none;
   z-index: 300;
   box-shadow: 0 10px 15px -3px rgba(0,0,0,0.4);
+}
+
+/* Compatibilidade do Tema Claro com blocos inline */
+[data-theme="light"] div[style*="background:rgba(15,23,42"],
+[data-theme="light"] div[style*="background: rgba(15, 23, 42"],
+[data-theme="light"] div[style*="background:rgba(15, 23, 42"],
+[data-theme="light"] div[style*="background: #090e1a"],
+[data-theme="light"] div[style*="background:#090e1a"] {
+  background: var(--stat-box-bg) !important;
+  border-color: var(--card-border) !important;
+}
+
+[data-theme="light"] input[style*="background:rgba(15,23,42"],
+[data-theme="light"] input[style*="background: #0f172a"],
+[data-theme="light"] input[style*="background:#0f172a"],
+[data-theme="light"] input[style*="background:#090e1a"],
+[data-theme="light"] select[style*="background:#090e1a"],
+[data-theme="light"] select[style*="background: #090e1a"] {
+  background: var(--input-bg) !important;
+  border-color: var(--input-border) !important;
+  color: var(--input-text) !important;
+}
+
+[data-theme="light"] .rate-btn {
+  background: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+  color: #475569 !important;
+}
+[data-theme="light"] .rate-btn.active {
+  background: rgba(2, 132, 199, 0.12) !important;
+  border-color: var(--primary) !important;
+  color: var(--primary) !important;
+}
+[data-theme="light"] .rate-btn .sub {
+  color: #64748b !important;
+}
+[data-theme="light"] .rate-btn.active .sub {
+  color: var(--primary) !important;
 }
 
 /* Font Awesome 6 Pro Solid (carregada do Cartão SD) */
@@ -675,7 +946,41 @@ function pollGlobalStatus() {
     .catch(() => {});
 }
 
+// --- GESTÃO DE TEMA CLARO / ESCURO (LIGHT / DARK) ---
+function initTheme() {
+  const saved = localStorage.getItem('wd_theme');
+  const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const theme = saved ? saved : (prefersDark ? 'dark' : 'dark');
+  setTheme(theme, false);
+}
+
+function setTheme(theme, save = true) {
+  document.documentElement.setAttribute('data-theme', theme);
+  if (save) {
+    try { localStorage.setItem('wd_theme', theme); } catch(e) {}
+  }
+  const btn = document.getElementById('themeToggleBtn');
+  if (btn) {
+    btn.setAttribute('aria-pressed', theme === 'dark' ? 'true' : 'false');
+    btn.title = theme === 'dark' ? 'Mudar para tema claro' : 'Mudar para tema escuro';
+  }
+}
+
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme') || 'dark';
+  const next = current === 'dark' ? 'light' : 'dark';
+  setTheme(next, true);
+  if (typeof showToast === 'function') {
+    showToast(next === 'dark' ? 'Tema escuro ativado' : 'Tema claro ativado');
+  }
+}
+
+if (typeof document !== 'undefined') {
+  initTheme();
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+  initTheme();
   pollGlobalStatus();
   setInterval(pollGlobalStatus, 3000);
 });
@@ -703,23 +1008,35 @@ def generate_html_page(title, active_tab, body_content):
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{title} - WindDragons Rover</title>
   <link rel="stylesheet" href="/style.css">
+  <script>
+    (function(){{
+      var t = localStorage.getItem('wd_theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', t);
+    }})();
+  </script>
   <script src="/app.js"></script>
 </head>
 <body>
   <header class="navbar">
     <a href="/" class="brand">
-      <i class="fa-solid fa-robot"></i> WindDragons <span id="navRoverId">Rover</span>
+      <img src="/assets/logo_black_800.png" alt="WindDragons Logo" class="brand-logo logo-light">
+      <img src="/assets/logo_white_800.png" alt="WindDragons Logo" class="brand-logo logo-dark">
+      <span>WindDragons</span> <span id="navRoverId">Rover</span>
     </a>
     <nav class="nav-links">
       {nav_links}
     </nav>
-    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+    <div class="nav-actions">
       <a href="/config" id="navVersionBadge" class="badge" style="background:rgba(6,182,212,0.12);border:1px solid rgba(6,182,212,0.3);color:var(--primary);text-decoration:none;font-size:0.75rem;display:inline-flex;align-items:center;gap:6px;" title="Ver detalhes de firmware nas Configurações">
         <i class="fa-solid fa-code-branch"></i> <span id="navLafvinVer">Lafvin: v2.1.0</span> &bull; <span id="navC6Ver">C6: ...</span>
       </a>
       <span id="navWifiBadge" class="badge badge-sta">
         <i class="fa-solid fa-wifi"></i> A carregar...
       </span>
+      <button type="button" class="theme-toggle" id="themeToggleBtn" onclick="toggleTheme()" title="Alternar tema claro/escuro" aria-label="Alternar tema claro/escuro">
+        <i class="fa-solid fa-sun icon-sun"></i>
+        <i class="fa-solid fa-moon icon-moon"></i>
+      </button>
     </div>
   </header>
 
@@ -763,17 +1080,25 @@ def generate_base_html_page(title, active_tab, body_content):
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{title} - WindDragons Base Station</title>
   <link rel="stylesheet" href="/style.css">
+  <script>
+    (function(){{
+      var t = localStorage.getItem('wd_theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', t);
+    }})();
+  </script>
   <script src="/app.js"></script>
 </head>
 <body>
   <header class="navbar">
     <a href="/" class="brand">
-      <i class="fa-solid fa-tower-broadcast"></i> WindDragons <span>Base Station</span>
+      <img src="/assets/logo_black_800.png" alt="WindDragons Logo" class="brand-logo logo-light">
+      <img src="/assets/logo_white_800.png" alt="WindDragons Logo" class="brand-logo logo-dark">
+      <span>WindDragons</span> <span class="brand-sub">Base Station</span>
     </a>
     <nav class="nav-links">
       {nav_links}
     </nav>
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+    <div class="nav-actions">
       <a href="/config" id="navVersionBadge" class="badge" style="background:rgba(6,182,212,0.12);border:1px solid rgba(6,182,212,0.3);color:var(--primary);text-decoration:none;font-size:0.75rem;display:inline-flex;align-items:center;gap:6px;" title="Ver versões das placas e atualização OTA na página de Configuração">
         <i class="fa-solid fa-code-branch"></i> <span id="navLafvinVer">Lafvin: v2.1.0</span> &bull; <span id="navC6Ver">C6: ...</span>
       </a>
@@ -786,6 +1111,10 @@ def generate_base_html_page(title, active_tab, body_content):
       <span id="navWifiBadge" class="badge badge-sta">
         <i class="fa-solid fa-wifi"></i> A carregar...
       </span>
+      <button type="button" class="theme-toggle" id="themeToggleBtn" onclick="toggleTheme()" title="Alternar tema claro/escuro" aria-label="Alternar tema claro/escuro">
+        <i class="fa-solid fa-sun icon-sun"></i>
+        <i class="fa-solid fa-moon icon-moon"></i>
+      </button>
     </div>
   </header>
 
@@ -2045,11 +2374,31 @@ async function onOtaFileSelected(file) {
     setOtaProgress(5, 'A atualizar frontend no Cartão SD (0/' + webFiles.length + ')...');
     otaLog('★ [Passo 1] A atualizar ' + webFiles.length + ' ficheiros web no Cartão MicroSD...', '#06b6d4');
     let okCount = 0;
+    const createdDirs = new Set(['/', '/www']);
     for (let i = 0; i < webFiles.length; i++) {
       const wf = webFiles[i];
       const parts = wf.path.split('/');
       const fileName = parts.pop();
       const dirPath = '/' + parts.join('/');
+      
+      // Assegura recursivamente a existência da pasta de destino no SD
+      if (dirPath && dirPath !== '/' && !createdDirs.has(dirPath)) {
+        const segs = dirPath.split('/').filter(Boolean);
+        let curr = '';
+        for (const s of segs) {
+          curr += '/' + s;
+          if (!createdDirs.has(curr)) {
+            try {
+              await fetch('/api/sd/mkdir', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ dir: curr, path: curr })
+              });
+              createdDirs.add(curr);
+            } catch(e) {}
+          }
+        }
+      }
       
       const pct = 5 + Math.round((i / webFiles.length) * 15); // 5% a 20%
       setOtaProgress(pct, 'A gravar /' + wf.path + ' (' + (i + 1) + '/' + webFiles.length + ')...');
@@ -3679,12 +4028,32 @@ async function onOtaFileSelected(file) {
     setOtaProgress(5, 'A atualizar frontend no Cartão SD da Base (0/' + webFiles.length + ')...');
     otaLog('★ [Passo 1] A atualizar ' + webFiles.length + ' ficheiros web no Cartão MicroSD...', '#06b6d4');
     let okCount = 0;
+    const createdDirs = new Set(['/', '/www']);
     for (let i = 0; i < webFiles.length; i++) {
       if (otaC6AbortRequested) return;
       const wf = webFiles[i];
       const parts = wf.path.split('/');
       const fileName = parts.pop();
       const dirPath = '/' + parts.join('/');
+      
+      // Assegura recursivamente a existência da pasta de destino no SD
+      if (dirPath && dirPath !== '/' && !createdDirs.has(dirPath)) {
+        const segs = dirPath.split('/').filter(Boolean);
+        let curr = '';
+        for (const s of segs) {
+          curr += '/' + s;
+          if (!createdDirs.has(curr)) {
+            try {
+              await fetch('/api/sd/mkdir', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ dir: curr, path: curr })
+              });
+              createdDirs.add(curr);
+            } catch(e) {}
+          }
+        }
+      }
       
       const pct = 5 + Math.round((i / webFiles.length) * 15); // 5% a 20%
       setOtaProgress(pct, 'A gravar /' + wf.path + ' (' + (i + 1) + '/' + webFiles.length + ')...');

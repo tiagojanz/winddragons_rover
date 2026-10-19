@@ -133,6 +133,15 @@ def sync_device(ip, device_type):
                 if upload_file(ip, f, "/www/leaflet"):
                     success += 1
 
+    assets_dir = WWW_DIR / "assets"
+    if assets_dir.exists():
+        make_sd_dir(ip, "/www/assets")
+        for f in sorted(assets_dir.iterdir()):
+            if f.is_file() and not f.name.startswith(".") and "original" not in f.name:
+                total += 1
+                if upload_file(ip, f, "/www/assets"):
+                    success += 1
+
     # 3. Páginas especializadas
     subfolder = "base" if device_type == "base" else "rover"
     src_dir = WWW_DIR / subfolder

@@ -2587,7 +2587,7 @@ private:
             return;
         }
 
-        bool ok = _sd.createDir(path.c_str());
+        bool ok = _sd.ensureDir(path.c_str());
 
         JsonDocument res;
         res["success"] = ok;
@@ -2607,6 +2607,9 @@ private:
             if (!dir.startsWith("/")) dir = "/" + dir;
             while (dir.length() > 1 && dir.endsWith("/")) {
                 dir = dir.substring(0, dir.length() - 1);
+            }
+            if (dir != "/" && dir.length() > 0) {
+                _sd.ensureDir(dir.c_str());
             }
 
             String filename = upload.filename;

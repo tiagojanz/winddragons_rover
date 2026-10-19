@@ -312,6 +312,50 @@ public:
     }
 
     /**
+     * Verifica se um directório existe
+     */
+    bool dirExists(const char* path) {
+        if (!_initialized || !path || strlen(path) == 0) return false;
+        String p = String(path);
+        if (!p.startsWith("/")) p = "/" + p;
+        while (p.length() > 1 && p.endsWith("/")) {
+            p = p.substring(0, p.length() - 1);
+        }
+        if (p == "/") return true;
+
+        prepareBus();
+        File f = SD.open(p.c_str());
+        bool exists = (f && f.isDirectory());
+        if (f) f.close();
+        digitalWrite(_csPin, HIGH);
+        return exists;
+    }
+
+    /**
+     * Garante que um directório (e todos os pais) existe, criando recursivamente
+     */
+    bool ensureDir(const char* path) {
+        if (!_initialized || !path || strlen(path) == 0) return false;
+        String p = String(path);
+        if (!p.startsWith("/")) p = "/" + p;
+        while (p.length() > 1 && p.endsWith("/")) {
+            p = p.substring(0, p.length() - 1);
+        }
+        if (p == "/") return true;
+        if (dirExists(p.c_str())) return true;
+
+        int idx = 1;
+        while ((idx = p.indexOf('/', idx)) != -1) {
+            String sub = p.substring(0, idx);
+            if (sub.length() > 0 && sub != "/" && !dirExists(sub.c_str())) {
+                createDir(sub.c_str());
+            }
+            idx++;
+        }
+        return createDir(p.c_str());
+    }
+
+    /**
      * Apaga um directório (recursivamente com todo o conteúdo ou apenas se vazio).
      * Não permite apagar a raiz ("/").
      */

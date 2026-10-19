@@ -5,6 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>GPS Frota - WindDragons Base</title>
   <link rel="stylesheet" href="/style.css">
+  <script>
+    (function(){
+      var t = localStorage.getItem('wd_theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
   <link rel="stylesheet" href="/leaflet/leaflet.css" onerror="this.onerror=null;this.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" onerror="this.style.display='none';">
   <script src="/app.js"></script>
@@ -370,12 +376,62 @@
       background: #7f1d1d;
       color: #fca5a5;
     }
+
+    /* Regras de Tema Claro para GPS Map HUD e Painéis */
+    [data-theme="light"] body {
+      background: #f8fafc;
+      color: #0f172a;
+    }
+    [data-theme="light"] .navbar {
+      background: #ffffff;
+      border-bottom-color: #e2e8f0;
+    }
+    [data-theme="light"] .brand {
+      color: #0f172a;
+    }
+    [data-theme="light"] .nav-links {
+      background: #e2e8f0;
+    }
+    [data-theme="light"] .nav-item {
+      color: #475569;
+    }
+    [data-theme="light"] .nav-item.active {
+      color: #0284c7;
+      background: rgba(2, 132, 199, 0.15);
+    }
+    [data-theme="light"] .gps-hud-bar {
+      background: rgba(255, 255, 255, 0.96);
+      border-bottom-color: #cbd5e1;
+    }
+    [data-theme="light"] .hud-select {
+      background: #f1f5f9;
+      color: #0284c7;
+      border-color: #0284c7;
+    }
+    [data-theme="light"] .hud-pill {
+      background: #f1f5f9;
+      border-color: #cbd5e1;
+      color: #0f172a;
+    }
+    [data-theme="light"] .quick-card,
+    [data-theme="light"] .panel-container,
+    [data-theme="light"] .modal-sheet {
+      background: rgba(255, 255, 255, 0.96) !important;
+      border-color: #cbd5e1 !important;
+      color: #0f172a !important;
+    }
+    [data-theme="light"] .stat-mini {
+      background: #f1f5f9 !important;
+      border-color: #e2e8f0 !important;
+    }
   </style>
 </head>
 <body>
   <header class="navbar">
     <a href="/" class="brand">
-      <i class="fa-solid fa-tower-broadcast"></i> WindDragons <span>Base</span>
+      <img src="/assets/logo_black_800.png" alt="WindDragons Logo" class="brand-logo logo-light" style="height:28px;max-width:32px;">
+      <img src="/assets/logo_white_800.png" alt="WindDragons Logo" class="brand-logo logo-dark" style="height:28px;max-width:32px;">
+      <span>WindDragons</span> <span class="brand-sub">Base</span>
     </a>
     <nav class="nav-links">
       <a href="/mission" class="nav-item"><i class="fa-solid fa-flag-checkered"></i> Missão</a>
@@ -387,6 +443,12 @@
       <a href="/control" class="nav-item"><i class="fa-solid fa-gamepad"></i> Cmd</a>
       <a href="/sd" class="nav-item"><i class="fa-solid fa-folder"></i> SD</a>
     </nav>
+    <div style="display:flex;align-items:center;gap:6px;">
+      <button type="button" class="theme-toggle" id="themeToggleBtn" onclick="toggleTheme()" title="Alternar tema claro/escuro" aria-label="Alternar tema claro/escuro" style="width:30px;height:30px;font-size:0.85rem;">
+        <i class="fa-solid fa-sun icon-sun" style="font-size:0.85rem;"></i>
+        <i class="fa-solid fa-moon icon-moon" style="font-size:0.85rem;"></i>
+      </button>
+    </div>
   </header>
 
   <div class="map-page-wrapper">

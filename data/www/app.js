@@ -107,7 +107,41 @@ function pollGlobalStatus() {
     .catch(() => {});
 }
 
+// --- GESTÃO DE TEMA CLARO / ESCURO (LIGHT / DARK) ---
+function initTheme() {
+  const saved = localStorage.getItem('wd_theme');
+  const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const theme = saved ? saved : (prefersDark ? 'dark' : 'dark');
+  setTheme(theme, false);
+}
+
+function setTheme(theme, save = true) {
+  document.documentElement.setAttribute('data-theme', theme);
+  if (save) {
+    try { localStorage.setItem('wd_theme', theme); } catch(e) {}
+  }
+  const btn = document.getElementById('themeToggleBtn');
+  if (btn) {
+    btn.setAttribute('aria-pressed', theme === 'dark' ? 'true' : 'false');
+    btn.title = theme === 'dark' ? 'Mudar para tema claro' : 'Mudar para tema escuro';
+  }
+}
+
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme') || 'dark';
+  const next = current === 'dark' ? 'light' : 'dark';
+  setTheme(next, true);
+  if (typeof showToast === 'function') {
+    showToast(next === 'dark' ? 'Tema escuro ativado' : 'Tema claro ativado');
+  }
+}
+
+if (typeof document !== 'undefined') {
+  initTheme();
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+  initTheme();
   pollGlobalStatus();
   setInterval(pollGlobalStatus, 3000);
 });
