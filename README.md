@@ -117,25 +117,26 @@ A Base Station inclui gestão inteligente de ligações WiFi e um Servidor Web H
 Com o **PlatformIO** instalado:
 
 ### 1. Compilar e Enviar para o Rover:
-Para alterar o identificador da boia (por ex. `ROVER-01`, `ROVER-02`), basta definir `-DROVER_ID=2` no build flag ou no topo do código.
+O Rover possui dois módulos ESP32-C6:
+- **Rover C6 (Slave):** Controla Rádio LoRa, GPS LC29H, ESC do Motor, Servos e Sensores.
+- **Rover Lafvin (Master):** Controla o Ecrã LCD 1.47" ST7789, Leitor MicroSD e Joystick.
 
 ```bash
-# Compilar Rover
-pio run -e rover
+# Rover C6 (Slave - LoRa / GPS / Atuadores)
+pio run -e rover_c6 -t upload
+pio device monitor -e rover_c6
 
-# Enviar via USB para o Rover
-pio run -e rover -t upload
+# Rover Lafvin (Master - LCD / MicroSD)
+pio run -e rover_lafvin -t upload
+pio device monitor -e rover_lafvin
 
-# Monitor Série (115200 baud)
-pio device monitor -e rover
+# Ou gerar pacote unificado para atualização remota (OTA):
+python3 scripts/bundle_firmware.py
 ```
 
 ### 2. Compilar e Enviar para a Base:
 ```bash
-# Compilar Base
-pio run -e base
-
-# Enviar via USB para a Base
+# Compilar e Enviar Base
 pio run -e base -t upload
 
 # Monitor Série (115200 baud)

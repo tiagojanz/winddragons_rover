@@ -1,19 +1,27 @@
 [
   {
-    "id": "btn-upload-rover",
-    "label": "$(rocket) Upload Rover",
+    "id": "btn-upload-rover-c6",
+    "label": "$(rocket) Upload Rover C6",
     "command": "workbench.action.tasks.runTask",
-    "args": "Upload Rover",
+    "args": "Upload Rover C6",
     "color": "#38bdf8",
-    "tooltip": "Compilar e Enviar Firmware para a Boia (Rover)"
+    "tooltip": "Compilar e Enviar Firmware para o ESP32-C6 do Rover (Telemetria, LoRa, Servos)"
+  },
+  {
+    "id": "btn-upload-rover-lafvin",
+    "label": "$(device-mobile) Upload Rover Lafvin",
+    "command": "workbench.action.tasks.runTask",
+    "args": "Upload Rover Lafvin",
+    "color": "#06b6d4",
+    "tooltip": "Compilar e Enviar Firmware para a placa Lafvin do Rover (Ecrã LCD 1.47\", MicroSD)"
   },
   {
     "id": "btn-upload-base",
-    "label": "$(broadcast) Upload Base",
+    "label": "$(broadcast) Upload Base C6",
     "command": "workbench.action.tasks.runTask",
-    "args": "Upload Base",
+    "args": "Upload Base C6",
     "color": "#4ade80",
-    "tooltip": "Compilar e Enviar Firmware para a Estação Base"
+    "tooltip": "Compilar e Enviar Firmware para a Estação Base C6"
   },
   {
     "id": "btn-upload-sdcard",
@@ -24,12 +32,28 @@
     "tooltip": "Gerar e Enviar Ficheiros e Páginas Web para o Cartão MicroSD"
   },
   {
-    "id": "btn-monitor-rover",
-    "label": "$(terminal) Monitor Rover",
+    "id": "btn-bundle-rover",
+    "label": "$(package) Bundle Rover",
     "command": "workbench.action.tasks.runTask",
-    "args": "Monitor Rover",
+    "args": "Bundle Rover Firmware",
+    "color": "#c084fc",
+    "tooltip": "Compilar C6 + Lafvin e Gerar dist/rover_firmware.zip para OTA"
+  },
+  {
+    "id": "btn-monitor-rover-c6",
+    "label": "$(terminal) Monitor Rover C6",
+    "command": "workbench.action.tasks.runTask",
+    "args": "Monitor Rover C6",
     "color": "#a5b4fc",
-    "tooltip": "Abrir Monitor Série do Rover"
+    "tooltip": "Abrir Monitor Série do Rover C6"
+  },
+  {
+    "id": "btn-monitor-rover-lafvin",
+    "label": "$(terminal) Monitor Rover Lafvin",
+    "command": "workbench.action.tasks.runTask",
+    "args": "Monitor Rover Lafvin",
+    "color": "#818cf8",
+    "tooltip": "Abrir Monitor Série do Rover Lafvin"
   },
   {
     "id": "btn-monitor-base",
