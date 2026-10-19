@@ -294,11 +294,19 @@ public:
         }
 
         // 3. Bottom Footer Bar (Height: 22px)
-        canvas->fillRect(0, 150, SCREEN_W, 22, UI_NAVY);
-        canvas->setTextColor(UI_YELLOW);
-        canvas->setTextSize(1);
-        canvas->setCursor(10, 156);
-        canvas->printf("PAG %d/%d | CLIQUE [BOOT] P/ MUDAR PAGINA", currentPage + 1, ROVER_PAGE_COUNT);
+        if (actuators.getThrottle() != 0 || actuators.getRudder() != 0) {
+            canvas->fillRect(0, 150, SCREEN_W, 22, UI_DARKGREY);
+            canvas->setTextColor(UI_GREEN);
+            canvas->setTextSize(1);
+            canvas->setCursor(10, 156);
+            canvas->printf("JOYSTICK: MOT: %+3d%% | LEME: %+3d%%", actuators.getThrottle(), actuators.getRudder());
+        } else {
+            canvas->fillRect(0, 150, SCREEN_W, 22, UI_NAVY);
+            canvas->setTextColor(UI_YELLOW);
+            canvas->setTextSize(1);
+            canvas->setCursor(10, 156);
+            canvas->printf("PAG %d/%d | CLIQUE [BOOT] P/ MUDAR PAGINA", currentPage + 1, ROVER_PAGE_COUNT);
+        }
 
         // 4. Push complete frame to physical ST7789 display
         display.drawPixelBuffer(0, 0, LCD_WIDTH - 1, LCD_HEIGHT - 1, canvas->getFramebuffer());

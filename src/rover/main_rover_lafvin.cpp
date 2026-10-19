@@ -289,6 +289,8 @@ void loop() {
             if (abs(rud - lastSentRud) >= 2 || abs(thr - lastSentThr) >= 2) {
                 lastSentRud = rud;
                 lastSentThr = thr;
+                interSerial.printf("CMD:JOY:%d:%d\n", thr, rud);
+                interSerial.flush();
                 snprintf(queuedWebCommand, sizeof(queuedWebCommand), "CMD:JOY:%d:%d", thr, rud);
                 printLog("[JOYSTICK] Ativo (X=%d Y=%d) -> Leme: %d%% | Motor: %d%%\n", rawX, rawY, rud, thr);
             }
@@ -298,6 +300,8 @@ void loop() {
             lastSentThr = 0;
             actuators.setRudder(0);
             actuators.setThrottle(0);
+            interSerial.println("CMD:JOY:0:0");
+            interSerial.flush();
             snprintf(queuedWebCommand, sizeof(queuedWebCommand), "CMD:JOY:0:0");
             printLog("[JOYSTICK] Centro (X=%d Y=%d) -> Leme: 0% | Motor: 0%\n", rawX, rawY);
         }

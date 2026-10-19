@@ -41,9 +41,10 @@ public:
           _lastProcessedHallPulseCount(0),
           alarmActive(false), alarmEndTimeMs(0),
           lastAlarmToggleMs(0), alarmStrobeState(false),
-          pwmAvailable(false) {}
+          pwmAvailable(false), _isInitialized(false) {}
 
     void begin() {
+        _isInitialized = true;
         // 1. Configurar Canais PWM Diretos LEDC no ESP32-C6 (Hardware DevKitC)
         #if defined(PIN_C6_WINCH) && (PIN_C6_WINCH >= 0)
         ledcAttach(PIN_C6_WINCH, ACT_PWM_FREQ, ACT_PWM_RES);
@@ -126,10 +127,15 @@ public:
             pwm.writeMicroseconds(PCA_CH_RACK, pulseUs);
         }
         #if defined(PIN_C6_SERVO_RACK) && (PIN_C6_SERVO_RACK >= 0)
-        ledcWrite(PIN_C6_SERVO_RACK, actUsToDuty(pulseUs));
+        if (_isInitialized) {
+            ledcWrite(PIN_C6_SERVO_RACK, actUsToDuty(pulseUs));
+        }
         #endif
         isRackLifted = (angle > 45);
-        Serial.printf("[ACT-SERVO] CALIBRACAO -> PCA CH %d / GPIO %d enviado %d graus (%d us)\n", PCA_CH_RACK, PIN_C6_SERVO_RACK, angle, pulseUs);
+        if (_isInitialized) {
+            Serial.printf("[ACT-SERVO] CALIBRACAO -> PCA CH %d / GPIO %d enviado %d graus (%d us)\n", PCA_CH_RACK, PIN_C6_SERVO_RACK, angle, pulseUs);
+            Serial0.printf("[ACT-SERVO] CALIBRACAO -> PCA CH %d / GPIO %d enviado %d graus (%d us)\n", PCA_CH_RACK, PIN_C6_SERVO_RACK, angle, pulseUs);
+        }
     }
 
     // Desativa o pulso do servo para relaxar o motor e evitar aquecimento em stall
@@ -138,9 +144,14 @@ public:
             pwm.setPin(PCA_CH_RACK, 0, false); // 0V flat
         }
         #if defined(PIN_C6_SERVO_RACK) && (PIN_C6_SERVO_RACK >= 0)
-        ledcWrite(PIN_C6_SERVO_RACK, 0);
+        if (_isInitialized) {
+            ledcWrite(PIN_C6_SERVO_RACK, 0);
+        }
         #endif
-        Serial.printf("[ACT-SERVO] RELAX -> pulso PWM desligado (motor solto/frio)\n");
+        if (_isInitialized) {
+            Serial.printf("[ACT-SERVO] RELAX -> pulso PWM desligado (motor solto/frio)\n");
+            Serial0.printf("[ACT-SERVO] RELAX -> pulso PWM desligado (motor solto/frio)\n");
+        }
     }
 
     bool isRackReleased() const { return isRackLifted; }
@@ -175,9 +186,14 @@ public:
             pwm.writeMicroseconds(PCA_CH_MOTOR, pulseUs);
         }
         #if defined(PIN_C6_MOTOR_ESC) && (PIN_C6_MOTOR_ESC >= 0)
-        ledcWrite(PIN_C6_MOTOR_ESC, actUsToDuty(pulseUs));
+        if (_isInitialized) {
+            ledcWrite(PIN_C6_MOTOR_ESC, actUsToDuty(pulseUs));
+        }
         #endif
-        Serial.printf("[ACT-MOTOR] ESC Throttle: %d%% (%d us no GPIO %d)\n", currentThrottle, pulseUs, PIN_C6_MOTOR_ESC);
+        if (_isInitialized) {
+            Serial.printf("[ACT-MOTOR] ESC Throttle: %d%% (%d us no GPIO %d)\n", currentThrottle, pulseUs, PIN_C6_MOTOR_ESC);
+            Serial0.printf("[ACT-MOTOR] ESC Throttle: %d%% (%d us no GPIO %d)\n", currentThrottle, pulseUs, PIN_C6_MOTOR_ESC);
+        }
     }
 
     // Rudder: -100 (full left) to +100 (full right)
@@ -188,9 +204,14 @@ public:
             pwm.writeMicroseconds(PCA_CH_RUDDER, pulseUs);
         }
         #if defined(PIN_C6_SERVO_RUD) && (PIN_C6_SERVO_RUD >= 0)
-        ledcWrite(PIN_C6_SERVO_RUD, actUsToDuty(pulseUs));
+        if (_isInitialized) {
+            ledcWrite(PIN_C6_SERVO_RUD, actUsToDuty(pulseUs));
+        }
         #endif
-        Serial.printf("[ACT-LEME] Leme: %d%% (%d us no GPIO %d)\n", currentRudder, pulseUs, PIN_C6_SERVO_RUD);
+        if (_isInitialized) {
+            Serial.printf("[ACT-LEME] Leme: %d%% (%d us no GPIO %d)\n", currentRudder, pulseUs, PIN_C6_SERVO_RUD);
+            Serial0.printf("[ACT-LEME] Leme: %d%% (%d us no GPIO %d)\n", currentRudder, pulseUs, PIN_C6_SERVO_RUD);
+        }
     }
 
     void stopMotor() {
@@ -208,13 +229,23 @@ public:
             pwm.setPin(PCA_CH_WINCH, 0, false);
         }
         #if defined(PIN_C6_WINCH) && (PIN_C6_WINCH >= 0)
-        ledcWrite(PIN_C6_WINCH, 0); // 0V plano, sinal totalmente cortado
+        if (_isInitialized) {
+            ledcWrite(PIN_C6_WINCH, 0); // 0V plano, sinal totalmente cortado
+        }
         #endif
         #if defined(PIN_C6_WINCH_ALT) && (PIN_C6_WINCH_ALT >= 0)
-        ledcWrite(PIN_C6_WINCH_ALT, 0);
-        Serial.printf("[ACT-GUINCHO] SINAL TOTALMENTE CORTADO (0V nos GPIOs %d e %d)\n", PIN_C6_WINCH, PIN_C6_WINCH_ALT);
+        if (_isInitialized) {
+            ledcWrite(PIN_C6_WINCH_ALT, 0);
+        }
+        if (_isInitialized) {
+            Serial.printf("[ACT-GUINCHO] SINAL TOTALMENTE CORTADO (0V nos GPIOs %d e %d)\n", PIN_C6_WINCH, PIN_C6_WINCH_ALT);
+            Serial0.printf("[ACT-GUINCHO] SINAL TOTALMENTE CORTADO (0V nos GPIOs %d e %d)\n", PIN_C6_WINCH, PIN_C6_WINCH_ALT);
+        }
         #else
-        Serial.printf("[ACT-GUINCHO] SINAL TOTALMENTE CORTADO (0V no GPIO %d)\n", PIN_C6_WINCH);
+        if (_isInitialized) {
+            Serial.printf("[ACT-GUINCHO] SINAL TOTALMENTE CORTADO (0V no GPIO %d)\n", PIN_C6_WINCH);
+            Serial0.printf("[ACT-GUINCHO] SINAL TOTALMENTE CORTADO (0V no GPIO %d)\n", PIN_C6_WINCH);
+        }
         #endif
     }
 
@@ -255,12 +286,19 @@ public:
             pwm.writeMicroseconds(PCA_CH_WINCH, pulseUs);
         }
         #if defined(PIN_C6_WINCH) && (PIN_C6_WINCH >= 0)
-        ledcWrite(PIN_C6_WINCH, actUsToDuty(pulseUs));
+        if (_isInitialized) {
+            ledcWrite(PIN_C6_WINCH, actUsToDuty(pulseUs));
+        }
         #endif
         #if defined(PIN_C6_WINCH_ALT) && (PIN_C6_WINCH_ALT >= 0)
-        ledcWrite(PIN_C6_WINCH_ALT, actUsToDuty(pulseUs));
+        if (_isInitialized) {
+            ledcWrite(PIN_C6_WINCH_ALT, actUsToDuty(pulseUs));
+        }
         #endif
-        Serial.printf("[ACT-GUINCHO] SINAL ATIVO (ON): %d us no GPIO %d\n", pulseUs, PIN_C6_WINCH);
+        if (_isInitialized) {
+            Serial.printf("[ACT-GUINCHO] SINAL ATIVO (ON): %d us no GPIO %d\n", pulseUs, PIN_C6_WINCH);
+            Serial0.printf("[ACT-GUINCHO] SINAL ATIVO (ON): %d us no GPIO %d\n", pulseUs, PIN_C6_WINCH);
+        }
     }
 
     void setWinchNeutral(int neutralUs) {
@@ -477,4 +515,5 @@ private:
     uint32_t lastAlarmToggleMs;
     bool alarmStrobeState;
     bool pwmAvailable;
+    bool _isInitialized;
 };

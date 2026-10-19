@@ -58,30 +58,81 @@
 </div>
 
 <div class="card">
-  <div class="card-title">
-    <i class="fa-solid fa-gauge-high"></i> Motor Principal (ESC) & Leme de Direção
+  <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+    <span><i class="fa-solid fa-gamepad"></i> Motor Principal (ESC), Leme & Joystick 2D</span>
+    <span id="joyLiveBadge" class="badge" style="background:#1e293b;border:1px solid #334155;color:var(--muted);font-size:0.85rem;">Joystick: CENTRADO (0%)</span>
   </div>
-  <div class="grid-2">
+  <div style="display:grid;grid-template-columns:1fr auto;gap:24px;align-items:center;">
     <div>
-      <div class="stat-label">Aceleração ESC: <span id="thrVal" style="font-size:1.1rem;color:var(--primary);">0%</span></div>
-      <input type="range" id="throttleSlider" min="-100" max="100" value="0" class="slider" oninput="updateSliders()" onchange="sendActuators()">
-      <div class="btn-group" style="margin-top:12px;">
-        <button type="button" onclick="setThrottle(0)" class="btn btn-secondary">0% (Stop)</button>
-        <button type="button" onclick="setThrottle(25)" class="btn btn-secondary">+25%</button>
-        <button type="button" onclick="setThrottle(50)" class="btn btn-secondary">+50%</button>
-        <button type="button" onclick="setThrottle(100)" class="btn btn-primary">+100%</button>
-        <button type="button" onclick="setThrottle(-50)" class="btn btn-secondary">-50% (Ré)</button>
+      <div style="margin-bottom:16px;">
+        <div class="stat-label">Aceleração ESC (Motor): <span id="thrVal" style="font-size:1.1rem;font-weight:700;color:var(--primary);">0%</span></div>
+        <input type="range" id="throttleSlider" min="-100" max="100" value="0" class="slider" oninput="updateSliders()" onchange="isUserDraggingThr=false;sendActuators()" onmousedown="isUserDraggingThr=true" ontouchstart="isUserDraggingThr=true" onmouseup="isUserDraggingThr=false" ontouchend="isUserDraggingThr=false">
+        <div class="btn-group" style="margin-top:10px;">
+          <button type="button" onclick="setThrottle(0)" class="btn btn-secondary">0% (Stop)</button>
+          <button type="button" onclick="setThrottle(25)" class="btn btn-secondary">+25%</button>
+          <button type="button" onclick="setThrottle(50)" class="btn btn-secondary">+50%</button>
+          <button type="button" onclick="setThrottle(100)" class="btn btn-primary">+100%</button>
+          <button type="button" onclick="setThrottle(-50)" class="btn btn-secondary">-50% (Ré)</button>
+        </div>
+      </div>
+
+      <div>
+        <div class="stat-label">Ângulo do Leme (Direção): <span id="rudVal" style="font-size:1.1rem;font-weight:700;color:var(--primary);">0%</span></div>
+        <input type="range" id="rudderSlider" min="-100" max="100" value="0" class="slider" oninput="updateSliders()" onchange="isUserDraggingRud=false;sendActuators()" onmousedown="isUserDraggingRud=true" ontouchstart="isUserDraggingRud=true" onmouseup="isUserDraggingRud=false" ontouchend="isUserDraggingRud=false">
+        <div class="btn-group" style="margin-top:10px;">
+          <button type="button" onclick="setRudder(-75)" class="btn btn-secondary"><i class="fa-solid fa-arrow-left"></i> Bombordo (-75%)</button>
+          <button type="button" onclick="setRudder(0)" class="btn btn-secondary"><i class="fa-solid fa-compass"></i> Centro (0%)</button>
+          <button type="button" onclick="setRudder(75)" class="btn btn-secondary">Estibordo (+75%) <i class="fa-solid fa-arrow-right"></i></button>
+        </div>
       </div>
     </div>
 
-    <div>
-      <div class="stat-label">Ângulo do Leme: <span id="rudVal" style="font-size:1.1rem;color:var(--primary);">0%</span></div>
-      <input type="range" id="rudderSlider" min="-100" max="100" value="0" class="slider" oninput="updateSliders()" onchange="sendActuators()">
-      <div class="btn-group" style="margin-top:12px;">
-        <button type="button" onclick="setRudder(-75)" class="btn btn-secondary"><i class="fa-solid fa-arrow-left"></i> Bombordo (-75%)</button>
-        <button type="button" onclick="setRudder(0)" class="btn btn-secondary"><i class="fa-solid fa-compass"></i> Centro (0%)</button>
-        <button type="button" onclick="setRudder(75)" class="btn btn-secondary">Estibordo (+75%) <i class="fa-solid fa-arrow-right"></i></button>
+    <div style="display:flex;flex-direction:column;align-items:center;background:#0b1120;border:1px solid #1e293b;border-radius:12px;padding:16px;">
+      <div style="font-size:0.8rem;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">Deflexão Joystick 2D</div>
+      <canvas id="joyCanvas" width="180" height="180" style="background:#030712;border-radius:50%;border:2px solid #1e293b;cursor:crosshair;touch-action:none;"></canvas>
+      <div style="font-size:0.75rem;color:var(--muted);margin-top:8px;">Arrasta ou move o stick físico</div>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="border:1px solid #0284c7;">
+  <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
+    <span><i class="fa-solid fa-compass-drafting"></i> Contador de Cabo da Âncora (Sensor Hall DRV5032 - GPIO 20)</span>
+    <span id="anchorLimitBadge" class="badge" style="background:#1e293b;border:1px solid #334155;color:var(--muted);font-size:0.85rem;">Fim de Curso: LIVRE</span>
+  </div>
+  
+  <div class="grid-4" style="margin-bottom:14px;">
+    <div class="stat-box">
+      <div class="stat-label">Cabo Desenrolado</div>
+      <div class="stat-value" id="hallDepthVal" style="color:var(--primary);font-size:1.4rem;font-weight:700;">0.00 m</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Voltas do Tambor</div>
+      <div class="stat-value" id="hallRevsVal" style="color:#38bdf8;font-size:1.4rem;font-weight:700;">0.00</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Total de Pulsos</div>
+      <div class="stat-value" id="hallPulsesVal" style="font-size:1.4rem;font-weight:700;">0</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Perímetro / Volta</div>
+      <div class="stat-value" id="hallCircVal" style="color:var(--yellow);font-size:1.2rem;font-weight:600;">9.4 cm</div>
+    </div>
+  </div>
+
+  <div style="background:rgba(15,23,42,0.6);border:1px solid #334155;border-radius:8px;padding:14px;">
+    <div style="font-weight:600;font-size:0.95rem;margin-bottom:10px;color:var(--text);"><i class="fa-solid fa-gear"></i> Calibração do Tambor do Guincho</div>
+    <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;">
+      <div>
+        <label style="display:block;font-size:0.8rem;color:var(--muted);margin-bottom:4px;">Diâmetro do Tambor (mm):</label>
+        <input type="number" id="cfgDrumDiam" step="0.5" min="5" max="500" value="30.0" style="background:#0f172a;border:1px solid #334155;color:#fff;padding:8px 12px;border-radius:6px;width:130px;font-size:1rem;">
       </div>
+      <div>
+        <label style="display:block;font-size:0.8rem;color:var(--muted);margin-bottom:4px;">Pulsos por Volta (Ímanes):</label>
+        <input type="number" id="cfgPulsesPerRev" min="1" max="24" value="1" style="background:#0f172a;border:1px solid #334155;color:#fff;padding:8px 12px;border-radius:6px;width:110px;font-size:1rem;">
+      </div>
+      <button type="button" onclick="saveAnchorConfig()" class="btn btn-primary" style="padding:10px 18px;"><i class="fa-solid fa-floppy-disk"></i> Guardar Calibração</button>
+      <button type="button" onclick="zeroAnchorCounter()" class="btn btn-secondary" style="background:#0284c7;color:#fff;padding:10px 18px;"><i class="fa-solid fa-rotate-left"></i> Zerar Contador (0.0 m)</button>
     </div>
   </div>
 </div>
@@ -108,29 +159,134 @@
 </div>
 
 <script>
-function updateSliders() {
-  document.getElementById('thrVal').innerText = document.getElementById('throttleSlider').value + '%';
-  document.getElementById('rudVal').innerText = document.getElementById('rudderSlider').value + '%';
+let isUserDraggingThr = false;
+let isUserDraggingRud = false;
+let isUserDraggingPad = false;
+let curThr = 0;
+let curRud = 0;
+
+const joyCanvas = document.getElementById('joyCanvas');
+const joyCtx = joyCanvas ? joyCanvas.getContext('2d') : null;
+
+function drawJoystickPad(thr, rud) {
+  if (!joyCtx || !joyCanvas) return;
+  const w = joyCanvas.width;
+  const h = joyCanvas.height;
+  const cx = w / 2;
+  const cy = h / 2;
+  const r = (w / 2) - 12;
+
+  joyCtx.clearRect(0, 0, w, h);
+
+  // Outer circular area
+  joyCtx.beginPath();
+  joyCtx.arc(cx, cy, r, 0, Math.PI * 2);
+  joyCtx.fillStyle = '#0f172a';
+  joyCtx.fill();
+  joyCtx.strokeStyle = '#334155';
+  joyCtx.lineWidth = 2;
+  joyCtx.stroke();
+
+  // Deadband zone
+  joyCtx.beginPath();
+  joyCtx.arc(cx, cy, r * 0.15, 0, Math.PI * 2);
+  joyCtx.strokeStyle = 'rgba(51,65,85,0.6)';
+  joyCtx.lineWidth = 1;
+  joyCtx.stroke();
+
+  // Crosshairs
+  joyCtx.strokeStyle = '#1e293b';
+  joyCtx.beginPath();
+  joyCtx.moveTo(cx, 12);
+  joyCtx.lineTo(cx, h - 12);
+  joyCtx.moveTo(12, cy);
+  joyCtx.lineTo(w - 12, cy);
+  joyCtx.stroke();
+
+  // Labels
+  joyCtx.fillStyle = '#64748b';
+  joyCtx.font = '10px sans-serif';
+  joyCtx.textAlign = 'center';
+  joyCtx.fillText('FRENTE', cx, 20);
+  joyCtx.fillText('RÉ', cx, h - 12);
+  joyCtx.fillText('BOM', 22, cy + 4);
+  joyCtx.fillText('EST', w - 22, cy + 4);
+
+  // Puck Position: rud (-100..100) -> X, thr (-100..100) -> Y (inverted)
+  const puckX = cx + (rud / 100.0) * (r - 16);
+  const puckY = cy - (thr / 100.0) * (r - 16);
+
+  // Line from center
+  joyCtx.beginPath();
+  joyCtx.moveTo(cx, cy);
+  joyCtx.lineTo(puckX, puckY);
+  joyCtx.strokeStyle = (thr !== 0 || rud !== 0) ? 'rgba(6,182,212,0.6)' : 'rgba(100,116,139,0.2)';
+  joyCtx.lineWidth = 3;
+  joyCtx.stroke();
+
+  // Puck circle
+  joyCtx.beginPath();
+  joyCtx.arc(puckX, puckY, 13, 0, Math.PI * 2);
+  joyCtx.fillStyle = (thr !== 0 || rud !== 0) ? '#06b6d4' : '#64748b';
+  joyCtx.fill();
+  joyCtx.strokeStyle = '#ffffff';
+  joyCtx.lineWidth = 2;
+  joyCtx.stroke();
+
+  joyCtx.beginPath();
+  joyCtx.arc(puckX, puckY, 3, 0, Math.PI * 2);
+  joyCtx.fillStyle = '#ffffff';
+  joyCtx.fill();
 }
+
+function updateSliders() {
+  const t = parseInt(document.getElementById('throttleSlider').value) || 0;
+  const r = parseInt(document.getElementById('rudderSlider').value) || 0;
+  document.getElementById('thrVal').innerText = t + '%';
+  document.getElementById('rudVal').innerText = r + '%';
+  drawJoystickPad(t, r);
+  updateJoyBadge(t, r);
+}
+
+function updateJoyBadge(t, r) {
+  const badge = document.getElementById('joyLiveBadge');
+  if (badge) {
+    if (t !== 0 || r !== 0) {
+      badge.innerText = `Joystick: ATIVO (T:${t>0?'+':''}${t}% | R:${r>0?'+':''}${r}%)`;
+      badge.style.background = '#059669';
+      badge.style.color = '#fff';
+    } else {
+      badge.innerText = 'Joystick: CENTRADO (0%)';
+      badge.style.background = '#1e293b';
+      badge.style.color = 'var(--muted)';
+    }
+  }
+}
+
 function setThrottle(v) {
+  isUserDraggingThr = false;
   document.getElementById('throttleSlider').value = v;
   updateSliders();
   sendActuators();
 }
+
 function setRudder(v) {
+  isUserDraggingRud = false;
   document.getElementById('rudderSlider').value = v;
   updateSliders();
   sendActuators();
 }
+
 function sendActuators() {
-  const t = parseInt(document.getElementById('throttleSlider').value);
-  const r = parseInt(document.getElementById('rudderSlider').value);
+  const t = parseInt(document.getElementById('throttleSlider').value) || 0;
+  const r = parseInt(document.getElementById('rudderSlider').value) || 0;
   fetch('/api/control/actuator', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ throttle: t, rudder: r })
   });
 }
+
 function sendAction(a) {
   fetch('/api/control/action', {
     method: 'POST',
@@ -140,11 +296,99 @@ function sendAction(a) {
   .then(r => r.json())
   .then(res => showToast(res.msg));
 }
+
+function zeroAnchorCounter() {
+  sendAction(15);
+}
+
+function saveAnchorConfig() {
+  const d = parseFloat(document.getElementById('cfgDrumDiam').value) || 30.0;
+  const p = parseInt(document.getElementById('cfgPulsesPerRev').value) || 1;
+  fetch('/api/control/anchor/config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ diam_mm: d, pulses_per_rev: p })
+  })
+  .then(r => r.json())
+  .then(res => showToast(res.msg || 'Calibração guardada com sucesso!'));
+}
+
 function sendEmergencyStop() {
   setThrottle(0);
   setRudder(0);
   sendAction(2);
 }
+
+// Interatividade no Canvas 2D
+if (joyCanvas) {
+  function handlePointer(e) {
+    const rect = joyCanvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const cx = rect.width / 2;
+    const cy = rect.height / 2;
+    const dx = clientX - rect.left - cx;
+    const dy = clientY - rect.top - cy;
+    const maxR = (rect.width / 2) - 12;
+
+    let rud = Math.round(Math.max(-100, Math.min(100, (dx / maxR) * 100)));
+    let thr = Math.round(Math.max(-100, Math.min(100, (-dy / maxR) * 100)));
+
+    curRud = rud;
+    curThr = thr;
+    document.getElementById('throttleSlider').value = thr;
+    document.getElementById('rudderSlider').value = rud;
+    updateSliders();
+    sendActuators();
+  }
+
+  joyCanvas.addEventListener('mousedown', (e) => {
+    isUserDraggingPad = true;
+    handlePointer(e);
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (isUserDraggingPad) handlePointer(e);
+  });
+  window.addEventListener('mouseup', () => {
+    if (isUserDraggingPad) {
+      isUserDraggingPad = false;
+      curRud = 0;
+      curThr = 0;
+      document.getElementById('throttleSlider').value = 0;
+      document.getElementById('rudderSlider').value = 0;
+      updateSliders();
+      sendActuators();
+    }
+  });
+
+  joyCanvas.addEventListener('touchstart', (e) => {
+    isUserDraggingPad = true;
+    handlePointer(e);
+    e.preventDefault();
+  }, { passive: false });
+  joyCanvas.addEventListener('touchmove', (e) => {
+    if (isUserDraggingPad) {
+      handlePointer(e);
+      e.preventDefault();
+    }
+  }, { passive: false });
+  joyCanvas.addEventListener('touchend', (e) => {
+    if (isUserDraggingPad) {
+      isUserDraggingPad = false;
+      curRud = 0;
+      curThr = 0;
+      document.getElementById('throttleSlider').value = 0;
+      document.getElementById('rudderSlider').value = 0;
+      updateSliders();
+      sendActuators();
+      e.preventDefault();
+    }
+  }, { passive: false });
+}
+
+// Inicializar Canvas
+drawJoystickPad(0, 0);
+
 setInterval(() => {
   fetch('/api/status')
     .then(r => r.json())
@@ -153,10 +397,63 @@ setInterval(() => {
       if (!a) return;
       document.getElementById('curMotor').innerText = a.motor_status_str || 'idle';
       document.getElementById('curAnchor').innerText = a.anchor_status_str || 'recolhida';
-      document.getElementById('curDepth').innerText = (a.anchor_depth_m || 0).toFixed(1) + ' m';
+      document.getElementById('curDepth').innerText = (a.anchor_depth_m || 0).toFixed(2) + ' m';
       document.getElementById('curRack').innerText = a.rack_released ? 'LIVRE' : 'TRAVADA';
+
+      const hd = document.getElementById('hallDepthVal');
+      if (hd && a.anchor_depth_m !== undefined) {
+        hd.innerText = a.anchor_depth_m.toFixed(2) + ' m (' + (a.anchor_depth_cm || 0) + ' cm)';
+      }
+      const hr = document.getElementById('hallRevsVal');
+      if (hr && a.anchor_revs !== undefined) {
+        hr.innerText = a.anchor_revs.toFixed(2);
+      }
+      const hp = document.getElementById('hallPulsesVal');
+      if (hp && a.anchor_pulses !== undefined) {
+        hp.innerText = a.anchor_pulses;
+      }
+      const hc = document.getElementById('hallCircVal');
+      if (hc && a.anchor_drum_diam_mm !== undefined) {
+        const circ = (Math.PI * a.anchor_drum_diam_mm / 10.0);
+        hc.innerText = circ.toFixed(1) + ' cm';
+        const dInput = document.getElementById('cfgDrumDiam');
+        if (dInput && !dInput.matches(':focus')) {
+          dInput.value = a.anchor_drum_diam_mm;
+        }
+      }
+      const pInput = document.getElementById('cfgPulsesPerRev');
+      if (pInput && a.anchor_pulses_per_rev !== undefined && !pInput.matches(':focus')) {
+        pInput.value = a.anchor_pulses_per_rev;
+      }
+      const lb = document.getElementById('anchorLimitBadge');
+      if (lb) {
+        if (a.anchor_limit) {
+          lb.innerText = 'Fim de Curso: NO TOPO (Acionado)';
+          lb.style.background = '#059669';
+          lb.style.color = '#fff';
+        } else {
+          lb.innerText = 'Fim de Curso: LIVRE';
+          lb.style.background = '#1e293b';
+          lb.style.color = 'var(--muted)';
+        }
+      }
+
+      if (!isUserDraggingThr && !isUserDraggingPad && a.throttle !== undefined) {
+        document.getElementById('throttleSlider').value = a.throttle;
+        document.getElementById('thrVal').innerText = a.throttle + '%';
+      }
+
+      if (!isUserDraggingRud && !isUserDraggingPad && a.rudder !== undefined) {
+        document.getElementById('rudderSlider').value = a.rudder;
+        document.getElementById('rudVal').innerText = a.rudder + '%';
+      }
+
+      if (!isUserDraggingPad && a.throttle !== undefined && a.rudder !== undefined) {
+        drawJoystickPad(a.throttle, a.rudder);
+        updateJoyBadge(a.throttle, a.rudder);
+      }
     }).catch(() => {});
-}, 1000);
+}, 250);
 </script>
 
   </main>
