@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Configuração WiFi da Base - WindDragons Base Station</title>
+  <title>Configuração da Base Station - WindDragons Base Station</title>
   <link rel="stylesheet" href="/style.css">
   <script src="/app.js"></script>
 </head>
@@ -15,7 +15,8 @@
     <nav class="nav-links">
       <a href="/mission" class="nav-item "><i class="fa-solid fa-flag-checkered"></i> Missão</a>
 <a href="/portal" class="nav-item "><i class="fa-solid fa-cloud"></i> Portal Cloud</a>
-<a href="/wifi" class="nav-item active"><i class="fa-solid fa-wifi"></i> WiFi Base</a>
+<a href="/config" class="nav-item active"><i class="fa-solid fa-gear"></i> Configuração</a>
+<a href="/wifi" class="nav-item "><i class="fa-solid fa-wifi"></i> WiFi Base</a>
 <a href="/gps" class="nav-item "><i class="fa-solid fa-location-dot"></i> GPS Frota</a>
 <a href="/battery" class="nav-item "><i class="fa-solid fa-battery-three-quarters"></i> Bateria Frota</a>
 <a href="/control" class="nav-item "><i class="fa-solid fa-gamepad"></i> Comandos</a>
@@ -23,7 +24,7 @@
 
     </nav>
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-      <a href="/wifi" id="navVersionBadge" class="badge" style="background:rgba(6,182,212,0.12);border:1px solid rgba(6,182,212,0.3);color:var(--primary);text-decoration:none;font-size:0.75rem;display:inline-flex;align-items:center;gap:6px;" title="Ver detalhes de firmware no WiFi/Configurações">
+      <a href="/config" id="navVersionBadge" class="badge" style="background:rgba(6,182,212,0.12);border:1px solid rgba(6,182,212,0.3);color:var(--primary);text-decoration:none;font-size:0.75rem;display:inline-flex;align-items:center;gap:6px;" title="Ver versões das placas e atualização OTA na página de Configuração">
         <i class="fa-solid fa-code-branch"></i> <span id="navLafvinVer">Lafvin: v2.1.0</span> &bull; <span id="navC6Ver">C6: ...</span>
       </a>
       <span id="navOpStateBadge" class="badge" style="background:#64748b;color:#fff;font-weight:700;">
@@ -40,187 +41,6 @@
 
   <main class="container">
     
-<div class="card">
-  <div class="card-title">
-    <span><i class="fa-solid fa-fingerprint"></i> Identificação Única da Base (Portal Cloud)</span>
-  </div>
-  <p style="color:var(--muted);font-size:0.875rem;margin-bottom:16px;">
-    Este endereço MAC de hardware é o identificador único e exclusivo desta Base Station utilizado nas comunicações com o portal WindDragons (<span style="color:var(--primary);">https://winddragons.app</span>).
-  </p>
-  <div class="grid-2">
-    <div class="stat-box">
-      <div class="stat-label">Endereço MAC de Hardware (Station ID)</div>
-      <div class="stat-value" id="baseMacVal" style="color:var(--primary);font-family:monospace;font-size:1.3rem;">--:--:--:--:--:--</div>
-    </div>
-    <div class="stat-box">
-      <div class="stat-label">Nome da Estação Base</div>
-      <div class="stat-value" id="baseStationName" style="color:var(--yellow);font-size:1.3rem;">BASE-ALCOCHETE-01</div>
-    </div>
-  </div>
-</div>
-
-<div class="card">
-  <div class="card-title">
-    <span><i class="fa-solid fa-wifi"></i> Gestão de Redes Wi-Fi</span>
-    <button onclick="scanNetworks()" id="scanBtn" class="btn btn-secondary" style="padding:6px 12px;font-size:0.8rem;">
-      <i class="fa-solid fa-rotate"></i> Procurar Redes
-    </button>
-  </div>
-  <p style="color:var(--muted);font-size:0.875rem;margin-bottom:16px;">
-    Ligue a Base Station ao router Wi-Fi local para permitir controlo via browser e telemetria da frota em tempo real.
-  </p>
-
-  <div id="scanStatus" style="display:none;color:var(--primary);margin-bottom:12px;font-size:0.85rem;">
-    <i class="fa-solid fa-rotate fa-spin"></i> A procurar redes Wi-Fi nas imediações...
-  </div>
-
-  <div id="networksList" style="overflow-x:auto;">
-    <table>
-      <thead>
-        <tr>
-          <th>Rede (SSID)</th>
-          <th>Sinal</th>
-          <th>Segurança</th>
-          <th>Ação</th>
-        </tr>
-      </thead>
-      <tbody id="scanTableBody">
-        <tr><td colspan="4" style="text-align:center;color:var(--muted);">Clique em "Procurar Redes" para ver redes Wi-Fi disponíveis.</td></tr>
-      </tbody>
-    </table>
-  </div>
-</div>
-
-<div class="card">
-  <div class="card-title">
-    <span><i class="fa-solid fa-floppy-disk"></i> Redes Guardadas na Base Station</span>
-  </div>
-  <div id="savedNetworksList" style="overflow-x:auto;">
-    <table>
-      <thead>
-        <tr>
-          <th>SSID</th>
-          <th>Estado / Predefinição</th>
-          <th>Ações</th>
-        </tr>
-      </thead>
-      <tbody id="savedTableBody">
-        <tr><td colspan="3" style="text-align:center;color:var(--muted);">A carregar redes guardadas...</td></tr>
-      </tbody>
-    </table>
-  </div>
-</div>
-
-<!-- Modal Conectar -->
-<div id="connectModal" class="modal-overlay">
-  <div class="modal-card">
-    <div class="card-title">
-      <span><i class="fa-solid fa-plug"></i> Conectar à Rede Wi-Fi</span>
-      <button onclick="closeConnectModal()" class="btn btn-secondary" style="padding:4px 8px;"><i class="fa-solid fa-xmark"></i></button>
-    </div>
-    <form onsubmit="submitConnect(event)">
-      <div class="form-group">
-        <label class="stat-label">Nome da Rede (SSID):</label>
-        <input type="text" id="modalSsid" readonly style="background:#0b1120;color:var(--primary);">
-      </div>
-      <div class="form-group">
-        <label class="stat-label">Palavra-passe:</label>
-        <input type="password" id="modalPass" placeholder="Introduza a palavra-passe">
-      </div>
-      <div class="btn-group" style="justify-content:flex-end;margin-top:16px;">
-        <button type="button" onclick="closeConnectModal()" class="btn btn-secondary">Cancelar</button>
-        <button type="submit" class="btn btn-primary"><i class="fa-solid fa-plug"></i> Guardar e Ligar</button>
-      </div>
-    </form>
-  </div>
-</div>
-
-<script>
-function scanNetworks() {
-  const status = document.getElementById('scanStatus');
-  const tbody = document.getElementById('scanTableBody');
-  status.style.display = 'block';
-  tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--muted);"><i class="fa-solid fa-rotate fa-spin"></i> A varrer frequências 2.4 GHz...</td></tr>';
-
-  fetch('/api/scan')
-    .then(r => r.json())
-    .then(networks => {
-      status.style.display = 'none';
-      if (!networks || networks.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--yellow);">Nenhuma rede encontrada. Tente novamente.</td></tr>';
-        return;
-      }
-      let html = '';
-      networks.forEach(n => {
-        const lockIcon = n.secure ? '<i class="fa-solid fa-lock" style="color:var(--yellow);"></i> Protegida' : '<i class="fa-solid fa-lock-open" style="color:var(--muted);"></i> Aberta';
-        html += '<tr>';
-        html += '<td><strong>' + n.ssid + '</strong></td>';
-        html += '<td>' + n.rssi + ' dBm</td>';
-        html += '<td>' + lockIcon + '</td>';
-        html += '<td><button onclick="openConnectModal(\'' + n.ssid + '\')" class="btn btn-primary" style="padding:4px 10px;font-size:0.75rem;"><i class="fa-solid fa-plug"></i> Conectar</button></td>';
-        html += '</tr>';
-      });
-      tbody.innerHTML = html;
-    })
-    .catch(() => {
-      status.style.display = 'none';
-      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--red);">Erro ao pesquisar redes.</td></tr>';
-    });
-}
-
-function openConnectModal(ssid) {
-  document.getElementById('modalSsid').value = ssid;
-  document.getElementById('modalPass').value = '';
-  document.getElementById('connectModal').style.display = 'flex';
-}
-function closeConnectModal() {
-  document.getElementById('connectModal').style.display = 'none';
-}
-
-function submitConnect(e) {
-  e.preventDefault();
-  const ssid = document.getElementById('modalSsid').value;
-  const pass = document.getElementById('modalPass').value;
-  closeConnectModal();
-  showToast('A enviar credenciais ao Rover...');
-
-  fetch('/api/wifi/save', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ssid: ssid, pass: pass })
-  })
-  .then(r => r.json())
-  .then(res => {
-    showToast(res.msg || 'Rede guardada!');
-    loadSavedNetworks();
-  });
-}
-
-function loadSavedNetworks() {
-  fetch('/api/status')
-    .then(r => r.json())
-    .then(data => {
-      const tbody = document.getElementById('savedTableBody');
-      const curSsid = (data.wifi && !data.wifi.is_ap) ? data.wifi.ssid : '';
-      if (!curSsid) {
-        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--muted);">Modo AP Ativo ou nenhuma rede conectada no momento.</td></tr>';
-        return;
-      }
-      tbody.innerHTML = '<tr><td><strong>' + curSsid + '</strong></td><td><span class="badge badge-sta"><i class="fa-solid fa-circle-check"></i> Conectada</span></td><td><button onclick="disconnectWifi()" class="btn btn-secondary" style="padding:4px 8px;font-size:0.75rem;"><i class="fa-solid fa-rotate"></i> Reconectar</button></td></tr>';
-    }).catch(() => {});
-}
-
-function disconnectWifi() {
-  fetch('/api/wifi/reconnect', { method: 'POST' })
-    .then(() => showToast('A reconectar...'));
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-  loadSavedNetworks();
-  scanNetworks();
-});
-</script>
-
 <div class="card">
   <div class="card-title">
     <span><i class="fa-solid fa-sun"></i> Brilho do Ecrã (Display LCD ST7789)</span>
@@ -353,6 +173,12 @@ function toggleJoyScreen(enabled){
     <button type="button" class="btn btn-secondary" onclick="document.getElementById('otaFileInput').click()" style="padding:10px 20px;">
       <i class="fa-solid fa-folder-open"></i> Escolher Ficheiro de Firmware
     </button>
+    <div style="margin-top:14px;display:flex;align-items:center;gap:8px;justify-content:center;background:rgba(255,255,255,0.03);padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);">
+      <input type="checkbox" id="otaSkipC6" style="cursor:pointer;width:18px;height:18px;accent-color:var(--primary);">
+      <label for="otaSkipC6" style="font-size:0.85rem;color:var(--text);cursor:pointer;user-select:none;">
+        <strong>Ignorar Coprocessador C6</strong> (atualizar apenas Master Lafvin se C6 estiver desligado)
+      </label>
+    </div>
   </div>
 
   <!-- Painel de Progresso do OTA -->
@@ -369,10 +195,59 @@ function toggleJoyScreen(enabled){
     <div id="otaLogConsole" style="background:#030712;padding:12px;border-radius:6px;font-family:monospace;font-size:0.75rem;max-height:140px;overflow-y:auto;color:#94a3b8;line-height:1.5;">
       <div>[OTA] À espera de comando...</div>
     </div>
+    <div style="display:flex;gap:10px;justify-content:space-between;align-items:center;margin-top:12px;flex-wrap:wrap;">
+      <button type="button" id="btnCancelOta" onclick="cancelActiveOta()" class="btn btn-secondary" style="padding:6px 12px;font-size:0.8rem;background:#334155;border:1px solid #475569;">
+        <i class="fa-solid fa-xmark"></i> Cancelar OTA e Restaurar Ecrã
+      </button>
+      <button type="button" id="btnSkipC6ToLafvin" onclick="skipC6AndFlashLafvin()" class="btn" style="display:none;padding:6px 14px;font-size:0.8rem;background:#d97706;color:#fff;font-weight:600;">
+        <i class="fa-solid fa-forward-step"></i> Ignorar C6 e Gravar Master Lafvin
+      </button>
+    </div>
   </div>
 </div>
 
 <script>
+let currentOtaLafvinBlob = null;
+let otaInProgress = false;
+let otaC6AbortRequested = false;
+
+window.addEventListener('beforeunload', function(e) {
+  if (otaInProgress) {
+    e.preventDefault();
+    e.returnValue = 'Uma atualização OTA está em curso. Se sair da página agora, a gravação será interrompida!';
+    return e.returnValue;
+  }
+});
+
+async function cancelActiveOta() {
+  otaC6AbortRequested = true;
+  otaLog('A solicitar cancelamento de OTA e restauro do ecrã LCD...', '#f59e0b');
+  try {
+    const res = await fetch('/api/ota/cancel', { method: 'POST' });
+    const j = await res.json();
+    otaLog('✔ ' + (j.msg || 'OTA cancelado com sucesso.'), '#10b981');
+  } catch(e) {
+    otaLog('Aviso ao contactar /api/ota/cancel: ' + e.message, '#f59e0b');
+  }
+  otaInProgress = false;
+  setOtaProgress(0, 'OTA Cancelado. Operação normal restaurada.', false);
+  const skipBtn = document.getElementById('btnSkipC6ToLafvin');
+  if (skipBtn) skipBtn.style.display = 'none';
+}
+
+async function skipC6AndFlashLafvin() {
+  otaC6AbortRequested = true;
+  const skipBtn = document.getElementById('btnSkipC6ToLafvin');
+  if (skipBtn) skipBtn.style.display = 'none';
+  otaLog('A ignorar Coprocessador C6 e a avançar para gravação do Master Lafvin...', '#d97706');
+  if (currentOtaLafvinBlob) {
+    await performLafvinOta(currentOtaLafvinBlob);
+  } else {
+    otaLog('Nenhum binário lafvin.bin disponível para gravar.', '#ef4444');
+    cancelActiveOta();
+  }
+}
+
 function otaLog(msg, color) {
   const c = document.getElementById('otaLogConsole');
   if (!c) return;
@@ -431,6 +306,9 @@ async function onOtaFileSelected(file) {
   const panel = document.getElementById('otaProgressPanel');
   panel.style.display = 'block';
   document.getElementById('otaLogConsole').innerHTML = '';
+  const skipBtn = document.getElementById('btnSkipC6ToLafvin');
+  if (skipBtn) skipBtn.style.display = 'none';
+
   setOtaProgress(5, 'A analisar pacote ' + file.name + '...');
   otaLog('Ficheiro selecionado: ' + file.name + ' (' + Math.round(file.size/1024) + ' KB)');
 
@@ -478,12 +356,17 @@ async function onOtaFileSelected(file) {
     return;
   }
 
+  currentOtaLafvinBlob = lafvinBlob;
+  otaInProgress = true;
+  otaC6AbortRequested = false;
+
   // PASSO 1: Atualização dos ficheiros Web no Cartão MicroSD (se presentes)
   if (webFiles.length > 0) {
     setOtaProgress(5, 'A atualizar frontend no Cartão SD da Base (0/' + webFiles.length + ')...');
     otaLog('★ [Passo 1] A atualizar ' + webFiles.length + ' ficheiros web no Cartão MicroSD...', '#06b6d4');
     let okCount = 0;
     for (let i = 0; i < webFiles.length; i++) {
+      if (otaC6AbortRequested) return;
       const wf = webFiles[i];
       const parts = wf.path.split('/');
       const fileName = parts.pop();
@@ -512,18 +395,28 @@ async function onOtaFileSelected(file) {
   }
 
   // PASSO 2: Atualização do Coprocessador C6
-  if (c6Blob) {
+  const skipC6 = document.getElementById('otaSkipC6')?.checked;
+  if (c6Blob && !skipC6) {
     const ok = await performC6Ota(c6Blob);
     if (!ok) {
-      otaLog('Processo interrompido devido a erro no C6.', '#ef4444');
+      if (otaC6AbortRequested) return;
+      otaLog('Processo interrompido no C6. Se o C6 estiver desligado, pode ignorá-lo.', '#ef4444');
+      if (lafvinBlob) {
+        const skipBtn = document.getElementById('btnSkipC6ToLafvin');
+        if (skipBtn) skipBtn.style.display = 'inline-block';
+        otaLog('Clique no botão "Ignorar C6 e Gravar Master Lafvin" para prosseguir com o Master.', '#f59e0b');
+      }
       return;
     }
+  } else if (c6Blob && skipC6) {
+    otaLog('★ Coprocessador C6 ignorado conforme opção selecionada.', '#d97706');
   }
 
   // PASSO 3: Atualização do Master Lafvin
   if (lafvinBlob) {
     await performLafvinOta(lafvinBlob);
   } else {
+    otaInProgress = false;
     setOtaProgress(100, 'Atualização concluída com sucesso!', false);
     otaLog('★ Todas as operações de atualização foram concluídas!', '#10b981');
   }
@@ -555,7 +448,9 @@ async function performC6Ota(blob) {
   otaLog('A aguardar confirmação de gravação do Coprocessador C6...');
 
   for (let i = 0; i < 35; i++) {
+    if (otaC6AbortRequested) return false;
     await new Promise(r => setTimeout(r, 1000));
+    if (otaC6AbortRequested) return false;
     try {
       const sRes = await fetch('/api/ota/c6/status');
       const sJson = await sRes.json();
@@ -569,15 +464,21 @@ async function performC6Ota(blob) {
         otaLog('✔ Coprocessador C6 gravado e reiniciado com sucesso!', '#10b981');
         await new Promise(r => setTimeout(r, 2000));
         return true;
-      } else if (sJson.state && sJson.state.startsWith('FAIL')) {
-        otaLog('Falha no Coprocessador C6: ' + sJson.state, '#ef4444');
-        setOtaProgress(35, 'Falha na gravação do C6', false);
+      } else if (sJson.state && (sJson.state.startsWith('FAIL') || sJson.state === 'ERROR')) {
+        otaLog('Falha no Coprocessador C6: ' + (sJson.detail || sJson.state), '#ef4444');
+        setOtaProgress(35, 'Falha no C6: ' + sJson.state, false);
         return false;
       }
     } catch (e) {}
+
+    // Se após 5 segundos ainda estiver a aguardar resposta do C6, disponibiliza a opção de pular direto para o Master Lafvin
+    if (i >= 4 && currentOtaLafvinBlob) {
+      const skipBtn = document.getElementById('btnSkipC6ToLafvin');
+      if (skipBtn) skipBtn.style.display = 'inline-block';
+    }
   }
-  otaLog('Aviso: Timeout à espera de resposta do C6. A prosseguir com o Master...', '#f59e0b');
-  return true;
+  otaLog('Aviso: Timeout à espera de resposta do C6.', '#f59e0b');
+  return false;
 }
 
 function performLafvinOta(blob) {
@@ -596,6 +497,7 @@ function performLafvinOta(blob) {
     };
 
     xhr.onload = function() {
+      otaInProgress = false;
       if (xhr.status === 200) {
         setOtaProgress(100, '✔ Atualização concluída com sucesso! A reiniciar Base...', false);
         otaLog('★ Firmware do Master gravado com 100% de sucesso!', '#10b981');
@@ -619,6 +521,7 @@ function performLafvinOta(blob) {
     };
 
     xhr.onerror = function() {
+      otaInProgress = false;
       otaLog('Falha de rede ao gravar Master Lafvin.', '#ef4444');
       resolve(false);
     };

@@ -66,6 +66,7 @@ function pollGlobalStatus() {
         if (opBadge) {
           opBadge.style.background = colors[data.operation_state] || '#64748b';
         }
+      }
       if (data.version) {
         const laf = data.version.lafvin || 'v2.1.0';
         const c6 = data.version.c6 || '--';

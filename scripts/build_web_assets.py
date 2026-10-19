@@ -634,6 +634,7 @@ function pollGlobalStatus() {
         if (opBadge) {
           opBadge.style.background = colors[data.operation_state] || '#64748b';
         }
+      }
       if (data.version) {
         const laf = data.version.lafvin || 'v2.1.0';
         const c6 = data.version.c6 || '--';
@@ -743,6 +744,7 @@ def generate_base_html_page(title, active_tab, body_content):
     tabs = [
         ("mission", "/mission", "fa-flag-checkered", "Missão"),
         ("portal", "/portal", "fa-cloud", "Portal Cloud"),
+        ("config", "/config", "fa-gear", "Configuração"),
         ("wifi", "/wifi", "fa-wifi", "WiFi Base"),
         ("gps", "/gps", "fa-location-dot", "GPS Frota"),
         ("battery", "/battery", "fa-battery-three-quarters", "Bateria Frota"),
@@ -772,7 +774,7 @@ def generate_base_html_page(title, active_tab, body_content):
       {nav_links}
     </nav>
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-      <a href="/wifi" id="navVersionBadge" class="badge" style="background:rgba(6,182,212,0.12);border:1px solid rgba(6,182,212,0.3);color:var(--primary);text-decoration:none;font-size:0.75rem;display:inline-flex;align-items:center;gap:6px;" title="Ver detalhes de firmware no WiFi/Configurações">
+      <a href="/config" id="navVersionBadge" class="badge" style="background:rgba(6,182,212,0.12);border:1px solid rgba(6,182,212,0.3);color:var(--primary);text-decoration:none;font-size:0.75rem;display:inline-flex;align-items:center;gap:6px;" title="Ver versões das placas e atualização OTA na página de Configuração">
         <i class="fa-solid fa-code-branch"></i> <span id="navLafvinVer">Lafvin: v2.1.0</span> &bull; <span id="navC6Ver">C6: ...</span>
       </a>
       <span id="navOpStateBadge" class="badge" style="background:#64748b;color:#fff;font-weight:700;">
@@ -2361,27 +2363,20 @@ document.addEventListener('DOMContentLoaded', () => {
 # SD Explorer Page (Modern Grid / List dual view with breadcrumbs)
 SD_CONTENT = """
 <div class="card" style="margin-bottom:16px;">
-  <div class="card-title" style="margin-bottom:8px;">
+  <div class="card-title" style="margin-bottom:12px;">
     <span><i class="fa-solid fa-sd-card"></i> Cartão MicroSD TF (SPI Bus)</span>
     <span id="sdBadge" class="badge badge-sta"><i class="fa-solid fa-circle-check"></i> Montado</span>
   </div>
-  <div class="grid-4">
-    <div class="stat-box">
-      <div class="stat-label">Tipo de Cartão</div>
-      <div class="stat-value" id="cardType" style="color:var(--primary);font-size:1.1rem;">SDHC / SDXC</div>
-    </div>
-    <div class="stat-box">
-      <div class="stat-label">Espaço Total</div>
-      <div class="stat-value" id="totalMb">-- MB</div>
-    </div>
-    <div class="stat-box">
-      <div class="stat-label">Espaço Usado</div>
-      <div class="stat-value" id="usedMb" style="color:var(--yellow);">-- MB</div>
-    </div>
-    <div class="stat-box">
-      <div class="stat-label">Espaço Livre</div>
-      <div class="stat-value" id="freeMb" style="color:var(--green);">-- MB</div>
-    </div>
+  <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;font-size:0.875rem;margin-bottom:8px;">
+    <span style="color:var(--muted);">
+      Espaço Utilizado: <strong id="usedMb" style="color:var(--text);font-size:0.95rem;">-- MB</strong> de <span id="totalMb">-- MB</span> (<span id="usedPct">0%</span>)
+    </span>
+    <span style="color:var(--muted);">
+      Livre: <strong id="freeMb" style="color:var(--green);font-size:0.95rem;">-- MB</strong>
+    </span>
+  </div>
+  <div class="progress-bg" style="height:10px;margin-top:0;">
+    <div id="sdProgressBar" class="progress-bar" style="width:0%;background:var(--primary);"></div>
   </div>
 </div>
 
@@ -2510,6 +2505,31 @@ SD_CONTENT = """
 </div>
 
 <script>
+if (typeof formatBytes === 'undefined') {
+  window.formatBytes = function(bytes) {
+    if (!bytes || bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  };
+}
+if (typeof showToast === 'undefined') {
+  window.showToast = function(msg, isError = false) {
+    let t = document.getElementById('toast');
+    if (!t) {
+      t = document.createElement('div');
+      t.id = 'toast';
+      document.body.appendChild(t);
+    }
+    t.innerText = msg;
+    t.style.background = isError ? '#ef4444' : '#10b981';
+    t.style.color = '#fff';
+    t.style.display = 'block';
+    setTimeout(() => { t.style.display = 'none'; }, 3500);
+  };
+}
+
 let currentDir = '/';
 let allEntries = [];
 let currentFilter = '';
@@ -2564,10 +2584,26 @@ function refreshDir() {
   fetch('/api/sd/list?dir=' + encodeURIComponent(currentDir))
     .then(r => r.json())
     .then(data => {
-      document.getElementById('cardType').innerText = data.card_type || 'SD';
-      document.getElementById('totalMb').innerText = (data.total_mb || 0) + ' MB';
-      document.getElementById('usedMb').innerText = (data.used_mb || 0) + ' MB';
-      document.getElementById('freeMb').innerText = (data.free_mb || 0) + ' MB';
+      const total = data.total_mb || 0;
+      const used = data.used_mb || 0;
+      const free = data.free_mb !== undefined ? data.free_mb : (total > used ? total - used : 0);
+      const pct = total > 0 ? Math.min(100, Math.round((used / total) * 100)) : 0;
+      if (document.getElementById('totalMb')) document.getElementById('totalMb').innerText = total + ' MB';
+      if (document.getElementById('usedMb')) document.getElementById('usedMb').innerText = used + ' MB';
+      if (document.getElementById('freeMb')) document.getElementById('freeMb').innerText = free + ' MB';
+      if (document.getElementById('usedPct')) document.getElementById('usedPct').innerText = pct + '%';
+      const bar = document.getElementById('sdProgressBar');
+      if (bar) {
+        bar.style.width = pct + '%';
+        bar.style.background = pct > 90 ? 'var(--red)' : (pct > 75 ? 'var(--yellow)' : 'var(--primary)');
+      }
+      if (data.ready !== undefined) {
+        const badge = document.getElementById('sdBadge');
+        if (badge) {
+          badge.className = 'badge ' + (data.ready ? 'badge-sta' : 'badge-ap');
+          badge.innerHTML = data.ready ? '<i class="fa-solid fa-circle-check"></i> Montado' : '<i class="fa-solid fa-circle-exclamation"></i> Desconectado';
+        }
+      }
       currentDir = data.current_dir || currentDir;
       updateBreadcrumbs(currentDir);
       allEntries = data.files || [];
@@ -3451,6 +3487,12 @@ BASE_OTA_CARD = """
     <button type="button" class="btn btn-secondary" onclick="document.getElementById('otaFileInput').click()" style="padding:10px 20px;">
       <i class="fa-solid fa-folder-open"></i> Escolher Ficheiro de Firmware
     </button>
+    <div style="margin-top:14px;display:flex;align-items:center;gap:8px;justify-content:center;background:rgba(255,255,255,0.03);padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);">
+      <input type="checkbox" id="otaSkipC6" style="cursor:pointer;width:18px;height:18px;accent-color:var(--primary);">
+      <label for="otaSkipC6" style="font-size:0.85rem;color:var(--text);cursor:pointer;user-select:none;">
+        <strong>Ignorar Coprocessador C6</strong> (atualizar apenas Master Lafvin se C6 estiver desligado)
+      </label>
+    </div>
   </div>
 
   <!-- Painel de Progresso do OTA -->
@@ -3467,10 +3509,59 @@ BASE_OTA_CARD = """
     <div id="otaLogConsole" style="background:#030712;padding:12px;border-radius:6px;font-family:monospace;font-size:0.75rem;max-height:140px;overflow-y:auto;color:#94a3b8;line-height:1.5;">
       <div>[OTA] À espera de comando...</div>
     </div>
+    <div style="display:flex;gap:10px;justify-content:space-between;align-items:center;margin-top:12px;flex-wrap:wrap;">
+      <button type="button" id="btnCancelOta" onclick="cancelActiveOta()" class="btn btn-secondary" style="padding:6px 12px;font-size:0.8rem;background:#334155;border:1px solid #475569;">
+        <i class="fa-solid fa-xmark"></i> Cancelar OTA e Restaurar Ecrã
+      </button>
+      <button type="button" id="btnSkipC6ToLafvin" onclick="skipC6AndFlashLafvin()" class="btn" style="display:none;padding:6px 14px;font-size:0.8rem;background:#d97706;color:#fff;font-weight:600;">
+        <i class="fa-solid fa-forward-step"></i> Ignorar C6 e Gravar Master Lafvin
+      </button>
+    </div>
   </div>
 </div>
 
 <script>
+let currentOtaLafvinBlob = null;
+let otaInProgress = false;
+let otaC6AbortRequested = false;
+
+window.addEventListener('beforeunload', function(e) {
+  if (otaInProgress) {
+    e.preventDefault();
+    e.returnValue = 'Uma atualização OTA está em curso. Se sair da página agora, a gravação será interrompida!';
+    return e.returnValue;
+  }
+});
+
+async function cancelActiveOta() {
+  otaC6AbortRequested = true;
+  otaLog('A solicitar cancelamento de OTA e restauro do ecrã LCD...', '#f59e0b');
+  try {
+    const res = await fetch('/api/ota/cancel', { method: 'POST' });
+    const j = await res.json();
+    otaLog('✔ ' + (j.msg || 'OTA cancelado com sucesso.'), '#10b981');
+  } catch(e) {
+    otaLog('Aviso ao contactar /api/ota/cancel: ' + e.message, '#f59e0b');
+  }
+  otaInProgress = false;
+  setOtaProgress(0, 'OTA Cancelado. Operação normal restaurada.', false);
+  const skipBtn = document.getElementById('btnSkipC6ToLafvin');
+  if (skipBtn) skipBtn.style.display = 'none';
+}
+
+async function skipC6AndFlashLafvin() {
+  otaC6AbortRequested = true;
+  const skipBtn = document.getElementById('btnSkipC6ToLafvin');
+  if (skipBtn) skipBtn.style.display = 'none';
+  otaLog('A ignorar Coprocessador C6 e a avançar para gravação do Master Lafvin...', '#d97706');
+  if (currentOtaLafvinBlob) {
+    await performLafvinOta(currentOtaLafvinBlob);
+  } else {
+    otaLog('Nenhum binário lafvin.bin disponível para gravar.', '#ef4444');
+    cancelActiveOta();
+  }
+}
+
 function otaLog(msg, color) {
   const c = document.getElementById('otaLogConsole');
   if (!c) return;
@@ -3529,6 +3620,9 @@ async function onOtaFileSelected(file) {
   const panel = document.getElementById('otaProgressPanel');
   panel.style.display = 'block';
   document.getElementById('otaLogConsole').innerHTML = '';
+  const skipBtn = document.getElementById('btnSkipC6ToLafvin');
+  if (skipBtn) skipBtn.style.display = 'none';
+
   setOtaProgress(5, 'A analisar pacote ' + file.name + '...');
   otaLog('Ficheiro selecionado: ' + file.name + ' (' + Math.round(file.size/1024) + ' KB)');
 
@@ -3576,12 +3670,17 @@ async function onOtaFileSelected(file) {
     return;
   }
 
+  currentOtaLafvinBlob = lafvinBlob;
+  otaInProgress = true;
+  otaC6AbortRequested = false;
+
   // PASSO 1: Atualização dos ficheiros Web no Cartão MicroSD (se presentes)
   if (webFiles.length > 0) {
     setOtaProgress(5, 'A atualizar frontend no Cartão SD da Base (0/' + webFiles.length + ')...');
     otaLog('★ [Passo 1] A atualizar ' + webFiles.length + ' ficheiros web no Cartão MicroSD...', '#06b6d4');
     let okCount = 0;
     for (let i = 0; i < webFiles.length; i++) {
+      if (otaC6AbortRequested) return;
       const wf = webFiles[i];
       const parts = wf.path.split('/');
       const fileName = parts.pop();
@@ -3610,18 +3709,28 @@ async function onOtaFileSelected(file) {
   }
 
   // PASSO 2: Atualização do Coprocessador C6
-  if (c6Blob) {
+  const skipC6 = document.getElementById('otaSkipC6')?.checked;
+  if (c6Blob && !skipC6) {
     const ok = await performC6Ota(c6Blob);
     if (!ok) {
-      otaLog('Processo interrompido devido a erro no C6.', '#ef4444');
+      if (otaC6AbortRequested) return;
+      otaLog('Processo interrompido no C6. Se o C6 estiver desligado, pode ignorá-lo.', '#ef4444');
+      if (lafvinBlob) {
+        const skipBtn = document.getElementById('btnSkipC6ToLafvin');
+        if (skipBtn) skipBtn.style.display = 'inline-block';
+        otaLog('Clique no botão "Ignorar C6 e Gravar Master Lafvin" para prosseguir com o Master.', '#f59e0b');
+      }
       return;
     }
+  } else if (c6Blob && skipC6) {
+    otaLog('★ Coprocessador C6 ignorado conforme opção selecionada.', '#d97706');
   }
 
   // PASSO 3: Atualização do Master Lafvin
   if (lafvinBlob) {
     await performLafvinOta(lafvinBlob);
   } else {
+    otaInProgress = false;
     setOtaProgress(100, 'Atualização concluída com sucesso!', false);
     otaLog('★ Todas as operações de atualização foram concluídas!', '#10b981');
   }
@@ -3653,7 +3762,9 @@ async function performC6Ota(blob) {
   otaLog('A aguardar confirmação de gravação do Coprocessador C6...');
 
   for (let i = 0; i < 35; i++) {
+    if (otaC6AbortRequested) return false;
     await new Promise(r => setTimeout(r, 1000));
+    if (otaC6AbortRequested) return false;
     try {
       const sRes = await fetch('/api/ota/c6/status');
       const sJson = await sRes.json();
@@ -3667,15 +3778,21 @@ async function performC6Ota(blob) {
         otaLog('✔ Coprocessador C6 gravado e reiniciado com sucesso!', '#10b981');
         await new Promise(r => setTimeout(r, 2000));
         return true;
-      } else if (sJson.state && sJson.state.startsWith('FAIL')) {
-        otaLog('Falha no Coprocessador C6: ' + sJson.state, '#ef4444');
-        setOtaProgress(35, 'Falha na gravação do C6', false);
+      } else if (sJson.state && (sJson.state.startsWith('FAIL') || sJson.state === 'ERROR')) {
+        otaLog('Falha no Coprocessador C6: ' + (sJson.detail || sJson.state), '#ef4444');
+        setOtaProgress(35, 'Falha no C6: ' + sJson.state, false);
         return false;
       }
     } catch (e) {}
+
+    // Se após 5 segundos ainda estiver a aguardar resposta do C6, disponibiliza a opção de pular direto para o Master Lafvin
+    if (i >= 4 && currentOtaLafvinBlob) {
+      const skipBtn = document.getElementById('btnSkipC6ToLafvin');
+      if (skipBtn) skipBtn.style.display = 'inline-block';
+    }
   }
-  otaLog('Aviso: Timeout à espera de resposta do C6. A prosseguir com o Master...', '#f59e0b');
-  return true;
+  otaLog('Aviso: Timeout à espera de resposta do C6.', '#f59e0b');
+  return false;
 }
 
 function performLafvinOta(blob) {
@@ -3694,6 +3811,7 @@ function performLafvinOta(blob) {
     };
 
     xhr.onload = function() {
+      otaInProgress = false;
       if (xhr.status === 200) {
         setOtaProgress(100, '✔ Atualização concluída com sucesso! A reiniciar Base...', false);
         otaLog('★ Firmware do Master gravado com 100% de sucesso!', '#10b981');
@@ -3717,6 +3835,7 @@ function performLafvinOta(blob) {
     };
 
     xhr.onerror = function() {
+      otaInProgress = false;
       otaLog('Falha de rede ao gravar Master Lafvin.', '#ef4444');
       resolve(false);
     };
@@ -3729,10 +3848,12 @@ function performLafvinOta(blob) {
 </script>
 """
 
-BASE_WIFI_CONTENT = BASE_WIFI_CARD + WIFI_CONTENT.replace(
+BASE_CONFIG_CONTENT = BASE_LCD_CARD + BASE_OTA_CARD
+
+BASE_WIFI_CONTENT = WIFI_CONTENT.replace(
     "Ligue o Rover ao router Wi-Fi do cais ou centro de comando para telemetria em tempo real e acesso local direto.",
     "Ligue a Base Station ao router Wi-Fi local para permitir controlo via browser e telemetria da frota em tempo real."
-).replace("Redes Guardadas no Rover", "Redes Guardadas na Base Station") + BASE_LCD_CARD + BASE_OTA_CARD
+).replace("Redes Guardadas no Rover", "Redes Guardadas na Base Station")
 
 BASE_SD_CONTENT = SD_CONTENT.replace("Explorador do Cartão MicroSD", "Explorador MicroSD - Base Station").replace("Cartão MicroSD - Rover", "Cartão MicroSD - Base Station").replace("let currentDir = '/';", "let currentDir = '/www/base';")
 
@@ -4318,6 +4439,7 @@ def main():
             gps_base = f.read()
     else:
         gps_base = generate_base_html_page("Telemetria GPS da Frota", "gps", BASE_GPS_CONTENT)
+    config_base = generate_base_html_page("Configuração da Base Station", "config", BASE_CONFIG_CONTENT)
     bat_base = generate_base_html_page("Monitor de Bateria da Frota", "battery", BASE_BATTERY_CONTENT)
     ctrl_base = generate_base_html_page("Centro de Comando da Frota", "control", BASE_CONTROL_CONTENT)
     wifi_base = generate_base_html_page("Configuração WiFi da Base", "wifi", BASE_WIFI_CONTENT)
@@ -4327,11 +4449,11 @@ def main():
         ("index.html", mission_base),
         ("mission.html", mission_base),
         ("portal.html", portal_base),
+        ("config.html", config_base),
+        ("wifi.html", wifi_base),
         ("gps.html", gps_base),
         ("battery.html", bat_base),
         ("control.html", ctrl_base),
-        ("wifi.html", wifi_base),
-        ("config.html", wifi_base),
         ("sd.html", sd_base)
     ]
 
@@ -4342,7 +4464,7 @@ def main():
         if fname == "mission.html":
             with open(WWW_DIR / fname, "w", encoding="utf-8") as f:
                 f.write(content.strip() + "\n")
-    print(f"  [+] 8 páginas especializadas geradas em {BASE_DIR}")
+    print(f"  [+] 9 páginas especializadas geradas em {BASE_DIR}")
 
     print("\n[OK] Todas as páginas web do Rover e da Base Station foram geradas com sucesso!")
 

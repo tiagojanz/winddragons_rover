@@ -34,27 +34,20 @@
   <main class="container">
     
 <div class="card" style="margin-bottom:16px;">
-  <div class="card-title" style="margin-bottom:8px;">
+  <div class="card-title" style="margin-bottom:12px;">
     <span><i class="fa-solid fa-sd-card"></i> Cartão MicroSD TF (SPI Bus)</span>
     <span id="sdBadge" class="badge badge-sta"><i class="fa-solid fa-circle-check"></i> Montado</span>
   </div>
-  <div class="grid-4">
-    <div class="stat-box">
-      <div class="stat-label">Tipo de Cartão</div>
-      <div class="stat-value" id="cardType" style="color:var(--primary);font-size:1.1rem;">SDHC / SDXC</div>
-    </div>
-    <div class="stat-box">
-      <div class="stat-label">Espaço Total</div>
-      <div class="stat-value" id="totalMb">-- MB</div>
-    </div>
-    <div class="stat-box">
-      <div class="stat-label">Espaço Usado</div>
-      <div class="stat-value" id="usedMb" style="color:var(--yellow);">-- MB</div>
-    </div>
-    <div class="stat-box">
-      <div class="stat-label">Espaço Livre</div>
-      <div class="stat-value" id="freeMb" style="color:var(--green);">-- MB</div>
-    </div>
+  <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;font-size:0.875rem;margin-bottom:8px;">
+    <span style="color:var(--muted);">
+      Espaço Utilizado: <strong id="usedMb" style="color:var(--text);font-size:0.95rem;">-- MB</strong> de <span id="totalMb">-- MB</span> (<span id="usedPct">0%</span>)
+    </span>
+    <span style="color:var(--muted);">
+      Livre: <strong id="freeMb" style="color:var(--green);font-size:0.95rem;">-- MB</strong>
+    </span>
+  </div>
+  <div class="progress-bg" style="height:10px;margin-top:0;">
+    <div id="sdProgressBar" class="progress-bar" style="width:0%;background:var(--primary);"></div>
   </div>
 </div>
 
@@ -183,6 +176,31 @@
 </div>
 
 <script>
+if (typeof formatBytes === 'undefined') {
+  window.formatBytes = function(bytes) {
+    if (!bytes || bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  };
+}
+if (typeof showToast === 'undefined') {
+  window.showToast = function(msg, isError = false) {
+    let t = document.getElementById('toast');
+    if (!t) {
+      t = document.createElement('div');
+      t.id = 'toast';
+      document.body.appendChild(t);
+    }
+    t.innerText = msg;
+    t.style.background = isError ? '#ef4444' : '#10b981';
+    t.style.color = '#fff';
+    t.style.display = 'block';
+    setTimeout(() => { t.style.display = 'none'; }, 3500);
+  };
+}
+
 let currentDir = '/';
 let allEntries = [];
 let currentFilter = '';
@@ -237,10 +255,26 @@ function refreshDir() {
   fetch('/api/sd/list?dir=' + encodeURIComponent(currentDir))
     .then(r => r.json())
     .then(data => {
-      document.getElementById('cardType').innerText = data.card_type || 'SD';
-      document.getElementById('totalMb').innerText = (data.total_mb || 0) + ' MB';
-      document.getElementById('usedMb').innerText = (data.used_mb || 0) + ' MB';
-      document.getElementById('freeMb').innerText = (data.free_mb || 0) + ' MB';
+      const total = data.total_mb || 0;
+      const used = data.used_mb || 0;
+      const free = data.free_mb !== undefined ? data.free_mb : (total > used ? total - used : 0);
+      const pct = total > 0 ? Math.min(100, Math.round((used / total) * 100)) : 0;
+      if (document.getElementById('totalMb')) document.getElementById('totalMb').innerText = total + ' MB';
+      if (document.getElementById('usedMb')) document.getElementById('usedMb').innerText = used + ' MB';
+      if (document.getElementById('freeMb')) document.getElementById('freeMb').innerText = free + ' MB';
+      if (document.getElementById('usedPct')) document.getElementById('usedPct').innerText = pct + '%';
+      const bar = document.getElementById('sdProgressBar');
+      if (bar) {
+        bar.style.width = pct + '%';
+        bar.style.background = pct > 90 ? 'var(--red)' : (pct > 75 ? 'var(--yellow)' : 'var(--primary)');
+      }
+      if (data.ready !== undefined) {
+        const badge = document.getElementById('sdBadge');
+        if (badge) {
+          badge.className = 'badge ' + (data.ready ? 'badge-sta' : 'badge-ap');
+          badge.innerHTML = data.ready ? '<i class="fa-solid fa-circle-check"></i> Montado' : '<i class="fa-solid fa-circle-exclamation"></i> Desconectado';
+        }
+      }
       currentDir = data.current_dir || currentDir;
       updateBreadcrumbs(currentDir);
       allEntries = data.files || [];

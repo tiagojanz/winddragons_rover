@@ -55,6 +55,30 @@ public:
             _webControlActive = false;
         }
 
+        // Timeout de seguranca para OTA do C6 (35 segundos sem progresso -> cancelar estado e restaurar ecrã)
+        bool isOtaInProgress = (_c6OtaState != "IDLE" && 
+                                _c6OtaState != "SUCCESS" && 
+                                _c6OtaState != "ERROR" && 
+                                _c6OtaState != "FAIL_TIMEOUT" &&
+                                strncmp(_c6OtaState.c_str(), "FAIL", 4) != 0);
+        if (isOtaInProgress && _c6OtaTimestamp > 0 && (millis() - _c6OtaTimestamp > 35000)) {
+            Serial.println("[BASE OTA C6] Timeout: Sem resposta do Coprocessador C6 por 35s. A restaurar operacao normal.");
+            _c6OtaState = "FAIL_TIMEOUT";
+            _c6OtaDetail = "Timeout: Coprocessador C6 nao respondeu (desligado ou inacessivel)";
+            _c6OtaTimestamp = 0;
+            if (_display) {
+                _display->showOtaScreen("COPROCESSADOR C6", "ERRO: TIMEOUT C6", 0, "C6 nao respondeu. Ecra restaurado.", UI_RED);
+            }
+            _otaAutoClearMs = millis() + 3000;
+        }
+
+        if (_otaAutoClearMs > 0 && millis() >= _otaAutoClearMs) {
+            _otaAutoClearMs = 0;
+            _isBusy = false;
+            if (_display) _display->setOtaActive(false);
+            _c6OtaState = "IDLE";
+        }
+
         if (_restartScheduled > 0 && millis() >= _restartScheduled) {
             _restartScheduled = 0;
             delay(300);
@@ -116,6 +140,7 @@ public:
             if (_display) {
                 _display->showOtaScreen("COPROCESSADOR C6", "PASSO 1/2: FALHA NO C6", 0, status, UI_RED);
             }
+            _otaAutoClearMs = millis() + 4000;
         } else {
             _c6OtaState = String(status);
             if (_display) {
@@ -170,6 +195,7 @@ private:
     String _c6OtaDetail = "";
     uint8_t _c6OtaProgress = 0;
     uint32_t _c6OtaTimestamp = 0;
+    uint32_t _otaAutoClearMs = 0;
     size_t _lafvinOtaBytes = 0;
     uint32_t _restartScheduled = 0;
 
@@ -286,12 +312,12 @@ private:
             handleWifiPage();
         });
         _server.on("/config", [this]() {
-            if (tryServeSdFile("/www/config.html") || tryServeSdFile("/www/wifi.html")) return;
-            handleWifiPage();
+            if (tryServeSdFile("/www/config.html")) return;
+            handleConfigPage();
         });
         _server.on("/settings", [this]() {
-            if (tryServeSdFile("/www/config.html") || tryServeSdFile("/www/wifi.html")) return;
-            handleWifiPage();
+            if (tryServeSdFile("/www/config.html")) return;
+            handleConfigPage();
         });
         _server.on("/gps", [this]() { 
             if (_wifi.isAPMode()) { _server.sendHeader("Location", "/wifi"); _server.send(302, "text/plain", ""); return; }
@@ -383,6 +409,11 @@ private:
             [this]() { handleOtaC6UploadData(); }
         );
         _server.on("/api/ota/c6/status", HTTP_GET, [this]() { handleApiOtaC6Status(); });
+        _server.on("/api/ota/cancel", HTTP_ANY, [this]() { handleApiOtaCancel(); });
+        _server.on("/api/system/reboot", HTTP_ANY, [this]() {
+            _server.send(200, "application/json", "{\"success\":true,\"msg\":\"A reiniciar Base Station em 1 segundo...\"}");
+            _restartScheduled = millis() + 1000;
+        });
         _server.on("/api/ota/lafvin", HTTP_POST, 
             [this]() { handleApiOtaLafvinFinish(); },
             [this]() { handleApiOtaLafvinData(); }
@@ -488,11 +519,13 @@ private:
         html += "<div class='brand'>🌊 WindDragons <span>Base Station</span></div>";
         html += "<div class='nav-links'>";
         if (_wifi.isAPMode()) {
-            html += "<a href='/wifi' class='nav-item active'>Configuração WiFi (Modo AP)</a>";
+            html += "<a href='/wifi' class='nav-item " + String(activeTab == "wifi" ? "active" : "") + "'>Configuração WiFi (Modo AP)</a>";
+            html += "<a href='/config' class='nav-item " + String(activeTab == "config" ? "active" : "") + "'>⚙️ Configuração</a>";
             html += "<a href='/mission' class='nav-item " + String(activeTab == "mission" ? "active" : "") + "'>🏁 Missão</a>";
         } else {
             html += "<a href='/mission' class='nav-item " + String(activeTab == "mission" ? "active" : "") + "'>🏁 Missão</a>";
             html += "<a href='/portal' class='nav-item " + String(activeTab == "portal" ? "active" : "") + "'>☁️ Portal</a>";
+            html += "<a href='/config' class='nav-item " + String(activeTab == "config" ? "active" : "") + "'>⚙️ Configuração</a>";
             html += "<a href='/wifi' class='nav-item " + String(activeTab == "wifi" ? "active" : "") + "'>📡 WiFi</a>";
             html += "<a href='/gps' class='nav-item " + String(activeTab == "gps" ? "active" : "") + "'>📍 GPS Frota</a>";
             html += "<a href='/battery' class='nav-item " + String(activeTab == "battery" ? "active" : "") + "'>🔋 Bateria</a>";
@@ -616,7 +649,33 @@ private:
         html += "<div id='scanResults' style='margin-top:16px;'></div>";
         html += "</div>";
 
-        // Card: Brilho do Ecrã LCD (Display LCD ST7789)
+        // Script interativo WiFi
+        html += "<script>";
+        html += "function saveWifi(e){e.preventDefault();const s=document.getElementById('ssid').value;const p=document.getElementById('pass').value;const d=document.getElementById('is_default').checked;";
+        html += "fetch('/api/wifi/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:s,password:p,is_default:d})})";
+        html += ".then(r=>r.json()).then(res=>{alert(res.msg);location.reload();});}";
+        html += "function connectNetwork(s){if(confirm('Ligar à rede WiFi \"'+s+'\" agora?')){fetch('/api/wifi/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:s})}).then(r=>r.json()).then(res=>{alert(res.msg||('A ligar à rede '+s+'...'));setTimeout(()=>location.reload(),6000);}).catch(()=>{alert('Comando enviado. A recarregar em 6 segundos...');setTimeout(()=>location.reload(),6000);});}}";
+        html += "function setDefault(s){fetch('/api/wifi/setdefault',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:s})}).then(()=>location.reload());}";
+        html += "function deleteNetwork(s){if(confirm('Eliminar rede '+s+'?')){fetch('/api/wifi/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:s})}).then(()=>location.reload());}}";
+        html += "function reconnectSTA(){if(confirm('Reiniciar o WiFi para conectar à rede padrão?')){fetch('/api/wifi/reconnect',{method:'POST'}).then(r=>r.json()).then(res=>{alert(res.msg);setTimeout(()=>location.reload(),5000);});}}";
+        html += "function scanNetworks(){const d=document.getElementById('scanResults');d.innerHTML='<p style=\"color:var(--primary);\">A pesquisar redes WiFi ao alcance...</p>';";
+        html += "fetch('/api/scan').then(r=>r.json()).then(list=>{if(!list||!list.length){d.innerHTML='<p>Nenhuma rede encontrada.</p>';return;}";
+        html += "let h='<table><thead><tr><th>SSID</th><th>Sinal</th><th>Segurança</th><th>Ação</th></tr></thead><tbody>';";
+        html += "list.forEach(item=>{h+='<tr><td><strong>'+item.ssid+'</strong></td><td>'+item.rssi+' dBm</td><td>'+(item.secure?'Protegida':'Aberta')+'</td><td><button onclick=\"document.getElementById(\\'ssid\\').value=\\''+item.ssid+'\\';document.getElementById(\\'pass\\').focus();\" class=\"btn btn-secondary\" style=\"padding:4px 8px;\">Selecionar</button></td></tr>';});";
+        html += "h+='</tbody></table>';d.innerHTML=h;});}";
+        html += "</script>";
+
+        html += getHtmlFooter();
+        _server.send(200, "text/html", html);
+    }
+
+    // -------------------------------------------------------------
+    // PÁGINA: CONFIGURAÇÃO DA BASE STATION (LCD, VERSÕES & OTA)
+    // -------------------------------------------------------------
+    void handleConfigPage() {
+        String html = getHtmlHeader("Configuração", "config");
+
+        // Card 1: Brilho do Ecrã LCD (Display LCD ST7789)
         uint8_t curBright = _display ? _display->getBrightness() : 85;
         html += "<div class='card'>";
         html += "<div class='card-title'><span><i class='fa-solid fa-sun'></i> Brilho do Ecrã (Display LCD ST7789)</span><span id='brightValBadge' class='badge' style='background:#1e293b;color:var(--primary);font-size:0.9rem;font-weight:700;'>" + String(curBright) + "%</span></div>";
@@ -635,51 +694,49 @@ private:
         html += "<button type='button' onclick='setPreset(100)' class='btn btn-secondary' style='padding:6px 12px;font-size:0.8rem;'><i class='fa-solid fa-bolt'></i> 100% (Sol Máximo)</button>";
         html += "</div></div></div>";
 
-        // Card 4: Configuração dos Ecrãs LCD da Base Station
+        // Card 3: Configuração dos Ecrãs LCD da Base Station
         html += "<div class='card'>";
         html += "<div class='card-title'><span><i class='fa-solid fa-tv'></i> Páginas do Ecrã LCD (Base Station)</span><span class='badge' style='background:#1e3a8a;color:#93c5fd;'>ST7789 320x172</span></div>";
-        html += "<p style='color:var(--muted);font-size:0.875rem;margin-bottom:14px;'>";
-        html += "O ecrã da Estação Base possui 3 ecrãs principais essenciais: <strong>1. Estação (ID, MAC, Estado)</strong>, <strong>2. Conectividade WiFi</strong> e <strong>3. Rover Selecionado</strong>.";
-        html += "</p>";
+        html += "<p style='color:var(--muted);font-size:0.875rem;margin-bottom:14px;'>O ecrã da Estação Base possui 3 ecrãs principais essenciais: <strong>1. Estação (ID, MAC, Estado)</strong>, <strong>2. Conectividade WiFi</strong> e <strong>3. Rover Selecionado</strong>.</p>";
         html += "<div class='form-group' style='display:flex;align-items:center;gap:12px;padding:12px;background:rgba(255,255,255,0.03);border:1px solid var(--card-border);border-radius:8px;'>";
         html += "<input type='checkbox' id='joyScreenCheck' onchange='toggleJoyScreen(this.checked)' style='width:20px;height:20px;cursor:pointer;'>";
         html += "<label for='joyScreenCheck' style='cursor:pointer;font-size:0.95rem;font-weight:600;'>";
         html += "Ativar 4º Ecrã: Teste do Joystick";
-        html += "<div style='font-size:0.75rem;font-weight:normal;color:var(--muted);margin-top:2px;'>";
-        html += "Adiciona a mira analógica 2D e diagnóstico dos eixos ADC ao carrossel de navegação do ecrã físico.";
-        html += "</div></label></div></div>";
+        html += "<div style='font-size:0.75rem;font-weight:normal;color:var(--muted);margin-top:2px;'>Adiciona a mira analógica 2D e diagnóstico dos eixos ADC ao carrossel de navegação do ecrã físico.</div>";
+        html += "</label></div></div>";
+
+        // Card 4: Versão das Placas & Atualização de Firmware Over-The-Air (OTA)
+        html += "<div class='card' style='border-color:var(--primary);'>";
+        html += "<div class='card-title'><span><i class='fa-solid fa-cloud-arrow-up'></i> Versão das Placas & Atualização Over-The-Air (OTA)</span><span class='badge' style='background:#1e293b;color:var(--primary);font-size:0.85rem;font-weight:700;'>Dual ESP32-C6</span></div>";
+        html += "<p style='color:var(--muted);font-size:0.875rem;margin-bottom:16px;'>Envie um único pacote <code>base_firmware.zip</code> contendo os binários de ambos os processadores (ou um ficheiro <code>.bin</code> individual). A atualização é sequencial e à prova de falhas: o Coprocessador C6 (LoRa 433MHz) é atualizado primeiro, seguido pelo Master Lafvin.</p>";
+
+        html += "<div style='display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;'>";
+        html += "<div style='background:rgba(15,23,42,0.7);padding:14px;border-radius:8px;border:1px solid var(--card-border);'>";
+        html += "<div style='color:var(--muted);font-size:0.75rem;text-transform:uppercase;font-weight:600;margin-bottom:4px;'><i class='fa-solid fa-microchip' style='color:var(--primary);margin-right:6px;'></i>Master Lafvin (LCD+SD+WiFi)</div>";
+        html += "<div id='fwLafvinVer' style='font-size:1.3rem;font-weight:700;color:var(--green);'>" + String(BASE_LAFVIN_VERSION) + "</div>";
+        html += "<div style='color:var(--muted);font-size:0.7rem;margin-top:2px;'>ST7789 Display, MicroSD, Web & Gestão</div>";
+        html += "</div>";
+        html += "<div style='background:rgba(15,23,42,0.7);padding:14px;border-radius:8px;border:1px solid var(--card-border);'>";
+        html += "<div style='color:var(--muted);font-size:0.75rem;text-transform:uppercase;font-weight:600;margin-bottom:4px;'><i class='fa-solid fa-satellite-dish' style='color:var(--yellow);margin-right:6px;'></i>Coprocessador C6 (LoRa 433MHz)</div>";
+        html += "<div id='fwC6Ver' style='font-size:1.3rem;font-weight:700;color:var(--yellow);'>" + (_c6Version.isEmpty() ? "A detetar..." : _c6Version) + "</div>";
+        html += "<div style='color:var(--muted);font-size:0.7rem;margin-top:2px;'>LoRa SX1278 (Hardware FSPI dedicado)</div>";
+        html += "</div></div>";
+
+        // Form OTA fallback
+        html += "<form method='POST' action='/api/ota/lafvin' enctype='multipart/form-data' style='display:flex;gap:10px;align-items:center;flex-wrap:wrap;'>";
+        html += "<input type='file' name='file' accept='.bin' required style='flex:1;min-width:200px;'>";
+        html += "<button type='submit' class='btn btn-primary' onclick='return confirm(\"Gravar firmware no Master Lafvin agora?\")'><i class='fa-solid fa-upload'></i> Atualizar Master (.bin)</button>";
+        html += "</form>";
+        html += "</div>";
 
         // Script interativo
         html += "<script>";
         html += "let slideTimer=null;";
-        html += "function onBrightSlide(v){";
-        html += "  const elVal=document.getElementById('brightDisplayVal');if(elVal)elVal.innerText=v+'%';";
-        html += "  const elBadge=document.getElementById('brightValBadge');if(elBadge)elBadge.innerText=v+'%';";
-        html += "  if(slideTimer)clearTimeout(slideTimer);";
-        html += "  slideTimer=setTimeout(()=>{fetch('/api/display/brightness?val='+v,{method:'POST'}).catch(()=>{});},60);";
-        html += "}";
+        html += "function onBrightSlide(v){const elVal=document.getElementById('brightDisplayVal');if(elVal)elVal.innerText=v+'%';const elBadge=document.getElementById('brightValBadge');if(elBadge)elBadge.innerText=v+'%';if(slideTimer)clearTimeout(slideTimer);slideTimer=setTimeout(()=>{fetch('/api/display/brightness?val='+v,{method:'POST'}).catch(()=>{});},60);}";
         html += "function onBrightChange(v){fetch('/api/display/brightness?val='+v,{method:'POST'}).catch(()=>{});}";
         html += "function setPreset(v){const el=document.getElementById('cfg_bright');if(el)el.value=v;onBrightSlide(v);onBrightChange(v);}";
-        html += "fetch('/api/display').then(r=>r.json()).then(d=>{";
-        html += "  const c=document.getElementById('joyScreenCheck');if(c)c.checked=!!d.joy_screen;";
-        html += "  const b=d.screen_brightness||d.brightness||85;";
-        html += "  const el=document.getElementById('cfg_bright');if(el)el.value=b;";
-        html += "  const elVal=document.getElementById('brightDisplayVal');if(elVal)elVal.innerText=b+'%';";
-        html += "  const elBadge=document.getElementById('brightValBadge');if(elBadge)elBadge.innerText=b+'%';";
-        html += "}).catch(()=>{});";
+        html += "fetch('/api/display').then(r=>r.json()).then(d=>{const c=document.getElementById('joyScreenCheck');if(c)c.checked=!!d.joy_screen;const b=d.screen_brightness||d.brightness||85;const el=document.getElementById('cfg_bright');if(el)el.value=b;const elVal=document.getElementById('brightDisplayVal');if(elVal)elVal.innerText=b+'%';const elBadge=document.getElementById('brightValBadge');if(elBadge)elBadge.innerText=b+'%';}).catch(()=>{});";
         html += "function toggleJoyScreen(enabled){fetch('/api/display',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({joy_screen:enabled})}).then(r=>r.json()).then(res=>{alert(res.joy_screen?'4º Ecrã (Teste Joystick) ativado no LCD!':'4º Ecrã desativado. LCD em modo simplificado de 3 ecrãs.');}).catch(e=>{alert('Erro ao guardar configuração do ecrã');});}";
-        html += "function saveWifi(e){e.preventDefault();const s=document.getElementById('ssid').value;const p=document.getElementById('pass').value;const d=document.getElementById('is_default').checked;";
-        html += "fetch('/api/wifi/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:s,password:p,is_default:d})})";
-        html += ".then(r=>r.json()).then(res=>{alert(res.msg);location.reload();});}";
-        html += "function connectNetwork(s){if(confirm('Ligar à rede WiFi \"'+s+'\" agora?')){fetch('/api/wifi/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:s})}).then(r=>r.json()).then(res=>{alert(res.msg||('A ligar à rede '+s+'...'));setTimeout(()=>location.reload(),6000);}).catch(()=>{alert('Comando enviado. A recarregar em 6 segundos...');setTimeout(()=>location.reload(),6000);});}}";
-        html += "function setDefault(s){fetch('/api/wifi/setdefault',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:s})}).then(()=>location.reload());}";
-        html += "function deleteNetwork(s){if(confirm('Eliminar rede '+s+'?')){fetch('/api/wifi/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:s})}).then(()=>location.reload());}}";
-        html += "function reconnectSTA(){if(confirm('Reiniciar o WiFi para conectar à rede padrão?')){fetch('/api/wifi/reconnect',{method:'POST'}).then(r=>r.json()).then(res=>{alert(res.msg);setTimeout(()=>location.reload(),5000);});}}";
-        html += "function scanNetworks(){const d=document.getElementById('scanResults');d.innerHTML='<p style=\"color:var(--primary);\">A pesquisar redes WiFi ao alcance...</p>';";
-        html += "fetch('/api/scan').then(r=>r.json()).then(list=>{if(!list||!list.length){d.innerHTML='<p>Nenhuma rede encontrada.</p>';return;}";
-        html += "let h='<table><thead><tr><th>SSID</th><th>Sinal</th><th>Segurança</th><th>Ação</th></tr></thead><tbody>';";
-        html += "list.forEach(item=>{h+='<tr><td><strong>'+item.ssid+'</strong></td><td>'+item.rssi+' dBm</td><td>'+(item.secure?'Protegida':'Aberta')+'</td><td><button onclick=\"document.getElementById(\\'ssid\\').value=\\''+item.ssid+'\\';document.getElementById(\\'pass\\').focus();\" class=\"btn btn-secondary\" style=\"padding:4px 8px;\">Selecionar</button></td></tr>';});";
-        html += "h+='</tbody></table>';d.innerHTML=h;});}";
         html += "</script>";
 
         html += getHtmlFooter();
@@ -1704,15 +1761,12 @@ private:
             return;
         }
 
-        // Estatísticas do Cartão
-        html += "<div class='grid-4'>";
-        html += "<div class='stat-box'><div class='stat-label'>Tipo de Cartão</div><div class='stat-value' style='color:var(--primary);'>" + String(_sd->getCardTypeStr()) + "</div></div>";
-        html += "<div class='stat-box'><div class='stat-label'>Capacidade Total</div><div class='stat-value'>" + String((uint32_t)totalMb) + " MB</div></div>";
-        html += "<div class='stat-box'><div class='stat-label'>Espaço Utilizado</div><div class='stat-value' style='color:var(--yellow);'>" + String((uint32_t)usedMb) + " MB (" + String(usedPct) + "%)</div></div>";
-        html += "<div class='stat-box'><div class='stat-label'>Espaço Livre</div><div class='stat-value' style='color:var(--green);'>" + String((uint32_t)freeMb) + " MB</div></div>";
+        // Barra de progresso do Cartão
+        html += "<div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;font-size:0.875rem;margin-bottom:8px;'>";
+        html += "<span style='color:var(--muted);'>Espaço Utilizado: <strong style='color:var(--text);font-size:0.95rem;'>" + String((uint32_t)usedMb) + " MB</strong> de " + String((uint32_t)totalMb) + " MB (" + String(usedPct) + "%)</span>";
+        html += "<span style='color:var(--muted);'>Livre: <strong style='color:var(--green);font-size:0.95rem;'>" + String((uint32_t)freeMb) + " MB</strong></span>";
         html += "</div>";
-
-        html += "<div class='progress-bg' style='margin-top:14px;'><div class='progress-bar' style='width:" + String(usedPct) + "%;background:var(--primary);'></div></div>";
+        html += "<div class='progress-bg' style='height:10px;margin-top:0;'><div class='progress-bar' style='width:" + String(usedPct) + "%;background:var(--primary);'></div></div>";
         html += "</div>";
 
         // Card Explorador
@@ -2158,6 +2212,7 @@ private:
 
         _c6OtaProgress = 20;
         _c6OtaState = "STARTING";
+        _c6OtaTimestamp = millis();
         _c6OtaDetail = "A aguardar ligacao do Coprocessador C6...";
         if (_display) _display->showOtaScreen("COPROCESSADOR C6", "PASSO 1/2: DOWNLOAD C6", 20, _c6OtaDetail.c_str(), UI_YELLOW);
 
@@ -2173,6 +2228,18 @@ private:
         String res;
         serializeJson(doc, res);
         _server.send(200, "application/json", res);
+    }
+
+    void handleApiOtaCancel() {
+        Serial.println("[BASE OTA] Cancelamento manual de OTA solicitado via API.");
+        _c6OtaState = "IDLE";
+        _c6OtaDetail = "OTA cancelado";
+        _c6OtaProgress = 0;
+        _c6OtaTimestamp = 0;
+        _otaAutoClearMs = 0;
+        _isBusy = false;
+        if (_display) _display->setOtaActive(false);
+        _server.send(200, "application/json", "{\"success\":true,\"msg\":\"OTA cancelado. Operação e ecrã restaurados.\"}");
     }
 
     void handleApiOtaLafvinData() {

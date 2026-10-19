@@ -1296,17 +1296,11 @@ private:
         html += "<span class='badge " + String(sdOk ? "badge-sta" : "badge-ap") + "'>" + String(sdOk ? "MONTADO (OK)" : "NÃO DETETADO") + "</span></div>";
 
         if (sdOk) {
-            html += "<div class='grid-4'>";
-            html += "<div class='stat-box'><div class='stat-label'>Tipo de Cartão</div><div class='stat-value' id='statCardType' style='color:var(--primary);'>" + String(_sd.getCardTypeStr()) + "</div></div>";
-            html += "<div class='stat-box'><div class='stat-label'>Capacidade Total</div><div class='stat-value' id='statTotalMb'>" + String((uint32_t)_sd.getCardSizeMB()) + " MB</div></div>";
-            html += "<div class='stat-box'><div class='stat-label'>Espaço Utilizado</div><div class='stat-value' id='statUsedMb' style='color:var(--yellow);'>" + String((uint32_t)usedMb) + " MB</div></div>";
-            html += "<div class='stat-box'><div class='stat-label'>Espaço Livre</div><div class='stat-value' id='statFreeMb' style='color:var(--green);'>" + String((uint32_t)freeMb) + " MB</div></div>";
+            html += "<div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;font-size:0.875rem;margin-bottom:8px;'>";
+            html += "<span style='color:var(--muted);'>Espaço Utilizado: <strong id='statUsedMb' style='color:var(--text);font-size:0.95rem;'>" + String((uint32_t)usedMb) + " MB</strong> de <span id='statTotalMb'>" + String((uint32_t)_sd.getCardSizeMB()) + " MB</span> (<span id='statUsedPct'>" + String(usedPct) + "%</span>)</span>";
+            html += "<span style='color:var(--muted);'>Livre: <strong id='statFreeMb' style='color:var(--green);font-size:0.95rem;'>" + String((uint32_t)freeMb) + " MB</strong></span>";
             html += "</div>";
-
-            html += "<div style='margin-top:14px;'>";
-            html += "<div class='stat-label'>Ocupação do Sistema de Ficheiros: " + String(usedPct) + "%</div>";
-            html += "<div class='progress-bg'><div class='progress-bar' style='width:" + String(usedPct) + "%;background:var(--primary);'></div></div>";
-            html += "</div>";
+            html += "<div class='progress-bg' style='height:10px;margin-top:0;'><div id='statProgressBar' class='progress-bar' style='width:" + String(usedPct) + "%;background:var(--primary);'></div></div>";
         } else {
             html += "<p style='color:var(--red);font-size:0.9rem;'>O cartão MicroSD TF não está montado ou não foi detetado no slot. Insira um cartão formatado em FAT32.</p>";
         }
@@ -1517,10 +1511,14 @@ private:
         html += "if(body) body.innerHTML = '<div class=\"fe-empty\"><i class=\"fa-solid fa-triangle-exclamation\" style=\"color:var(--red);\"></i><div style=\"color:var(--red);font-weight:600;\">Cartão SD não está pronto ou não foi detetado.</div></div>';";
         html += "return;";
         html += "}";
-        html += "if(data.card_type && document.getElementById('statCardType')) document.getElementById('statCardType').innerText = data.card_type;";
         html += "if(data.total_mb !== undefined && document.getElementById('statTotalMb')) document.getElementById('statTotalMb').innerText = data.total_mb + ' MB';";
         html += "if(data.used_mb !== undefined && document.getElementById('statUsedMb')) document.getElementById('statUsedMb').innerText = data.used_mb + ' MB';";
         html += "if(data.free_mb !== undefined && document.getElementById('statFreeMb')) document.getElementById('statFreeMb').innerText = data.free_mb + ' MB';";
+        html += "if(data.total_mb > 0 && data.used_mb !== undefined){";
+        html += "const p = Math.min(100, Math.round((data.used_mb / data.total_mb) * 100));";
+        html += "if(document.getElementById('statUsedPct')) document.getElementById('statUsedPct').innerText = p + '%';";
+        html += "if(document.getElementById('statProgressBar')) document.getElementById('statProgressBar').style.width = p + '%';";
+        html += "}";
         html += "const ss = document.getElementById('feStatusStorage');";
         html += "if(ss && data.free_mb !== undefined) ss.innerText = data.free_mb + ' MB livres de ' + data.total_mb + ' MB';";
         html += "rawFiles = data.files || [];";
