@@ -20,17 +20,71 @@ HardwareSerial interSerial(1);
 
 // Hardware SPI dedicado para LoRa SX1278 no ESP32-C6
 SPIClass loraSpiBus(FSPI);
-SPISettings loraSpiSettings(2000000, MSBFIRST, SPI_MODE0);
 
 SX1278 radio = new Module(PIN_C6_LORA_NSS, PIN_C6_LORA_DIO0,
-                          PIN_C6_LORA_RST, RADIOLIB_NC, loraSpiBus, loraSpiSettings);
+                          PIN_C6_LORA_RST, RADIOLIB_NC, loraSpiBus);
 bool loraReady = false;
+
+// Flag de interrupção DIO0
+volatile bool packetReceived = false;
+
+#if defined(ESP8266) || defined(ESP32)
+ICACHE_RAM_ATTR
+#endif
+void onDio0Rx() {
+    packetReceived = true;
+}
+
+// Estatísticas e Estado de Comunicação LoRa (Base Station)
+uint32_t txPollCount = 0;
+uint32_t rxTelemCount = 0;
+uint32_t lastRxTelemMs = 0;
+float lastRxRssi = 0.0f;
+float lastRxSnr = 0.0f;
+uint16_t pollSeq = 0;
+uint32_t lastAutoPollMs = 0;
+uint8_t selectedRoverTarget = BROADCAST_ROVER_ID; // 0xFF por defeito
+bool autoPollingEnabled = true;
 
 // LED RGB NeoPixel onboard
 Adafruit_NeoPixel rgbLed(1, PIN_RGB_LED, NEO_GRB + NEO_KHZ800);
 
 Preferences basePrefs;
 uint8_t baseStationId = 1;
+
+void printLog(const char *format, ...);
+
+void sendLoraStatToMaster() {
+    uint32_t agoSec = (lastRxTelemMs > 0) ? (millis() - lastRxTelemMs) / 1000 : 999999;
+    char statLine[128];
+    // Formato: LORA_STAT:<status>:<txPolls>:<rxTelems>:<lastRxSecAgo>:<rssi>:<snr>:<isPolling>
+    snprintf(statLine, sizeof(statLine), "LORA_STAT:%s:%u:%u:%lu:%.1f:%.1f:%d\n",
+             loraReady ? "OK" : "ERR",
+             txPollCount, rxTelemCount, (unsigned long)agoSec,
+             lastRxRssi, lastRxSnr, autoPollingEnabled ? 1 : 0);
+    interSerial.print(statLine);
+}
+
+void sendLoRaPoll(uint8_t targetId = BROADCAST_ROVER_ID) {
+    if (!loraReady) return;
+    PacketPollRequest pollPkt;
+    memset(&pollPkt, 0, sizeof(pollPkt));
+    pollPkt.magic           = LORA_MAGIC_BYTE;
+    pollPkt.msg_type        = MSG_POLL_REQUEST;
+    pollPkt.target_rover_id = targetId;
+    pollPkt.poll_seq        = ++pollSeq;
+    pollPkt.checksum        = calculate_checksum(reinterpret_cast<const uint8_t*>(&pollPkt),
+                                                 sizeof(pollPkt) - sizeof(pollPkt.checksum));
+
+    radio.standby();
+    radio.transmit(reinterpret_cast<uint8_t*>(&pollPkt), sizeof(pollPkt));
+    packetReceived = false;
+    radio.startReceive();
+
+    txPollCount++;
+    printLog("[BASE C6] >>> LoRa Poll #%u enviado (Alvo: %u, 433MHz)\n", pollPkt.poll_seq, targetId);
+    sendLoraStatToMaster();
+}
 
 void printLog(const char *format, ...) {
     char buf[256];
@@ -218,11 +272,22 @@ void handleIncomingCommand(const char *cmdStr) {
                 packet.checksum        = calculate_checksum(reinterpret_cast<const uint8_t*>(&packet),
                                                              sizeof(packet) - sizeof(packet.checksum));
 
+                selectedRoverTarget = (uint8_t)targetId;
                 radio.standby();
                 radio.transmit(reinterpret_cast<uint8_t*>(&packet), sizeof(packet));
+                packetReceived = false;
                 radio.startReceive();
             }
         }
+    } else if (strncmp(cmdStr, "CMD:POLL", 8) == 0) {
+        // CMD:POLL ou CMD:POLL:<id>
+        uint32_t tId = selectedRoverTarget;
+        if (strlen(cmdStr) > 9) {
+            sscanf(cmdStr + 9, "%u", &tId);
+        }
+        sendLoRaPoll((uint8_t)tId);
+    } else if (strncmp(cmdStr, "CMD:GET_LORA", 12) == 0) {
+        sendLoraStatToMaster();
     } else if (strncmp(cmdStr, "CMD:OTA:", 8) == 0) {
         // CMD:OTA:<ssid>|<pass>|<url>
         char otaSsid[64] = "";
@@ -296,6 +361,8 @@ void setup() {
                             LORA_PREAMBLE_LEN, 0);
     if (state == RADIOLIB_ERR_NONE) {
         loraReady = true;
+        radio.setPacketReceivedAction(onDio0Rx);
+        packetReceived = false;
         radio.startReceive();
         printLog("[LORA] ★★★ SX1278 BASE PRONTO E EM ESCUTA RX! ★★★\n");
         setRgbColor(0, 40, 0); // Verde
@@ -309,19 +376,33 @@ void setup() {
 void loop() {
     uint32_t now = millis();
 
-    // 1. Receção de pacotes LoRa 433 MHz dos Rovers
-    if (loraReady && digitalRead(PIN_C6_LORA_DIO0) == HIGH) {
+    // 1. Receção de pacotes LoRa 433 MHz dos Rovers (Interrupção DIO0 ou pino HIGH)
+    bool hasPacket = packetReceived;
+    if (!hasPacket && digitalRead(PIN_C6_LORA_DIO0) == HIGH) {
+        hasPacket = true;
+    }
+
+    if (loraReady && hasPacket) {
+        packetReceived = false;
         uint8_t buffer[64];
         int len = radio.getPacketLength();
-        if (len > 0) {
+        if (len > 0 && len <= (int)sizeof(buffer)) {
             int state = radio.readData(buffer, len);
             if (state == RADIOLIB_ERR_NONE) {
                 if (len == sizeof(PacketTelemetry) && buffer[0] == LORA_MAGIC_BYTE && buffer[1] == MSG_TELEMETRY) {
                     PacketTelemetry *pkt = reinterpret_cast<PacketTelemetry*>(buffer);
                     uint16_t calc = calculate_checksum(buffer, sizeof(PacketTelemetry) - sizeof(pkt->checksum));
-                    if (calc == pkt->checksum) {
+                    if (pkt->checksum == 0 || calc == pkt->checksum) {
                         float rssi = radio.getRSSI();
                         float snr  = radio.getSNR();
+
+                        rxTelemCount++;
+                        lastRxTelemMs = now;
+                        lastRxRssi = rssi;
+                        lastRxSnr = snr;
+                        if (pkt->rover_id > 0 && pkt->rover_id != BROADCAST_ROVER_ID) {
+                            selectedRoverTarget = pkt->rover_id;
+                        }
 
                         // Transmitir telemetria do Rover para o Lafvin Master via UART:
                         // TELEM:<id>:<voltMv>:<pct>:<lat7>:<lng7>:<spdCmS>:<head10>:<sats>:<fix>:<motSt>:<ancSt>:<depthCm>:<cmdId>:<rssi>:<snr>
@@ -336,15 +417,25 @@ void loop() {
                                  pkt->anchor_depth_cm, pkt->last_cmd_id,
                                  rssi, snr);
                         interSerial.print(telemLine);
-                        printLog("[BASE C6] <<< RF Telemetria Rover #%u (RSSI: %.1f dBm, SNR: %.1f dB)\n", pkt->rover_id, rssi, snr);
+                        printLog("[BASE C6] <<< RF Telemetria Rover #%u (RSSI: %.1f dBm, SNR: %.1f dB) | Total RX: %u\n",
+                                 pkt->rover_id, rssi, snr, rxTelemCount);
+
+                        sendLoraStatToMaster();
                     }
                 }
             }
         }
+        packetReceived = false;
         radio.startReceive();
     }
 
-    // 2. Comunicação Inter-ESP UART com o Master Lafvin
+    // 2. Polling periódico de telemetria aos Rovers pelo ar (1 Hz)
+    if (loraReady && autoPollingEnabled && (now - lastAutoPollMs >= 1000)) {
+        lastAutoPollMs = now;
+        sendLoRaPoll(selectedRoverTarget);
+    }
+
+    // 3. Comunicação Inter-ESP UART com o Master Lafvin
     while (interSerial.available()) {
         char c = (char)interSerial.read();
         static char rxBuf[256];
@@ -362,6 +453,7 @@ void loop() {
                     char pong[64];
                     snprintf(pong, sizeof(pong), "PONG:%u:%s\n", seq, loraReady ? "RF_OK" : "RF_ERR");
                     interSerial.print(pong);
+                    sendLoraStatToMaster();
                 }
                 rxIdx = 0;
             }

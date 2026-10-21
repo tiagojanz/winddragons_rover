@@ -15,6 +15,7 @@
 #include "rover_config_manager.h"
 #include "rover_web_server.h"
 #include "rover_version.h"
+#include "web_console.h"
 
 // =========================================================================
 // WINDDRAGONS ROVER - LAFVIN MASTER FIRMWARE
@@ -26,6 +27,9 @@
 //  - Botão BOOT (GPIO 9) para navegação entre ecrãs
 //  - Ponte UART com o Coprocessador C6 (TX=GPIO 2, RX=GPIO 1)
 // =========================================================================
+
+// Consola Web e Monitor de Logs em Tempo Real
+WebConsoleClass webConsole;
 
 #ifndef ROVER_ID
 #define ROVER_ID 1
@@ -46,6 +50,7 @@ uint32_t lastControlReceivedTime = 0;
 int16_t currentLoraRssi = 0;
 float currentLoraSnr = 0.0f;
 char loraStatusStr[32] = "A aguardar...";
+RoverLoraDiagnostics roverLoraDiag;
 
 RoverWebServer webServer(wifiConfig, gps, battery, actuators, currentMotorStatus, lastControlReceivedTime, roverConfig, sdCard, &roverDisplay);
 
@@ -84,6 +89,7 @@ void printLog(const char* format, ...) {
     vsnprintf(buf, sizeof(buf), format, args);
     va_end(args);
     Serial.print(buf);
+    webConsole.log(buf);
 }
 
 void setup() {
@@ -181,6 +187,15 @@ void setup() {
         roverDisplay.bootLogf(UI_CYAN, 80, "[WIFI] AP: %s (192.168.4.1)", apName);
     }
 
+    webServer.setLoraDiagnosticsPtr(&roverLoraDiag);
+    webServer.setCommandQueueCallback([](const char* cmd) {
+        if (cmd && strlen(cmd) > 0) {
+            interSerial.println(cmd);
+            interSerial.flush();
+            strncpy(queuedWebCommand, cmd, sizeof(queuedWebCommand) - 1);
+            queuedWebCommand[sizeof(queuedWebCommand) - 1] = '\0';
+        }
+    });
     webServer.begin();
 
     // 6. Configurar UART Inter-ESP (TX=GPIO 2, RX=GPIO 1)
@@ -387,6 +402,24 @@ void loop() {
                         printLog("[LAFVIN ROVER] <<< PONG #%u: Bat=%.2fV (%u%%) | LoRa=%s (RSSI=%.1f) | Fix=%u Sats=%u\n",
                                  seq, batMv / 1000.0f, batPct, rfSt, rssi, fix, sats);
                     }
+                } else if (strncmp(rxBuf, "LORA_STAT:", 10) == 0) {
+                    lastUartRxTime = now;
+                    char st[16] = "OK";
+                    uint32_t txT = 0, rxP = 0, ago = 999999;
+                    float rssi = 0.0f, snr = 0.0f;
+                    int contact = 0;
+                    if (sscanf(rxBuf + 10, "%15[^:]:%u:%u:%lu:%f:%f:%d", st, &txT, &rxP, &ago, &rssi, &snr, &contact) >= 5) {
+                        roverLoraDiag.hwReady = (strcmp(st, "OK") == 0);
+                        roverLoraDiag.txTelems = txT;
+                        roverLoraDiag.rxPolls = rxP;
+                        roverLoraDiag.lastRxSecAgo = ago;
+                        roverLoraDiag.rssi = rssi;
+                        roverLoraDiag.snr = snr;
+                        roverLoraDiag.hasContact = (contact != 0);
+                    }
+                } else {
+                    lastUartRxTime = now;
+                    webConsole.logf("[C6] %s", rxBuf);
                 }
                 rxIdx = 0;
             }

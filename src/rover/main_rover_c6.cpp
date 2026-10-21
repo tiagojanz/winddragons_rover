@@ -47,8 +47,34 @@ bool loraReady = false;
 float lastRssi = 0.0f;
 float lastSnr = 0.0f;
 
+// Flag de interrupção DIO0
+volatile bool packetReceived = false;
+
+#if defined(ESP8266) || defined(ESP32)
+ICACHE_RAM_ATTR
+#endif
+void onDio0Rx() {
+  packetReceived = true;
+}
+
+// Estatísticas LoRa Rover (Comunicações com a Base Station)
+uint32_t rxPollCount = 0;
+uint32_t txTelemCount = 0;
+uint32_t lastRxBaseMs = 0;
+
 // UART Inter-ESP (DevKitC -> Lafvin)
 HardwareSerial interSerial(1);
+
+void sendLoraStatToMaster() {
+  uint32_t agoSec = (lastRxBaseMs > 0) ? (millis() - lastRxBaseMs) / 1000 : 999999;
+  char statLine[128];
+  // Formato: LORA_STAT:<status>:<txTelems>:<rxPolls>:<lastRxSecAgo>:<rssi>:<snr>:<hasContact>
+  snprintf(statLine, sizeof(statLine), "LORA_STAT:%s:%u:%u:%lu:%.1f:%.1f:%d\n",
+           loraReady ? "OK" : "ERR",
+           txTelemCount, rxPollCount, (unsigned long)agoSec,
+           lastRssi, lastSnr, (lastRxBaseMs > 0 && agoSec < 10) ? 1 : 0);
+  interSerial.print(statLine);
+}
 
 // Estado de controlo e navegação
 uint16_t telemetrySeq = 0;
@@ -159,9 +185,15 @@ void sendLoRaTelemetry() {
   packet.anchor_status = actuators.getAnchorStatus();
   packet.anchor_depth_cm = actuators.getAnchorDepthCm();
   packet.last_cmd_id = lastExecutedCommandId;
+  packet.checksum = calculate_checksum(reinterpret_cast<const uint8_t*>(&packet),
+                                       sizeof(packet) - sizeof(packet.checksum));
 
+  txTelemCount++;
+  radio.standby();
   radio.transmit(reinterpret_cast<uint8_t *>(&packet), sizeof(packet));
+  packetReceived = false;
   radio.startReceive();
+  sendLoraStatToMaster();
 }
 
 void processIncomingLoRa(uint8_t *buffer, int len) {
@@ -177,6 +209,16 @@ void processIncomingLoRa(uint8_t *buffer, int len) {
 
   lastRssi = radio.getRSSI();
   lastSnr = radio.getSNR();
+  rxPollCount++;
+  lastRxBaseMs = millis();
+  lastControlReceivedTime = millis();
+
+  if (msgType == MSG_POLL_REQUEST) {
+    printLog("[C6 ROVER] <<< LoRa Poll da Base recebido! A responder com telemetria (TX #%u)\n", telemetrySeq);
+    sendLoRaTelemetry();
+    sendLoraStatToMaster();
+    return;
+  }
 
   if (msgType == MSG_MANUAL_CONTROL &&
       len >= (int)sizeof(PacketManualControl)) {
@@ -186,10 +228,11 @@ void processIncomingLoRa(uint8_t *buffer, int len) {
     if (ctrl->anchor_jog != 0)
       actuators.jogWinch(ctrl->anchor_jog);
     currentMotorStatus = MOTOR_MANUAL;
-    lastControlReceivedTime = millis();
     setRgbColor(0, 50, 0); // Green: Control active
+    sendLoraStatToMaster();
   } else if (msgType == MSG_ACTION_COMMAND &&
              len >= (int)sizeof(PacketActionCommand)) {
+    sendLoraStatToMaster();
     PacketActionCommand *cmd = reinterpret_cast<PacketActionCommand *>(buffer);
     lastExecutedCommandId = cmd->command_id;
 
@@ -531,6 +574,8 @@ void setup() {
                           LORA_PREAMBLE_LEN, 0);
   if (state == RADIOLIB_ERR_NONE) {
     loraReady = true;
+    radio.setPacketReceivedAction(onDio0Rx);
+    packetReceived = false;
     radio.startReceive();
     Serial.println("[LORA] ★★★ SX1278 PRONTO E EM ESCUTA RX! ★★★");
     setRgbColor(0, 40, 0); // Green
@@ -557,6 +602,10 @@ void handleIncomingCommand(const char *cmdStr) {
     currentMotorStatus = MOTOR_MANUAL;
     lastControlReceivedTime = now;
     printLog("[C6 ROVER] Modo Manual ativado via Web/Lafvin\n");
+  } else if (strncmp(cmdStr, "CMD:TX_TELEM", 12) == 0) {
+    sendLoRaTelemetry();
+  } else if (strncmp(cmdStr, "CMD:GET_LORA", 12) == 0) {
+    sendLoraStatToMaster();
   } else if (strncmp(cmdStr, "CMD:LEME:", 9) == 0) {
     int val = atoi(cmdStr + 9);
     actuators.setRudder(val);
@@ -668,16 +717,23 @@ void loop() {
     updateAutonomousNavigation();
   }
 
-  // 3. Receção LoRa SX1278
-  if (loraReady && digitalRead(PIN_C6_LORA_DIO0) == HIGH) {
+  // 3. Receção LoRa SX1278 (Interrupção DIO0 ou pino HIGH)
+  bool hasPacket = packetReceived;
+  if (!hasPacket && digitalRead(PIN_C6_LORA_DIO0) == HIGH) {
+    hasPacket = true;
+  }
+
+  if (loraReady && hasPacket) {
+    packetReceived = false;
     uint8_t buffer[64];
     int len = radio.getPacketLength();
-    if (len > 0) {
+    if (len > 0 && len <= (int)sizeof(buffer)) {
       int state = radio.readData(buffer, len);
       if (state == RADIOLIB_ERR_NONE) {
         processIncomingLoRa(buffer, len);
       }
     }
+    packetReceived = false;
     radio.startReceive();
   }
 
@@ -696,9 +752,9 @@ void loop() {
     lastTelemetryTime = now;
     sendLoRaTelemetry();
     printLog("[C6 ROVER] >>> LoRa Telemetria #%u enviada pelo ar (433MHz) | "
-             "Bat=%.2fV (%u%%)\n",
+             "Bat=%.2fV (%u%%) | Total TX: %u | RX Polls: %u\n",
              telemetrySeq, battery.getVoltageMv() / 1000.0f,
-             battery.getPercentage());
+             battery.getPercentage(), txTelemCount, rxPollCount);
   }
 
   // 6. Comunicação UART com o Lafvin Master
@@ -762,6 +818,7 @@ void loop() {
                    actuators.getAnchorDepthCm(), loraReady ? "RF_OK" : "RF_ERR",
                    lastRssi, lastSnr);
           interSerial.print(pong);
+          sendLoraStatToMaster();
           printLog("[C6 ROVER] <<< %s | >>> PONG: Bat=%.2fV (%d%%) LoRa=%s | "
                    "Winch=%dus | Depth=%ucm\n",
                    rxBuf, battery.getVoltageMv() / 1000.0f,

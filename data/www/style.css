@@ -720,7 +720,7 @@ input:focus, select:focus, textarea:focus {
        url('/system/fonts/Font%20Awesome%206%20Pro-Solid-900.otf') format('opentype');
   font-weight: 900;
   font-style: normal;
-  font-display: block;
+  font-display: swap;
 }
 
 .fa, .fas, .fa-solid {
@@ -811,3 +811,44 @@ input:focus, select:focus, textarea:focus {
 .fa-box-archive:before { content: '\f187'; }
 .fa-hourglass-half:before { content: '\f252'; }
 .fa-satellite-dish:before { content: '\f7c0'; }
+.fa-terminal:before { content: '\f120'; }
+.fa-arrows-down-to-line:before { content: '\e4b8'; }
+
+/* Toggle Switch Component */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  vertical-align: middle;
+}
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.slider-toggle {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: #334155;
+  transition: .3s;
+  border-radius: 24px;
+}
+.slider-toggle:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: .3s;
+  border-radius: 50%;
+}
+input:checked + .slider-toggle {
+  background-color: var(--primary);
+}
+input:checked + .slider-toggle:before {
+  transform: translateX(20px);
+}

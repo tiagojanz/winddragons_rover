@@ -13,6 +13,7 @@
 #include "wifi_config_manager.h"
 #include "base_web_server.h"
 #include "base_version.h"
+#include "web_console.h"
 
 // =========================================================================
 // WINDDRAGONS BASE STATION - LAFVIN MASTER FIRMWARE
@@ -22,6 +23,9 @@
 //  - Coprocessador C6: LoRa SX1278 (433 MHz) em barramento de hardware FSPI
 //  - Inter-ESP Link: UART (Lafvin TX=GPIO 2, RX=GPIO 1 @ 115200 baud)
 // =========================================================================
+
+// Consola Web e Monitor de Logs em Tempo Real
+WebConsoleClass webConsole;
 
 // Componentes do Sistema
 FleetManager      fleet;
@@ -40,6 +44,7 @@ uint32_t lastUartPingTime = 0;
 uint32_t lastUartRxTime = 0;
 char queuedWebCommand[256] = "NONE";
 bool loraReady = false;
+BaseLoraDiagnostics baseLoraDiag;
 
 // Temporizadores e controlo
 uint32_t lastControlTxTime = 0;
@@ -94,6 +99,7 @@ void printLog(const char* format, ...) {
     vsnprintf(buf, sizeof(buf), format, args);
     va_end(args);
     Serial.print(buf);
+    webConsole.log(buf);
 }
 
 void setup() {
@@ -173,6 +179,7 @@ void setup() {
 
     // 7. Configurar Callback de Comandos Web e Iniciar Servidor Web
     webServer.setLoraReadyPtr(&loraReady);
+    webServer.setLoraDiagnosticsPtr(&baseLoraDiag);
     webServer.setCommandQueueCallback([](const char* cmd) {
         if (cmd && strlen(cmd) > 0) {
             if (strncmp(cmd, "CMD:OTA:", 8) == 0) {
@@ -335,8 +342,26 @@ void handleUartFromC6() {
                     printLog("[BASE LAFVIN] ★ Versao Coprocessador C6: %s\n", rxBuf + 9);
                     webServer.setC6Version(rxBuf + 9);
                     display.setC6Version(rxBuf + 9);
+                } else if (strncmp(rxBuf, "LORA_STAT:", 10) == 0) {
+                    char st[16] = "OK";
+                    uint32_t txP = 0, rxT = 0, ago = 999999;
+                    float rssi = 0.0f, snr = 0.0f;
+                    int isPoll = 1;
+                    if (sscanf(rxBuf + 10, "%15[^:]:%u:%u:%lu:%f:%f:%d", st, &txP, &rxT, &ago, &rssi, &snr, &isPoll) >= 5) {
+                        baseLoraDiag.hwReady = (strcmp(st, "OK") == 0);
+                        baseLoraDiag.txPolls = txP;
+                        baseLoraDiag.rxTelems = rxT;
+                        baseLoraDiag.lastRxSecAgo = ago;
+                        baseLoraDiag.rssi = rssi;
+                        baseLoraDiag.snr = snr;
+                        baseLoraDiag.isPolling = (isPoll != 0);
+                        loraReady = baseLoraDiag.hwReady;
+                    }
                 } else if (strncmp(rxBuf, "PONG:", 5) == 0) {
                     loraReady = true;
+                    webConsole.logf("[C6] %s", rxBuf);
+                } else {
+                    webConsole.logf("[C6] %s", rxBuf);
                 }
                 rxIdx = 0;
             }

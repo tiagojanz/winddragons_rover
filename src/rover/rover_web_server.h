@@ -14,6 +14,17 @@
 #include "rover_display.h"
 #include "qrcode_helper.h"
 #include "rover_version.h"
+#include "web_console.h"
+
+struct RoverLoraDiagnostics {
+    bool hwReady = false;
+    uint32_t txTelems = 0;
+    uint32_t rxPolls = 0;
+    uint32_t lastRxSecAgo = 999999;
+    float rssi = 0.0f;
+    float snr = 0.0f;
+    bool hasContact = false;
+};
 
 class RoverWebServer {
 public:
@@ -119,6 +130,10 @@ public:
         _display = display;
     }
 
+    void setLoraDiagnosticsPtr(const RoverLoraDiagnostics *diag) {
+        _loraDiag = diag;
+    }
+
     bool isBusy() const {
         return _isBusy;
     }
@@ -126,6 +141,7 @@ public:
 private:
     WebServer _server;
     CommandQueueCallback _commandQueueCb = nullptr;
+    const RoverLoraDiagnostics *_loraDiag = nullptr;
     WiFiConfigManager &_wifi;
     GPSTracker &_gps;
     BatteryMonitor &_battery;
@@ -195,8 +211,19 @@ private:
             _server.sendHeader("Expires", "0");
         }
 
-        _server.client().setTimeout(30000);
-        _server.streamFile(f, contentType);
+        size_t fileSize = f.size();
+        _server.setContentLength(fileSize);
+        _server.send(200, contentType, "");
+
+        WiFiClient client = _server.client();
+        client.setTimeout(5000);
+        uint8_t buf[2048];
+        while (f.available() && client.connected()) {
+            size_t n = f.read(buf, sizeof(buf));
+            if (n > 0) {
+                client.write(buf, n);
+            }
+        }
         f.close();
         _isBusy = false;
         return true;
@@ -263,6 +290,34 @@ private:
 
         // APIs JSON & Operações
         _server.on("/api/status", [this]() { handleApiStatus(); });
+        _server.on("/api/lora/status", [this]() {
+            JsonDocument doc;
+            JsonObject lObj = doc.to<JsonObject>();
+            lObj["hw_ready"] = _loraDiag ? _loraDiag->hwReady : true;
+            lObj["role"] = "rover";
+            lObj["freq_mhz"] = LORA_FREQUENCY;
+            lObj["bw_khz"] = LORA_BANDWIDTH;
+            lObj["sf"] = LORA_SPREAD_FACTOR;
+            lObj["cr"] = "4/5";
+            lObj["power_dbm"] = LORA_OUTPUT_POWER;
+            lObj["tx_telemetry"] = _loraDiag ? _loraDiag->txTelems : 0;
+            lObj["rx_polls"] = _loraDiag ? _loraDiag->rxPolls : 0;
+            lObj["last_comm_seconds_ago"] = _loraDiag ? _loraDiag->lastRxSecAgo : 999999;
+            lObj["has_contact"] = _loraDiag ? _loraDiag->hasContact : false;
+            lObj["rssi"] = _loraDiag ? _loraDiag->rssi : 0.0f;
+            lObj["snr"] = _loraDiag ? _loraDiag->snr : 0.0f;
+            String res;
+            serializeJson(doc, res);
+            _server.send(200, "application/json", res);
+        });
+        _server.on("/api/lora/send_telem", HTTP_POST, [this]() {
+            if (_commandQueueCb) {
+                _commandQueueCb("CMD:TX_TELEM");
+                _server.send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Telemetria disparada via LoRa 433MHz\"}");
+            } else {
+                _server.send(500, "application/json", "{\"status\":\"error\",\"message\":\"Callback UART indisponivel\"}");
+            }
+        });
         _server.on("/api/scan", [this]() { handleApiScan(); });
         _server.on("/api/wifi/save", [this]() { handleApiWifiSave(); });
         _server.on("/api/wifi/setdefault", [this]() { handleApiWifiSetDefault(); });
@@ -332,6 +387,42 @@ private:
             [this]() { handleApiOtaLafvinData(); }
         );
 
+        // Endpoints de Consola e Monitor de Logs em Tempo Real
+        _server.on("/api/console", HTTP_GET, [this]() {
+            uint32_t since = 0;
+            if (_server.hasArg("since")) {
+                since = (uint32_t)_server.arg("since").toInt();
+            }
+            _server.send(200, "application/json", webConsole.getJsonSince(since));
+        });
+        _server.on("/api/console/send", HTTP_POST, [this]() {
+            String cmd = "";
+            if (_server.hasArg("cmd")) {
+                cmd = _server.arg("cmd");
+            } else if (_server.hasArg("plain")) {
+                cmd = _server.arg("plain");
+            }
+            cmd.trim();
+            if (cmd.length() > 0) {
+                if (cmd.equalsIgnoreCase("CLEAR")) {
+                    webConsole.clear();
+                    _server.send(200, "application/json", "{\"status\":\"ok\",\"action\":\"cleared\"}");
+                    return;
+                }
+                if (_commandQueueCb) {
+                    _commandQueueCb(cmd.c_str());
+                }
+                webConsole.logf("[CONSOLE TX] %s", cmd.c_str());
+                _server.send(200, "application/json", "{\"status\":\"ok\"}");
+                return;
+            }
+            _server.send(400, "application/json", "{\"status\":\"error\",\"msg\":\"Missing cmd\"}");
+        });
+        _server.on("/api/console/clear", HTTP_POST, [this]() {
+            webConsole.clear();
+            _server.send(200, "application/json", "{\"status\":\"ok\"}");
+        });
+
         // Servir fontes ou outros ficheiros estáticos diretamente do Cartão SD
         _server.on("/system/fonts/Font%20Awesome%206%20Pro-Solid-900.woff2", HTTP_GET, [this]() {
             if (!handleStaticFile("/system/fonts/Font Awesome 6 Pro-Solid-900.woff2")) {
@@ -355,9 +446,6 @@ private:
         });
 
         _server.onNotFound([this]() {
-            if (handleStaticFile(_server.uri())) {
-                return;
-            }
             if (_server.uri().startsWith("/") && !_server.uri().startsWith("/www/")) {
                 if (handleStaticFile("/www/rover" + _server.uri())) {
                     return;
@@ -365,6 +453,9 @@ private:
                 if (handleStaticFile("/www" + _server.uri())) {
                     return;
                 }
+            }
+            if (handleStaticFile(_server.uri())) {
+                return;
             }
             _server.send(404, "text/plain", "Ficheiro ou pagina nao encontrada");
         });
@@ -1725,6 +1816,21 @@ private:
         JsonObject sd = doc["sd"].to<JsonObject>();
         sd["ready"] = _sd.isReady();
         sd["card_type"] = _sd.getCardTypeStr();
+
+        JsonObject lObj = doc["lora"].to<JsonObject>();
+        lObj["hw_ready"] = _loraDiag ? _loraDiag->hwReady : true;
+        lObj["role"] = "rover";
+        lObj["freq_mhz"] = LORA_FREQUENCY;
+        lObj["bw_khz"] = LORA_BANDWIDTH;
+        lObj["sf"] = LORA_SPREAD_FACTOR;
+        lObj["cr"] = "4/5";
+        lObj["power_dbm"] = LORA_OUTPUT_POWER;
+        lObj["tx_telemetry"] = _loraDiag ? _loraDiag->txTelems : 0;
+        lObj["rx_polls"] = _loraDiag ? _loraDiag->rxPolls : 0;
+        lObj["last_comm_seconds_ago"] = _loraDiag ? _loraDiag->lastRxSecAgo : 999999;
+        lObj["has_contact"] = _loraDiag ? _loraDiag->hasContact : false;
+        lObj["rssi"] = _loraDiag ? _loraDiag->rssi : 0.0f;
+        lObj["snr"] = _loraDiag ? _loraDiag->snr : 0.0f;
 
         JsonObject v = doc["version"].to<JsonObject>();
         v["lafvin"] = ROVER_LAFVIN_VERSION;

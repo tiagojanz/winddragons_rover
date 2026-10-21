@@ -112,6 +112,17 @@ struct __attribute__((packed)) PacketActionCommand {
     uint16_t checksum;
 };
 
+// ------------------------------------------
+// 4. Poll Request Packet (Base -> Rover)
+// ------------------------------------------
+struct __attribute__((packed)) PacketPollRequest {
+    uint8_t  magic;          // 0xD9
+    uint8_t  msg_type;       // MSG_POLL_REQUEST (0x40)
+    uint8_t  target_rover_id;// Target Rover ID (or 0xFF for broadcast)
+    uint16_t poll_seq;       // Incremental poll sequence counter
+    uint16_t checksum;
+};
+
 // Checksum helper
 inline uint16_t calculate_checksum(const uint8_t *data, size_t len) {
     uint16_t sum = 0;

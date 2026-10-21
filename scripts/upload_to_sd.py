@@ -30,7 +30,7 @@ DATA_DIR         = Path(__file__).resolve().parent.parent / "data"
 WWW_DIR          = DATA_DIR / "www"
 SYSTEM_DIR       = DATA_DIR / "system"
 
-def is_reachable(ip, timeout=0.8):
+def is_reachable(ip, timeout=2.5):
     try:
         with socket.create_connection((ip, 80), timeout=timeout):
             return True
@@ -71,7 +71,9 @@ def upload_file(ip, local_path, remote_dir):
     encoded_dir = urllib.parse.quote(remote_dir)
     cmd = [
         "curl", "-s", "-S",
-        "--connect-timeout", "4",
+        "--connect-timeout", "8",
+        "--retry", "2",
+        "--retry-delay", "1",
         "--max-time", str(timeout_sec),
         "-F", f"file=@{local_path}",
         f"http://{ip}/api/sd/upload?dir={encoded_dir}&ajax=1"

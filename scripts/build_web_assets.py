@@ -741,7 +741,7 @@ input:focus, select:focus, textarea:focus {
        url('/system/fonts/Font%20Awesome%206%20Pro-Solid-900.otf') format('opentype');
   font-weight: 900;
   font-style: normal;
-  font-display: block;
+  font-display: swap;
 }
 
 .fa, .fas, .fa-solid {
@@ -832,6 +832,47 @@ input:focus, select:focus, textarea:focus {
 .fa-box-archive:before { content: '\\f187'; }
 .fa-hourglass-half:before { content: '\\f252'; }
 .fa-satellite-dish:before { content: '\\f7c0'; }
+.fa-terminal:before { content: '\\f120'; }
+.fa-arrows-down-to-line:before { content: '\\e4b8'; }
+
+/* Toggle Switch Component */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  vertical-align: middle;
+}
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.slider-toggle {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: #334155;
+  transition: .3s;
+  border-radius: 24px;
+}
+.slider-toggle:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: .3s;
+  border-radius: 50%;
+}
+input:checked + .slider-toggle {
+  background-color: var(--primary);
+}
+input:checked + .slider-toggle:before {
+  transform: translateX(20px);
+}
 """
 
 # ----------------------------------------------------------------------
@@ -1007,20 +1048,21 @@ def generate_html_page(title, active_tab, body_content):
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{title} - WindDragons Rover</title>
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="/style.css?v=2.1.3">
   <script>
     (function(){{
       var t = localStorage.getItem('wd_theme') || 'dark';
       document.documentElement.setAttribute('data-theme', t);
     }})();
   </script>
-  <script src="/app.js"></script>
+  <script src="/app.js?v=2.1.1"></script>
 </head>
 <body>
   <header class="navbar">
     <a href="/" class="brand">
-      <img src="/assets/logo_black_800.png" alt="WindDragons Logo" class="brand-logo logo-light">
-      <img src="/assets/logo_white_800.png" alt="WindDragons Logo" class="brand-logo logo-dark">
+      <img src="/assets/logo_black_800.png" alt="WindDragons Logo" class="brand-logo logo-light" style="height:36px;width:auto;max-width:40px;object-fit:contain;display:none;">
+      <img src="/assets/logo_white_800.png" alt="WindDragons Logo" class="brand-logo logo-dark" style="height:36px;width:auto;max-width:40px;object-fit:contain;display:inline-block;">
       <span>WindDragons</span> <span id="navRoverId">Rover</span>
     </a>
     <nav class="nav-links">
@@ -1079,20 +1121,21 @@ def generate_base_html_page(title, active_tab, body_content):
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{title} - WindDragons Base Station</title>
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="/style.css?v=2.1.3">
   <script>
     (function(){{
       var t = localStorage.getItem('wd_theme') || 'dark';
       document.documentElement.setAttribute('data-theme', t);
     }})();
   </script>
-  <script src="/app.js"></script>
+  <script src="/app.js?v=2.1.2"></script>
 </head>
 <body>
   <header class="navbar">
     <a href="/" class="brand">
-      <img src="/assets/logo_black_800.png" alt="WindDragons Logo" class="brand-logo logo-light">
-      <img src="/assets/logo_white_800.png" alt="WindDragons Logo" class="brand-logo logo-dark">
+      <img src="/assets/logo_black_800.png" alt="WindDragons Logo" class="brand-logo logo-light" style="height:36px;width:auto;max-width:40px;object-fit:contain;display:none;">
+      <img src="/assets/logo_white_800.png" alt="WindDragons Logo" class="brand-logo logo-dark" style="height:36px;width:auto;max-width:40px;object-fit:contain;display:inline-block;">
       <span>WindDragons</span> <span class="brand-sub">Base Station</span>
     </a>
     <nav class="nav-links">
@@ -2711,6 +2754,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
 # SD Explorer Page (Modern Grid / List dual view with breadcrumbs)
 SD_CONTENT = """
+<style>
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); backdrop-filter: blur(4px); z-index: 200; align-items: center; justify-content: center; padding: 16px; }
+.modal-card { background: var(--card, #0f172a); border: 1px solid var(--card-border, #1e293b); border-radius: 14px; max-width: 600px; width: 100%; padding: 24px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); }
+.explorer-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; margin-top: 16px; }
+.explorer-card { background: var(--stat-box-bg, rgba(15,23,42,0.6)); border: 1px solid var(--card-border, #1e293b); border-radius: 10px; padding: 14px 10px; display: flex; flex-direction: column; align-items: center; text-align: center; cursor: pointer; transition: all 0.2s; position: relative; }
+.explorer-card:hover { background: rgba(6, 182, 212, 0.08); border-color: var(--primary, #06b6d4); transform: translateY(-2px); }
+.explorer-card-icon { font-size: 2.2rem; margin-bottom: 8px; }
+.explorer-card-name { font-size: 0.85rem; font-weight: 600; word-break: break-all; max-width: 100%; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.explorer-card-size { font-size: 0.72rem; color: var(--muted, #64748b); margin-top: 4px; }
+.explorer-card-actions { display: flex; gap: 4px; margin-top: 8px; }
+.explorer-card-actions button { background: var(--btn-secondary-bg, #1e293b); border: none; color: var(--btn-secondary-color, #cbd5e1); border-radius: 4px; padding: 4px 6px; font-size: 0.75rem; cursor: pointer; transition: all 0.2s; }
+.explorer-card-actions button:hover { background: var(--primary, #06b6d4); color: #fff; }
+.breadcrumb-bar { display: flex; align-items: center; gap: 6px; background: var(--nav-links-bg, #0f172a); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--card-border, #1e293b); overflow-x: auto; white-space: nowrap; }
+.breadcrumb-item { color: var(--muted, #64748b); cursor: pointer; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 4px; }
+.breadcrumb-item:hover { color: var(--primary, #06b6d4); }
+.breadcrumb-sep { color: var(--card-border, #1e293b); }
+</style>
 <div class="card" style="margin-bottom:16px;">
   <div class="card-title" style="margin-bottom:12px;">
     <span><i class="fa-solid fa-sd-card"></i> Cartão MicroSD TF (SPI Bus)</span>
@@ -3701,6 +3761,574 @@ BASE_WIFI_CARD = """
 </div>
 """
 
+CONSOLE_CARD_TEMPLATE = """
+<!-- Consola de Sistema & Monitor Série em Tempo Real -->
+<div class="card" id="consoleCard" style="margin-top:24px;">
+  <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+    <span><i class="fa-solid fa-terminal" style="color:var(--primary);"></i> __CONSOLE_TITLE__</span>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <span id="consoleStatusBadge" class="badge" style="background:#334155;color:#94a3b8;font-size:0.75rem;padding:4px 10px;">PAUSADO</span>
+      <label class="switch" title="Ativar/Desativar streaming em tempo real">
+        <input type="checkbox" id="consoleToggle" onchange="toggleConsoleStreaming(this.checked)">
+        <span class="slider-toggle"></span>
+      </label>
+    </div>
+  </div>
+
+  <p style="color:var(--muted);font-size:0.875rem;margin-bottom:14px;">
+    Monitorização em tempo real das mensagens de sistema __CONSOLE_DEVICE__, tráfego UART inter-ESP com o Coprocessador C6 e rádio LoRa.
+    Ative o interruptor para ligar o streaming de logs.
+  </p>
+
+  <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center;">
+    <div style="flex:1;min-width:200px;">
+      <input type="text" id="consoleFilter" placeholder="Filtrar por texto (ex: C6, TELEM, LORA, HTTP)..." oninput="applyConsoleFilter()" style="width:100%;padding:6px 12px;font-size:0.82rem;background:#090d16;border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#f1f5f9;">
+    </div>
+    <button type="button" onclick="clearConsoleLog()" class="btn btn-secondary" style="padding:6px 12px;font-size:0.8rem;">
+      <i class="fa-solid fa-trash-can"></i> Limpar
+    </button>
+    <button type="button" id="consoleScrollBtn" onclick="toggleConsoleScroll()" class="btn btn-secondary" style="padding:6px 12px;font-size:0.8rem;background:rgba(6,182,212,0.15);color:var(--primary);border-color:rgba(6,182,212,0.3);">
+      <i class="fa-solid fa-arrows-down-to-line"></i> Auto-Scroll: ON
+    </button>
+    <button type="button" onclick="copyConsoleLog()" class="btn btn-secondary" style="padding:6px 12px;font-size:0.8rem;">
+      <i class="fa-solid fa-copy"></i> Copiar
+    </button>
+  </div>
+
+  <div id="consoleTerminalWindow" style="height:320px;background:#070a12;border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:12px;overflow-y:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,'Liberation Mono','Courier New',monospace;font-size:0.82rem;line-height:1.5;color:#e2e8f0;white-space:pre-wrap;word-break:break-all;">
+    <div id="consolePlaceholder" style="color:#64748b;font-style:italic;">Consola inativa. Ligue o interruptor no canto superior direito para receber logs em direto...</div>
+  </div>
+
+  <div style="display:flex;gap:8px;margin-top:10px;">
+    <input type="text" id="consoleCmdInput" placeholder="Comando UART para o C6 (ex: __CONSOLE_CMD__, CMD:GET_VER, CMD:STATUS, CLEAR)..." onkeydown="if(event.key==='Enter'){event.preventDefault();sendConsoleCmd();}" style="flex:1;padding:8px 12px;background:#090d16;border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:#38bdf8;font-family:monospace;font-size:0.85rem;">
+    <button type="button" onclick="sendConsoleCmd()" class="btn btn-primary" style="padding:8px 18px;font-size:0.85rem;">
+      <i class="fa-solid fa-paper-plane"></i> Enviar
+    </button>
+  </div>
+</div>
+
+<script>
+let consoleStreaming = false;
+let consoleTimer = null;
+let consoleLastId = 0;
+let consoleLines = [];
+let consoleAutoScroll = true;
+
+function toggleConsoleStreaming(active) {
+  consoleStreaming = active;
+  const badge = document.getElementById('consoleStatusBadge');
+  const placeholder = document.getElementById('consolePlaceholder');
+
+  if (active) {
+    if (badge) {
+      badge.textContent = 'ONLINE (1s)';
+      badge.style.background = '#065f46';
+      badge.style.color = '#34d399';
+    }
+    if (placeholder) placeholder.style.display = 'none';
+    fetchConsoleLogs();
+    if (!consoleTimer) {
+      consoleTimer = setInterval(fetchConsoleLogs, 1000);
+    }
+  } else {
+    if (badge) {
+      badge.textContent = 'PAUSADO';
+      badge.style.background = '#334155';
+      badge.style.color = '#94a3b8';
+    }
+    if (consoleTimer) {
+      clearInterval(consoleTimer);
+      consoleTimer = null;
+    }
+  }
+}
+
+function fetchConsoleLogs() {
+  fetch('/api/console?since=' + consoleLastId)
+    .then(r => r.json())
+    .then(data => {
+      if (!data) return;
+      if (data.last_id !== undefined) {
+        consoleLastId = data.last_id;
+      }
+      if (data.lines && data.lines.length > 0) {
+        data.lines.forEach(l => {
+          consoleLines.push(l);
+        });
+        if (consoleLines.length > 500) {
+          consoleLines = consoleLines.slice(consoleLines.length - 500);
+        }
+        renderConsoleTerminal();
+      }
+    })
+    .catch(err => {
+      console.warn('Erro consola:', err);
+    });
+}
+
+function renderConsoleTerminal() {
+  const term = document.getElementById('consoleTerminalWindow');
+  if (!term) return;
+  const filter = (document.getElementById('consoleFilter')?.value || '').toLowerCase().trim();
+
+  let filtered = consoleLines;
+  if (filter) {
+    filtered = consoleLines.filter(l => (l.msg || '').toLowerCase().includes(filter));
+  }
+
+  if (filtered.length === 0) {
+    term.innerHTML = '<div style="color:#64748b;font-style:italic;">' + (filter ? 'Nenhum registo corresponde ao filtro.' : 'A aguardar mensagens...') + '</div>';
+    return;
+  }
+
+  let html = '';
+  filtered.forEach(l => {
+    let msg = escapeConsoleHtml(l.msg || '');
+    let color = '#e2e8f0';
+    if (msg.includes('<<<') || msg.includes('TELEM:')) color = '#34d399';
+    else if (msg.includes('>>>') || msg.includes('TX')) color = '#38bdf8';
+    else if (msg.includes('ERRO') || msg.includes('ERROR') || msg.includes('FAIL')) color = '#f87171';
+    else if (msg.includes('★') || msg.includes('PONG:VER')) color = '#fbbf24';
+    else if (msg.includes('[C6]')) color = '#c084fc';
+    else if (msg.includes('[HTTP]') || msg.includes('[WIFI]')) color = '#67e8f9';
+
+    const sec = (l.ms / 1000).toFixed(2);
+    html += '<div style="margin-bottom:2px;color:' + color + ';">' +
+      '<span style="color:#64748b;user-select:none;margin-right:8px;">[' + sec + 's]</span>' +
+      msg +
+      '</div>';
+  });
+
+  term.innerHTML = html;
+  if (consoleAutoScroll) {
+    term.scrollTop = term.scrollHeight;
+  }
+}
+
+function applyConsoleFilter() {
+  renderConsoleTerminal();
+}
+
+function toggleConsoleScroll() {
+  consoleAutoScroll = !consoleAutoScroll;
+  const btn = document.getElementById('consoleScrollBtn');
+  if (btn) {
+    if (consoleAutoScroll) {
+      btn.innerHTML = '<i class="fa-solid fa-arrows-down-to-line"></i> Auto-Scroll: ON';
+      btn.style.background = 'rgba(6,182,212,0.15)';
+      btn.style.color = 'var(--primary)';
+      btn.style.borderColor = 'rgba(6,182,212,0.3)';
+      const term = document.getElementById('consoleTerminalWindow');
+      if (term) term.scrollTop = term.scrollHeight;
+    } else {
+      btn.innerHTML = '<i class="fa-solid fa-arrows-down-to-line"></i> Auto-Scroll: OFF';
+      btn.style.background = 'var(--btn-secondary-bg)';
+      btn.style.color = 'var(--muted)';
+      btn.style.borderColor = 'transparent';
+    }
+  }
+}
+
+function clearConsoleLog() {
+  consoleLines = [];
+  fetch('/api/console/clear', { method: 'POST' }).catch(() => {});
+  const term = document.getElementById('consoleTerminalWindow');
+  if (term) {
+    term.innerHTML = '<div style="color:#64748b;font-style:italic;">Consola limpa.</div>';
+  }
+}
+
+function copyConsoleLog() {
+  const text = consoleLines.map(l => '[' + (l.ms/1000).toFixed(2) + 's] ' + (l.msg || '')).join('\\n');
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(() => showToast('Logs copiados para a área de transferência!'));
+  } else {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast('Logs copiados!');
+  }
+}
+
+function sendConsoleCmd() {
+  const input = document.getElementById('consoleCmdInput');
+  if (!input) return;
+  const cmd = input.value.trim();
+  if (!cmd) return;
+
+  input.value = '';
+  consoleLines.push({ id: 0, ms: Date.now() % 1000000, msg: '>>> [WEB TX] ' + cmd });
+  renderConsoleTerminal();
+
+  fetch('/api/console/send', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: 'cmd=' + encodeURIComponent(cmd)
+  })
+  .then(r => r.json())
+  .then(res => {
+    if (res.status === 'ok') {
+      showToast('Comando enviado: ' + cmd);
+      if (!consoleStreaming) {
+        setTimeout(fetchConsoleLogs, 300);
+      }
+    } else {
+      showToast('Erro ao enviar: ' + (res.msg || 'Falha'), true);
+    }
+  })
+  .catch(err => {
+    showToast('Erro de rede ao enviar comando', true);
+  });
+}
+
+function escapeConsoleHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+</script>
+"""
+
+BASE_CONSOLE_CARD = CONSOLE_CARD_TEMPLATE.replace(
+    "__CONSOLE_TITLE__", "Consola de Sistema & Monitor Série (Estação Base)"
+).replace(
+    "__CONSOLE_DEVICE__", "da Estação Base"
+).replace(
+    "__CONSOLE_CMD__", "PING"
+)
+
+ROVER_CONSOLE_CARD = CONSOLE_CARD_TEMPLATE.replace(
+    "__CONSOLE_TITLE__", "Consola de Sistema & Monitor Série (Rover)"
+).replace(
+    "__CONSOLE_DEVICE__", "do Rover"
+).replace(
+    "__CONSOLE_CMD__", "CMD:JOY:0:0"
+)
+
+BASE_LORA_CARD = """
+<div class="card" id="baseLoraCard">
+  <div class="card-title">
+    <span><i class="fa-solid fa-tower-broadcast"></i> Diagnóstico e Comunicações LoRa (433 MHz)</span>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <span id="baseLoraHwBadge" class="badge" style="background:#064e3b;color:#a7f3d0;border:1px solid #059669;">
+        <i class="fa-solid fa-circle-check"></i> SX1278 ONLINE
+      </span>
+      <span id="baseLoraPollBadge" class="badge" style="background:#1e3a8a;color:#93c5fd;border:1px solid #3b82f6;">
+        <i class="fa-solid fa-arrows-rotate fa-spin"></i> A FAZER POLLING (1 Hz)
+      </span>
+    </div>
+  </div>
+  <p style="color:var(--muted);font-size:0.875rem;margin-bottom:16px;">
+    Monitorização em tempo real do rádio SX1278 no Coprocessador C6 via barramento FSPI e ciclo de polling contínuo aos rovers no canal 433.0 MHz.
+  </p>
+
+  <div class="grid-4" style="margin-bottom:16px;">
+    <div class="stat-box">
+      <div class="stat-label">Polls Enviados (TX)</div>
+      <div class="stat-value" id="baseLoraTxPolls" style="color:var(--primary);">0</div>
+      <div style="font-size:0.72rem;color:var(--muted);margin-top:2px;">Transmissões de pedido</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Telemetrias Recebidas (RX)</div>
+      <div class="stat-value" id="baseLoraRxTelems" style="color:var(--green);">0</div>
+      <div style="font-size:0.72rem;color:var(--muted);margin-top:2px;">Respostas dos Rovers</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Última Resposta</div>
+      <div class="stat-value" id="baseLoraLastRxAgo" style="color:var(--yellow);font-size:1.15rem;">Nunca</div>
+      <div style="font-size:0.72rem;color:var(--muted);margin-top:2px;" id="baseLoraLastRxSub">A aguardar sinal do Rover...</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Sinal LoRa (RSSI / SNR)</div>
+      <div class="stat-value" id="baseLoraSignal" style="font-size:1.15rem;">-- dBm / -- dB</div>
+      <div style="font-size:0.72rem;color:var(--muted);margin-top:2px;">Último pacote recebido</div>
+    </div>
+  </div>
+
+  <div style="background:rgba(0,0,0,0.2);padding:14px 18px;border-radius:10px;border:1px solid var(--card-border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+    <div style="font-size:0.8rem;color:var(--muted);">
+      <strong style="color:var(--text);"><i class="fa-solid fa-sliders"></i> Configuração RF:</strong> 
+      433.0 MHz &bull; BW 250 kHz &bull; SF7 &bull; CR 4/5 &bull; Sync 0x12 &bull; Potência 17 dBm
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <button type="button" onclick="triggerBaseLoraPoll()" class="btn btn-primary" id="btnForcePoll">
+        <i class="fa-solid fa-paper-plane"></i> Forçar Poll / Ping Imediato
+      </button>
+      <span id="basePollFeedback" style="font-size:0.8rem;color:var(--green);"></span>
+    </div>
+  </div>
+</div>
+
+<script>
+function refreshBaseLoraStatus() {
+  fetch('/api/lora/status')
+    .then(r => r.json())
+    .then(d => {
+      const elHw = document.getElementById('baseLoraHwBadge');
+      if (elHw) {
+        if (d.hw_ready) {
+          elHw.innerHTML = '<i class=\"fa-solid fa-circle-check\"></i> SX1278 ONLINE';
+          elHw.style.background = '#064e3b';
+          elHw.style.color = '#a7f3d0';
+          elHw.style.borderColor = '#059669';
+        } else {
+          elHw.innerHTML = '<i class=\"fa-solid fa-triangle-exclamation\"></i> ERRO RF / DESCONECTADO';
+          elHw.style.background = '#7f1d1d';
+          elHw.style.color = '#fecaca';
+          elHw.style.borderColor = '#dc2626';
+        }
+      }
+
+      const elPoll = document.getElementById('baseLoraPollBadge');
+      if (elPoll) {
+        if (d.is_polling) {
+          elPoll.innerHTML = '<i class=\"fa-solid fa-arrows-rotate fa-spin\"></i> A FAZER POLLING (1 Hz)';
+          elPoll.style.background = '#1e3a8a';
+          elPoll.style.color = '#93c5fd';
+          elPoll.style.borderColor = '#3b82f6';
+        } else {
+          elPoll.innerHTML = '<i class=\"fa-solid fa-pause\"></i> POLLING PARADO';
+          elPoll.style.background = '#334155';
+          elPoll.style.color = '#cbd5e1';
+          elPoll.style.borderColor = '#475569';
+        }
+      }
+
+      const elTx = document.getElementById('baseLoraTxPolls');
+      if (elTx) elTx.innerText = d.tx_polls || 0;
+
+      const elRx = document.getElementById('baseLoraRxTelems');
+      if (elRx) elRx.innerText = d.rx_telemetry || 0;
+
+      const elAgo = document.getElementById('baseLoraLastRxAgo');
+      const elSub = document.getElementById('baseLoraLastRxSub');
+      if (elAgo) {
+        const ago = d.last_comm_seconds_ago;
+        if (ago === undefined || ago === null || ago >= 900000 || ago === 999999) {
+          elAgo.innerText = 'Nunca';
+          elAgo.style.color = 'var(--yellow)';
+          if (elSub) elSub.innerText = 'A aguardar resposta do Rover...';
+        } else if (ago <= 3) {
+          elAgo.innerText = ago + 's atrás';
+          elAgo.style.color = 'var(--green)';
+          if (elSub) elSub.innerText = 'Ligação LoRa bidirecional ativa';
+        } else if (ago < 10) {
+          elAgo.innerText = ago + 's atrás';
+          elAgo.style.color = 'var(--yellow)';
+          if (elSub) elSub.innerText = 'Sinal recente';
+        } else {
+          elAgo.innerText = ago + 's atrás';
+          elAgo.style.color = 'var(--red)';
+          if (elSub) elSub.innerText = 'Sem contacto (>10s)';
+        }
+      }
+
+      const elSig = document.getElementById('baseLoraSignal');
+      if (elSig) {
+        if (d.rx_telemetry > 0 && d.rssi !== 0) {
+          elSig.innerText = d.rssi.toFixed(1) + ' dBm / ' + (d.snr ? d.snr.toFixed(1) : '0.0') + ' dB';
+          elSig.style.color = d.rssi > -95 ? 'var(--green)' : 'var(--yellow)';
+        } else {
+          elSig.innerText = '-- dBm / -- dB';
+          elSig.style.color = 'var(--muted)';
+        }
+      }
+    })
+    .catch(() => {});
+}
+
+function triggerBaseLoraPoll() {
+  const btn = document.getElementById('btnForcePoll');
+  const fb = document.getElementById('basePollFeedback');
+  if (btn) btn.disabled = true;
+  if (fb) fb.innerText = 'A transmitir...';
+
+  fetch('/api/lora/poll', { method: 'POST' })
+    .then(r => r.json())
+    .then(d => {
+      if (fb) fb.innerText = 'Poll enviado!';
+      setTimeout(() => {
+        refreshBaseLoraStatus();
+        if (fb) fb.innerText = '';
+        if (btn) btn.disabled = false;
+      }, 1000);
+    })
+    .catch(e => {
+      if (fb) fb.innerText = 'Erro ao enviar';
+      if (btn) btn.disabled = false;
+    });
+}
+
+setInterval(refreshBaseLoraStatus, 1500);
+setTimeout(refreshBaseLoraStatus, 300);
+</script>
+"""
+
+ROVER_LORA_CARD = """
+<div class="card" id="roverLoraCard">
+  <div class="card-title">
+    <span><i class="fa-solid fa-tower-broadcast"></i> Diagnóstico e Comunicações LoRa (433 MHz)</span>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <span id="roverLoraHwBadge" class="badge" style="background:#064e3b;color:#a7f3d0;border:1px solid #059669;">
+        <i class="fa-solid fa-circle-check"></i> SX1278 ONLINE
+      </span>
+      <span id="roverLoraContactBadge" class="badge" style="background:#78350f;color:#fde68a;border:1px solid #b45309;">
+        <i class="fa-solid fa-clock"></i> A AGUARDAR BASE
+      </span>
+    </div>
+  </div>
+  <p style="color:var(--muted);font-size:0.875rem;margin-bottom:16px;">
+    Estado do rádio SX1278 no Coprocessador C6 via barramento FSPI e monitorização de pedidos/polls recebidos da Estação Base.
+  </p>
+
+  <div class="grid-4" style="margin-bottom:16px;">
+    <div class="stat-box">
+      <div class="stat-label">Pedidos da Base (RX)</div>
+      <div class="stat-value" id="roverLoraRxPolls" style="color:var(--primary);">0</div>
+      <div style="font-size:0.72rem;color:var(--muted);margin-top:2px;">Polls e comandos recebidos</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Telemetrias Enviadas (TX)</div>
+      <div class="stat-value" id="roverLoraTxTelems" style="color:var(--green);">0</div>
+      <div style="font-size:0.72rem;color:var(--muted);margin-top:2px;">Pacotes 433MHz transmitidos</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Último Pedido Recebido</div>
+      <div class="stat-value" id="roverLoraLastRxAgo" style="color:var(--yellow);font-size:1.15rem;">Nunca</div>
+      <div style="font-size:0.72rem;color:var(--muted);margin-top:2px;" id="roverLoraLastRxSub">Aguardando sinal da Base...</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Sinal da Base (RSSI / SNR)</div>
+      <div class="stat-value" id="roverLoraSignal" style="font-size:1.15rem;">-- dBm / -- dB</div>
+      <div style="font-size:0.72rem;color:var(--muted);margin-top:2px;">Última receção pelo ar</div>
+    </div>
+  </div>
+
+  <div style="background:rgba(0,0,0,0.2);padding:14px 18px;border-radius:10px;border:1px solid var(--card-border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+    <div style="font-size:0.8rem;color:var(--muted);">
+      <strong style="color:var(--text);"><i class="fa-solid fa-sliders"></i> Configuração RF:</strong> 
+      433.0 MHz &bull; BW 250 kHz &bull; SF7 &bull; CR 4/5 &bull; Sync 0x12 &bull; Potência 17 dBm
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <button type="button" onclick="triggerRoverLoraTelem()" class="btn btn-primary" id="btnForceTelem">
+        <i class="fa-solid fa-paper-plane"></i> Transmitir Telemetria Agora
+      </button>
+      <span id="roverTelemFeedback" style="font-size:0.8rem;color:var(--green);"></span>
+    </div>
+  </div>
+</div>
+
+<script>
+function refreshRoverLoraStatus() {
+  fetch('/api/lora/status')
+    .then(r => r.json())
+    .then(d => {
+      const elHw = document.getElementById('roverLoraHwBadge');
+      if (elHw) {
+        if (d.hw_ready) {
+          elHw.innerHTML = '<i class=\"fa-solid fa-circle-check\"></i> SX1278 ONLINE';
+          elHw.style.background = '#064e3b';
+          elHw.style.color = '#a7f3d0';
+          elHw.style.borderColor = '#059669';
+        } else {
+          elHw.innerHTML = '<i class=\"fa-solid fa-triangle-exclamation\"></i> ERRO RF / DESCONECTADO';
+          elHw.style.background = '#7f1d1d';
+          elHw.style.color = '#fecaca';
+          elHw.style.borderColor = '#dc2626';
+        }
+      }
+
+      const elContact = document.getElementById('roverLoraContactBadge');
+      if (elContact) {
+        if (d.has_contact || (d.last_comm_seconds_ago !== undefined && d.last_comm_seconds_ago < 5)) {
+          elContact.innerHTML = '<i class=\"fa-solid fa-link\"></i> COM PEDIDOS DA BASE';
+          elContact.style.background = '#064e3b';
+          elContact.style.color = '#a7f3d0';
+          elContact.style.borderColor = '#059669';
+        } else if (d.rx_polls > 0) {
+          elContact.innerHTML = '<i class=\"fa-solid fa-clock-rotate-left\"></i> CONTACTO PERDIDO (>5s)';
+          elContact.style.background = '#78350f';
+          elContact.style.color = '#fde68a';
+          elContact.style.borderColor = '#b45309';
+        } else {
+          elContact.innerHTML = '<i class=\"fa-solid fa-clock\"></i> A AGUARDAR BASE';
+          elContact.style.background = '#334155';
+          elContact.style.color = '#cbd5e1';
+          elContact.style.borderColor = '#475569';
+        }
+      }
+
+      const elRx = document.getElementById('roverLoraRxPolls');
+      if (elRx) elRx.innerText = d.rx_polls || 0;
+
+      const elTx = document.getElementById('roverLoraTxTelems');
+      if (elTx) elTx.innerText = d.tx_telemetry || 0;
+
+      const elAgo = document.getElementById('roverLoraLastRxAgo');
+      const elSub = document.getElementById('roverLoraLastRxSub');
+      if (elAgo) {
+        const ago = d.last_comm_seconds_ago;
+        if (ago === undefined || ago === null || ago >= 900000 || ago === 999999) {
+          elAgo.innerText = 'Nunca';
+          elAgo.style.color = 'var(--yellow)';
+          if (elSub) elSub.innerText = 'Nenhum pedido recebido da Base ainda';
+        } else if (ago <= 3) {
+          elAgo.innerText = ago + 's atrás';
+          elAgo.style.color = 'var(--green)';
+          if (elSub) elSub.innerText = 'Recebendo pedidos em tempo real';
+        } else if (ago < 10) {
+          elAgo.innerText = ago + 's atrás';
+          elAgo.style.color = 'var(--yellow)';
+          if (elSub) elSub.innerText = 'Pedido recente';
+        } else {
+          elAgo.innerText = ago + 's atrás';
+          elAgo.style.color = 'var(--red)';
+          if (elSub) elSub.innerText = 'Sem pedidos da Base (>10s)';
+        }
+      }
+
+      const elSig = document.getElementById('roverLoraSignal');
+      if (elSig) {
+        if (d.rx_polls > 0 && d.rssi !== 0) {
+          elSig.innerText = d.rssi.toFixed(1) + ' dBm / ' + (d.snr ? d.snr.toFixed(1) : '0.0') + ' dB';
+          elSig.style.color = d.rssi > -95 ? 'var(--green)' : 'var(--yellow)';
+        } else {
+          elSig.innerText = '-- dBm / -- dB';
+          elSig.style.color = 'var(--muted)';
+        }
+      }
+    })
+    .catch(() => {});
+}
+
+function triggerRoverLoraTelem() {
+  const btn = document.getElementById('btnForceTelem');
+  const fb = document.getElementById('roverTelemFeedback');
+  if (btn) btn.disabled = true;
+  if (fb) fb.innerText = 'A transmitir...';
+
+  fetch('/api/lora/send_telem', { method: 'POST' })
+    .then(r => r.json())
+    .then(d => {
+      if (fb) fb.innerText = 'Telemetria enviada!';
+      setTimeout(() => {
+        refreshRoverLoraStatus();
+        if (fb) fb.innerText = '';
+        if (btn) btn.disabled = false;
+      }, 1000);
+    })
+    .catch(e => {
+      if (fb) fb.innerText = 'Erro ao enviar';
+      if (btn) btn.disabled = false;
+    });
+}
+
+setInterval(refreshRoverLoraStatus, 1500);
+setTimeout(refreshRoverLoraStatus, 300);
+</script>
+"""
+
 BASE_LCD_CARD = """
 <div class="card">
   <div class="card-title">
@@ -4217,7 +4845,7 @@ function performLafvinOta(blob) {
 </script>
 """
 
-BASE_CONFIG_CONTENT = BASE_LCD_CARD + BASE_OTA_CARD
+BASE_CONFIG_CONTENT = BASE_LORA_CARD + BASE_LCD_CARD + BASE_CONSOLE_CARD + BASE_OTA_CARD
 
 BASE_WIFI_CONTENT = WIFI_CONTENT.replace(
     "Ligue o Rover ao router Wi-Fi do cais ou centro de comando para telemetria em tempo real e acesso local direto.",
@@ -4777,7 +5405,11 @@ def main():
     gps_rover = generate_html_page("Telemetria GPS", "gps", GPS_CONTENT)
     bat_rover = generate_html_page("Monitor da Bateria LiPo 4S", "battery", BATTERY_CONTENT)
     ctrl_rover = generate_html_page("Comandar Boia", "control", CONTROL_CONTENT)
-    cfg_rover = generate_html_page("Configuração do Rover", "config", CONFIG_CONTENT)
+    cfg_rover = generate_html_page(
+        "Configuração do Rover",
+        "config",
+        CONFIG_CONTENT.replace("<!-- Secção OTA (Dual ESP32-C6) -->", ROVER_LORA_CARD + "\n" + ROVER_CONSOLE_CARD + "\n<!-- Secção OTA (Dual ESP32-C6) -->")
+    )
     wifi_rover = generate_html_page("Configuração WiFi", "wifi", WIFI_CONTENT)
     sd_rover = generate_html_page("Explorador do Cartão MicroSD", "sd", SD_CONTENT)
 

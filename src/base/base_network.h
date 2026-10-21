@@ -16,7 +16,7 @@ class BaseNetwork {
 public:
     BaseNetwork(FleetManager &fleet, WiFiConfigManager &wifi) 
         : fleetManager(fleet), wifiConfig(wifi), lastSyncTime(0), lastHttpStatus(0), 
-          syncSuccess(false), successCount(0), failCount(0) {}
+          syncSuccess(false), successCount(0), failCount(0), consecutiveFails(0) {}
 
     void begin() {
         // Conexão e fallback AP geridos pelo WiFiConfigManager
@@ -34,7 +34,9 @@ public:
 
     void update() {
         uint32_t now = millis();
-        if (now - lastSyncTime < TELEMETRY_SYNC_INTERVAL_MS) {
+        // Em caso de falha de rede/cloud, aguarda 10s para não bloquear o servidor Web nem os botões
+        uint32_t syncInterval = (consecutiveFails > 0) ? 10000 : TELEMETRY_SYNC_INTERVAL_MS;
+        if (now - lastSyncTime < syncInterval) {
             return;
         }
         lastSyncTime = now;
@@ -53,14 +55,16 @@ private:
     void syncTelemetryToCloud() {
         WiFiClientSecure client;
         client.setInsecure(); // Skip certificate verification for flexible operation
-        client.setTimeout(4);
+        client.setTimeout(1500);
 
         HTTPClient https;
-        https.setTimeout(4000);
+        https.setTimeout(1500);
+        https.setConnectTimeout(1500);
         if (!https.begin(client, WINDDRAGONS_API_URL)) {
             Serial.println("[HTTP] Failed to connect to WindDragons endpoint");
             syncSuccess = false;
             failCount++;
+            consecutiveFails++;
             return;
         }
 
@@ -124,6 +128,7 @@ private:
         if (httpResponseCode == HTTP_CODE_OK || httpResponseCode == 201) {
             syncSuccess = true;
             successCount++;
+            consecutiveFails = 0;
             String responsePayload = https.getString();
             Serial.printf("[CLOUD] Resposta Portal: %s\n", responsePayload.c_str());
             parseCloudResponse(responsePayload);
@@ -134,6 +139,7 @@ private:
         } else {
             syncSuccess = false;
             failCount++;
+            consecutiveFails++;
             Serial.printf("[HTTP] POST failed, error: %d - %s (falhas: %u)\n", 
                           httpResponseCode, https.errorToString(httpResponseCode).c_str(), failCount);
         }
@@ -282,6 +288,7 @@ private:
     uint32_t lastSyncTime;
     uint32_t successCount;
     uint32_t failCount;
+    uint32_t consecutiveFails;
     int lastHttpStatus;
     bool syncSuccess;
 };
