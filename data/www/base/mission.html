@@ -2,10 +2,20 @@
 <html lang="pt">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Gestão de Missão & Regata - WindDragons Base Station</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Missão & Frota - WindDragons Base Station</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <link rel="stylesheet" href="/style.css?v=2.1.3">
+  
+  <link rel="stylesheet" href="/leaflet/leaflet.css" onerror="this.onerror=null;this.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';">
+  <script src="/leaflet/leaflet.js"></script>
+  <script>
+    if (typeof L === 'undefined') {
+      document.write('<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">');
+      document.write('<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script>');
+    }
+  </script>
+
   <script>
     (function(){
       var t = localStorage.getItem('wd_theme') || 'dark';
@@ -17,8 +27,8 @@
 <body>
   <header class="navbar">
     <a href="/" class="brand">
-      <img src="/assets/logo_black_800.png" alt="WindDragons Logo" class="brand-logo logo-light" style="height:36px;width:auto;max-width:40px;object-fit:contain;display:none;">
-      <img src="/assets/logo_white_800.png" alt="WindDragons Logo" class="brand-logo logo-dark" style="height:36px;width:auto;max-width:40px;object-fit:contain;display:inline-block;">
+      <img src="/assets/logo_black_800.png" alt="WindDragons Logo" class="brand-logo logo-light" style="height:32px;width:auto;max-width:36px;object-fit:contain;display:none;">
+      <img src="/assets/logo_white_800.png" alt="WindDragons Logo" class="brand-logo logo-dark" style="height:32px;width:auto;max-width:36px;object-fit:contain;display:inline-block;">
       <span>WindDragons</span> <span class="brand-sub">Base Station</span>
     </a>
     <nav class="nav-links">
@@ -26,20 +36,17 @@
 <a href="/portal" class="nav-item "><i class="fa-solid fa-cloud"></i> Portal Cloud</a>
 <a href="/config" class="nav-item "><i class="fa-solid fa-gear"></i> Configuração</a>
 <a href="/wifi" class="nav-item "><i class="fa-solid fa-wifi"></i> WiFi Base</a>
-<a href="/gps" class="nav-item "><i class="fa-solid fa-location-dot"></i> GPS Frota</a>
-<a href="/battery" class="nav-item "><i class="fa-solid fa-battery-three-quarters"></i> Bateria Frota</a>
-<a href="/control" class="nav-item "><i class="fa-solid fa-gamepad"></i> Comandos</a>
 <a href="/sd" class="nav-item "><i class="fa-solid fa-folder"></i> Cartão SD</a>
 
     </nav>
     <div class="nav-actions">
-      <a href="/config" id="navVersionBadge" class="badge" style="background:rgba(6,182,212,0.12);border:1px solid rgba(6,182,212,0.3);color:var(--primary);text-decoration:none;font-size:0.75rem;display:inline-flex;align-items:center;gap:6px;" title="Ver versões das placas e atualização OTA na página de Configuração">
+      <a href="/config" id="navVersionBadge" class="badge badge-hide-mobile" style="background:rgba(6,182,212,0.12);border:1px solid rgba(6,182,212,0.3);color:var(--primary);text-decoration:none;font-size:0.75rem;display:inline-flex;align-items:center;gap:6px;" title="Ver versões das placas e atualização OTA na página de Configuração">
         <i class="fa-solid fa-code-branch"></i> <span id="navLafvinVer">Lafvin: v2.1.0</span> &bull; <span id="navC6Ver">C6: ...</span>
       </a>
       <span id="navOpStateBadge" class="badge" style="background:#64748b;color:#fff;font-weight:700;">
         <i class="fa-solid fa-flag"></i> <span id="navOpStateText">STORAGE</span>
       </span>
-      <span id="navStationBadge" class="badge" style="background:rgba(2,132,199,0.2);color:#38bdf8;border:1px solid rgba(56,189,248,0.3);font-family:monospace;">
+      <span id="navStationBadge" class="badge badge-hide-mobile" style="background:rgba(2,132,199,0.2);color:#38bdf8;border:1px solid rgba(56,189,248,0.3);font-family:monospace;">
         <i class="fa-solid fa-fingerprint"></i> <span id="navStationId">ID Base</span>
       </span>
       <span id="navWifiBadge" class="badge badge-sta">
@@ -52,96 +59,983 @@
     </div>
   </header>
 
-  <main class="container">
+  <main class="container mission-container">
     
-<div class="card">
-  <div class="card-title">
-    <span><i class="fa-solid fa-flag-checkered"></i> Estado de Operação da Estação Base</span>
-    <span id="badgeState" class="badge" style="background:#64748b;color:#fff;font-size:0.85rem;padding:6px 14px;">
-      STORAGE - Not in use
+<style>
+/* Reset & Container */
+.mission-container {
+  max-width: 1200px;
+  margin: 4px auto 20px auto;
+  padding: 0 6px;
+}
+@media (min-width: 768px) {
+  .mission-container {
+    padding: 0 16px;
+    margin: 12px auto 30px auto;
+  }
+}
+
+/* Top Bar: Fleet Quick Selector & Mission Status */
+.mission-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  padding: 8px 12px;
+  border-radius: 12px;
+  margin-bottom: 10px;
+  box-shadow: var(--card-shadow);
+  flex-wrap: wrap;
+}
+.fleet-scroll {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 2px 0;
+  flex: 1;
+  min-width: 0;
+}
+.fleet-scroll::-webkit-scrollbar { display: none; }
+.fleet-chip {
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--card-border);
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  min-height: 36px;
+  user-select: none;
+}
+.fleet-chip:active { transform: scale(0.96); }
+.fleet-chip.active {
+  background: var(--primary);
+  color: #0b1329;
+  border-color: var(--primary);
+  box-shadow: 0 0 10px rgba(6, 182, 212, 0.4);
+}
+.fleet-chip .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.fleet-chip .dot.online { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.fleet-chip .dot.offline { background: var(--red); }
+
+.state-pill-btn {
+  background: #475569;
+  border: 1px solid #94a3b8;
+  color: #fff;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  min-height: 36px;
+  transition: all 0.15s ease;
+}
+.state-pill-btn:active { transform: scale(0.96); }
+
+/* Segmented Mobile Tab Bar */
+.mission-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  background: rgba(14, 26, 56, 0.95);
+  border: 1px solid var(--card-border);
+  padding: 4px;
+  border-radius: 12px;
+  margin-bottom: 12px;
+  position: sticky;
+  top: 6px;
+  z-index: 1050;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.m-tab-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 8px 4px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  min-height: 48px;
+  user-select: none;
+}
+.m-tab-btn i { font-size: 1.15rem; }
+.m-tab-btn.active {
+  background: rgba(6, 182, 212, 0.18);
+  color: var(--primary);
+  border-color: var(--primary);
+  box-shadow: 0 0 12px rgba(6, 182, 212, 0.25);
+}
+[data-theme="light"] .mission-tabs {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: #cbd5e1;
+}
+[data-theme="light"] .m-tab-btn.active {
+  background: rgba(2, 132, 199, 0.15);
+  color: #0284c7;
+  border-color: #0284c7;
+}
+
+/* Tab Panes */
+.tab-pane {
+  display: none;
+}
+.tab-pane.active {
+  display: block;
+  animation: fadeInPane 0.2s ease;
+}
+@keyframes fadeInPane {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* MAP SECTION */
+.map-hud-bar {
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  padding: 6px 10px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+.map-hud-bar::-webkit-scrollbar { display: none; }
+.hud-select {
+  background: #090e1a;
+  color: var(--primary);
+  font-weight: 700;
+  border: 1px solid var(--primary);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 0.78rem;
+  outline: none;
+}
+[data-theme="light"] .hud-select {
+  background: #f1f5f9;
+}
+.hud-pill {
+  font-size: 0.72rem;
+  padding: 3px 8px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 600;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: var(--text);
+}
+[data-theme="light"] .hud-pill {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+.hud-btn {
+  background: rgba(6, 182, 212, 0.15);
+  color: var(--primary);
+  border: 1px solid var(--primary);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.hud-btn:active { background: var(--primary); color: #04101e; }
+
+.map-wrapper {
+  position: relative;
+  width: 100%;
+}
+#fleetMap {
+  width: 100%;
+  height: calc(100dvh - 280px);
+  min-height: 380px;
+  max-height: 620px;
+  border-radius: 12px;
+  border: 1px solid var(--card-border);
+  background: #091325;
+  position: relative;
+  z-index: 10;
+}
+.map-bottom-bar {
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.coords-text {
+  font-family: monospace;
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+.coords-text strong { color: var(--text); }
+.map-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.btn-action-touch {
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  min-height: 42px;
+  transition: transform 0.1s ease;
+}
+.btn-action-touch:active { transform: scale(0.96); }
+.btn-goto { background: #0284c7; color: #fff; }
+.btn-hold { background: #0f766e; color: #fff; }
+.btn-stop { background: #7f1d1d; color: #fca5a5; }
+
+/* Drag Hint & Toast */
+.drag-hint-pill {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(9, 14, 26, 0.95);
+  border: 1px solid var(--primary);
+  color: #fff;
+  padding: 6px 16px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  z-index: 1500;
+  pointer-events: none;
+  display: none;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+  white-space: nowrap;
+}
+.toast-banner {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #064e3b;
+  color: #a7f3d0;
+  border: 1px solid #10b981;
+  padding: 8px 18px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  z-index: 2500;
+  display: none;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.6);
+  text-align: center;
+  max-width: 90%;
+  animation: fadeInToast 0.25s ease;
+}
+@keyframes fadeInToast {
+  from { opacity: 0; transform: translate(-50%, -10px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* Nautical Markers on Leaflet */
+.rover-icon-container {
+  position: relative;
+  width: 38px;
+  height: 38px;
+  cursor: grab;
+  touch-action: none;
+}
+.rover-icon-container:active { cursor: grabbing; }
+.rover-boat-pin {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #0f1e3d;
+  border: 2px solid var(--primary);
+  box-shadow: 0 0 10px rgba(6, 182, 212, 0.6);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transition: transform 0.2s ease;
+}
+.rover-boat-pin.selected {
+  border-color: #38bdf8;
+  box-shadow: 0 0 14px #38bdf8, inset 0 0 6px #38bdf8;
+  transform: scale(1.12);
+}
+.rover-boat-pin.offline {
+  border-color: var(--red);
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
+}
+.rover-heading-arrow {
+  position: absolute;
+  top: -7px;
+  left: 50%;
+  transform-origin: bottom center;
+  margin-left: -5px;
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 8px solid var(--primary);
+  filter: drop-shadow(0 0 4px var(--primary));
+  transition: transform 0.3s ease;
+}
+.rover-code-text {
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1;
+}
+.rover-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+}
+.rover-status-dot.offline { background: var(--red); }
+.target-pin {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(245, 158, 11, 0.3);
+  border: 2px dashed #f59e0b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.7);
+  cursor: grab;
+  animation: pulseTarget 1.8s infinite;
+}
+@keyframes pulseTarget {
+  0% { transform: scale(0.95); opacity: 0.85; }
+  50% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(0.95); opacity: 0.85; }
+}
+
+/* COMMANDS STYLES */
+.btn-emergency {
+  width: 100%;
+  background: linear-gradient(135deg, #b91c1c, #dc2626);
+  color: #fff;
+  font-size: 1.05rem;
+  font-weight: 800;
+  padding: 14px;
+  border-radius: 10px;
+  border: 2px solid #ef4444;
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.4);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  letter-spacing: 0.5px;
+  min-height: 52px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.btn-emergency:active { transform: scale(0.98); }
+.cmd-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+.touch-slider-group {
+  background: rgba(0,0,0,0.15);
+  border: 1px solid var(--card-border);
+  padding: 14px;
+  border-radius: 10px;
+  margin-bottom: 12px;
+}
+.slider-touch {
+  width: 100%;
+  -webkit-appearance: none;
+  height: 14px;
+  background: #0f172a;
+  border-radius: 8px;
+  outline: none;
+  margin: 12px 0;
+}
+.slider-touch::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--primary);
+  cursor: pointer;
+  box-shadow: 0 0 10px rgba(6, 182, 212, 0.6);
+}
+
+/* BATTERY STYLES */
+.bat-circle-container {
+  text-align: center;
+  padding: 16px 0;
+}
+.bat-gauge-num {
+  font-size: 3.6rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+/* Modal Backdrop */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0,0,0,0.7);
+  z-index: 3000;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  backdrop-filter: blur(4px);
+}
+.modal-content-card {
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  padding: 20px;
+  max-width: 480px;
+  width: 100%;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+  animation: modalScale 0.2s ease;
+}
+@keyframes modalScale {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* Responsive tweaks for phones */
+@media (max-width: 640px) {
+  .mission-tabs { grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 3px; }
+  .m-tab-btn { font-size: 0.68rem; padding: 6px 2px; min-height: 44px; }
+  .m-tab-btn i { font-size: 0.95rem; }
+  .map-actions { width: 100%; justify-content: space-between; }
+  .btn-action-touch { flex: 1; justify-content: center; }
+  #fleetMap { height: calc(100dvh - 300px); min-height: 320px; }
+  .badge-hide-mobile { display: none !important; }
+}
+</style>
+
+<!-- Barra Superior: Seleção Rápida de Bóias & Estado da Base -->
+<div class="mission-top-bar">
+  <div class="fleet-scroll" id="fleetChipsBar">
+    <span class="fleet-chip active" id="chip_1" onclick="changeRover(1)">
+      <i class="fa-solid fa-sailboat"></i> R1 <span class="dot online"></span> <b>--%</b>
     </span>
   </div>
-  <p style="color:var(--muted);font-size:0.875rem;margin-bottom:14px;">
-    Selecione o estado operacional da Estação Base para a missão atual:
-  </p>
-
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;">
-    <button onclick="setState('STORAGE')" id="btnStateSTORAGE" class="btn" style="display:flex;flex-direction:column;align-items:flex-start;padding:14px;background:rgba(255,255,255,0.05);color:#fff;border:1px solid var(--card-border);">
-      <span style="font-size:1.05rem;font-weight:700;"><i class="fa-solid fa-box-archive"></i> Storage</span>
-      <span style="font-size:0.75rem;color:var(--muted);margin-top:4px;">Not in use (Standby)</span>
-    </button>
-
-    <button onclick="setState('WAITING_ROVERS')" id="btnStateWAITING_ROVERS" class="btn" style="display:flex;flex-direction:column;align-items:flex-start;padding:14px;background:rgba(255,255,255,0.05);color:#fff;border:1px solid var(--card-border);">
-      <span style="font-size:1.05rem;font-weight:700;"><i class="fa-solid fa-hourglass-half"></i> Waiting Rover List</span>
-      <span style="font-size:0.75rem;color:var(--muted);margin-top:4px;">Connected and waiting</span>
-    </button>
-
-    <button onclick="setState('IDLE')" id="btnStateIDLE" class="btn" style="display:flex;flex-direction:column;align-items:flex-start;padding:14px;background:rgba(255,255,255,0.05);color:#fff;border:1px solid var(--card-border);">
-      <span style="font-size:1.05rem;font-weight:700;"><i class="fa-solid fa-anchor"></i> Idle</span>
-      <span style="font-size:0.75rem;color:var(--muted);margin-top:4px;">Rover list ready</span>
-    </button>
-
-    <button onclick="setState('GO')" id="btnStateGO" class="btn" style="display:flex;flex-direction:column;align-items:flex-start;padding:14px;background:rgba(255,255,255,0.05);color:#fff;border:1px solid var(--card-border);">
-      <span style="font-size:1.05rem;font-weight:700;"><i class="fa-solid fa-rocket"></i> Go</span>
-      <span style="font-size:0.75rem;color:var(--muted);margin-top:4px;">In mission (Ativo)</span>
+  <div>
+    <button type="button" class="state-pill-btn" id="stateBadgePill" onclick="toggleStateModal()" title="Toque para mudar o Estado da Base">
+      <i class="fa-solid fa-flag"></i> <span id="topStateText">STORAGE</span> <i class="fa-solid fa-chevron-down" style="font-size:0.7rem;margin-left:2px;"></i>
     </button>
   </div>
 </div>
 
-<div class="card">
-  <div class="card-title">
-    <span><i class="fa-solid fa-sailboat"></i> Dados do Percurso / Regata</span>
-  </div>
-  <div class="grid-2">
-    <div class="form-group">
-      <label class="stat-label">ID da Regata / Prova</label>
-      <input type="text" id="raceIdInput" placeholder="ex: REGATA-TEJO-2026-R1">
+<!-- Barra de Abas Tácteis Segmentadas (Otimizada para Telemóvel / Tablet) -->
+<div class="mission-tabs">
+  <button type="button" class="m-tab-btn active" id="segTab_map" onclick="switchMissionTab('map')">
+    <i class="fa-solid fa-location-dot"></i>
+    <span>Mapa GPS</span>
+  </button>
+  <button type="button" class="m-tab-btn" id="segTab_cmd" onclick="switchMissionTab('cmd')">
+    <i class="fa-solid fa-gamepad"></i>
+    <span>Comandos</span>
+  </button>
+  <button type="button" class="m-tab-btn" id="segTab_bat" onclick="switchMissionTab('bat')">
+    <i class="fa-solid fa-battery-three-quarters"></i>
+    <span>Bateria</span>
+  </button>
+  <button type="button" class="m-tab-btn" id="segTab_setup" onclick="switchMissionTab('setup')">
+    <i class="fa-solid fa-sailboat"></i>
+    <span>Regata & Bóias</span>
+  </button>
+</div>
+
+<!-- ===================================================================== -->
+<!-- TAB 1: MAPA GPS INTERATIVO -->
+<!-- ===================================================================== -->
+<div class="tab-pane active" id="pane_map">
+  <!-- HUD Superior do Mapa -->
+  <div class="map-hud-bar">
+    <div style="display:flex;align-items:center;gap:6px;">
+      <select id="mapRoverSelect" onchange="changeRover(this.value)" class="hud-select">
+        <option value="1">R1</option>
+      </select>
+      <span id="fixStatusBadge" class="hud-pill" style="color:var(--green);border-color:var(--green);">
+        ● ONLINE
+      </span>
     </div>
-    <div class="form-group">
-      <label class="stat-label">Nome da Missão / Prova</label>
-      <input type="text" id="missionNameInput" placeholder="ex: Troféu de Outono - Prova 1">
+
+    <div style="display:flex;align-items:center;gap:4px;">
+      <span class="hud-pill" title="Bateria">
+        <i class="fa-solid fa-battery-half" style="color:var(--green);"></i>
+        <span id="batVal">--%</span>
+      </span>
+      <span class="hud-pill" title="Velocidade">
+        <i class="fa-solid fa-gauge-high"></i>
+        <span id="speedVal">0.0 kn</span>
+      </span>
+      <span class="hud-pill" title="Rumo Proa">
+        <i class="fa-solid fa-compass"></i>
+        <span id="headingVal">0°</span>
+      </span>
+      <span class="hud-pill" title="Sinal LoRa">
+        <i class="fa-solid fa-signal"></i>
+        <span id="rssiVal">-- dBm</span>
+      </span>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:4px;">
+      <button type="button" onclick="centerMapOnRovers()" class="hud-btn" title="Centrar Mapa">
+        <i class="fa-solid fa-crosshairs"></i> Focar
+      </button>
+      <button type="button" onclick="toggleMapLayer()" class="hud-btn" id="layerBtn" title="Alternar Satélite / Mapa">
+        <i class="fa-solid fa-layer-group"></i> Sat
+      </button>
+    </div>
+  </div>
+
+  <!-- Contentor do Mapa com Indicador de Arraste -->
+  <div class="map-wrapper">
+    <div id="dragHint" class="drag-hint-pill">
+      <i class="fa-solid fa-arrows-up-down-left-right"></i> <span id="dragHintText">A arrastar alvo...</span>
+    </div>
+    <div id="fleetMap"></div>
+  </div>
+
+  <!-- Barra Inferior de Coordenadas e Ações Rápidas -->
+  <div class="map-bottom-bar">
+    <div class="coords-text">
+      <div>GPS: <strong id="curCoordTxt">--.------, --.------</strong></div>
+      <div style="color:var(--primary);">Alvo: <strong id="tgtCoordTxt">Nenhum alvo definido</strong></div>
+    </div>
+    <div class="map-actions">
+      <button type="button" onclick="sendTargetCommand(6)" class="btn-action-touch btn-goto" id="btnGoTarget" title="Navegar para o alvo">
+        <i class="fa-solid fa-paper-plane"></i> Navegar
+      </button>
+      <button type="button" onclick="sendHoldStation()" class="btn-action-touch btn-hold" title="Manter Posição (Hold Station)">
+        <i class="fa-solid fa-anchor"></i> Manter
+      </button>
+      <button type="button" onclick="sendStopRover()" class="btn-action-touch btn-stop" title="Parar Motores">
+        <i class="fa-solid fa-ban"></i> Parar
+      </button>
     </div>
   </div>
 </div>
 
-<div class="card">
-  <div class="card-title">
-    <span><i class="fa-solid fa-satellite-dish"></i> Lista de Bóias da Missão (Persistente no MicroSD)</span>
-    <span style="font-size:0.8rem;color:var(--muted);font-weight:normal;">/config/rovers.json</span>
+<!-- ===================================================================== -->
+<!-- TAB 2: COMANDOS & ATUADORES -->
+<!-- ===================================================================== -->
+<div class="tab-pane" id="pane_cmd">
+  <!-- Paragem de Emergência Imediata -->
+  <button type="button" onclick="sendEmergencyStop()" class="btn-emergency">
+    <i class="fa-solid fa-ban"></i> PARAGEM DE EMERGÊNCIA
+  </button>
+
+  <div class="card">
+    <div class="card-title">
+      <span><i class="fa-solid fa-gamepad"></i> Centro de Comando da Frota</span>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <label class="stat-label" style="margin:0;">Alvo:</label>
+        <select id="targetRoverSelect" onchange="changeRover(this.value)" class="hud-select">
+          <option value="1">Rover-1</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="grid-4">
+      <div class="stat-box">
+        <div class="stat-label">Modo Motor</div>
+        <div class="stat-value" id="curMotor" style="color:var(--yellow);font-size:1.1rem;">idle</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Estado Âncora</div>
+        <div class="stat-value" id="curAnchor" style="color:var(--primary);font-size:1.1rem;">retracted</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Profundidade</div>
+        <div class="stat-value" id="curDepth">0.0 m</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Sinal LoRa</div>
+        <div class="stat-value" id="curRssi" style="color:var(--green);">0 dBm</div>
+      </div>
+    </div>
   </div>
 
-  <div style="overflow-x:auto;">
-    <table id="roversTable">
-      <thead>
-        <tr>
-          <th>ID</th>
-          <th>Nome</th>
-          <th>MAC Address</th>
-          <th>Papel / Role</th>
-          <th>Coord. Alvo (Lat, Lng)</th>
-          <th>Status LoRa / Bat / Âncora</th>
-          <th>Ações</th>
-        </tr>
-      </thead>
-      <tbody id="roversTbody">
-        <tr><td colspan="7" style="text-align:center;color:var(--muted);">A carregar lista de bóias...</td></tr>
-      </tbody>
-    </table>
+  <!-- Modos de Navegação e Segurança -->
+  <div class="card">
+    <div class="card-title">
+      <span><i class="fa-solid fa-compass"></i> Modos de Navegação & Segurança</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;">
+      <button type="button" onclick="sendAction(1)" class="btn" style="background:#0284c7;color:#fff;padding:12px 10px;">
+        <i class="fa-solid fa-location-crosshairs"></i> Hold Station
+      </button>
+      <button type="button" onclick="sendAction(7)" class="btn" style="background:#7c3aed;color:#fff;padding:12px 10px;">
+        <i class="fa-solid fa-house"></i> RTL (Regresso)
+      </button>
+      <button type="button" onclick="sendAction(10)" class="btn btn-secondary" style="padding:12px 10px;">
+        <i class="fa-solid fa-gamepad"></i> Modo Manual
+      </button>
+      <button type="button" onclick="sendAction(8)" class="btn" style="background:var(--yellow);color:#0f172a;padding:12px 10px;">
+        <i class="fa-solid fa-bell"></i> Alarme / Strobe
+      </button>
+    </div>
   </div>
 
-  <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;">
-    <button onclick="addRow()" class="btn btn-secondary"><i class="fa-solid fa-plus"></i> Adicionar Bóia</button>
-    <button onclick="saveRovers()" class="btn btn-primary" style="padding:10px 24px;"><i class="fa-solid fa-floppy-disk"></i> Guardar Lista no MicroSD</button>
-    <button onclick="clearRovers()" class="btn btn-danger" style="background:#78350f;"><i class="fa-solid fa-rotate-left"></i> Repor Pré-definições</button>
+  <!-- Guincho da Âncora -->
+  <div class="card">
+    <div class="card-title">
+      <span><i class="fa-solid fa-anchor"></i> Guincho da Âncora & Travão</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;">
+      <button type="button" onclick="sendAction(3)" class="btn btn-primary" style="padding:12px 10px;">
+        <i class="fa-solid fa-arrow-down"></i> Lançar Âncora
+      </button>
+      <button type="button" onclick="sendAction(4)" class="btn btn-primary" style="padding:12px 10px;">
+        <i class="fa-solid fa-arrow-up"></i> Recolher Âncora
+      </button>
+      <button type="button" onclick="sendAction(5)" class="btn btn-secondary" style="padding:12px 10px;">
+        <i class="fa-solid fa-stop"></i> Parar Guincho
+      </button>
+    </div>
+  </div>
+
+  <!-- Propulsão ESC & Leme -->
+  <div class="card">
+    <div class="card-title">
+      <span><i class="fa-solid fa-fan"></i> Propulsão ESC & Leme de Direção</span>
+    </div>
+    
+    <div class="touch-slider-group">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span class="stat-label">Aceleração ESC:</span>
+        <strong id="thrVal" style="font-size:1.15rem;color:var(--primary);">0%</strong>
+      </div>
+      <input type="range" id="throttleSlider" min="-100" max="100" value="0" class="slider-touch" oninput="updateSliders()" onchange="sendActuators()">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+        <button type="button" onclick="setThrottle(0)" class="btn btn-secondary" style="flex:1;min-height:38px;">Stop (0%)</button>
+        <button type="button" onclick="setThrottle(25)" class="btn btn-secondary" style="flex:1;min-height:38px;">+25%</button>
+        <button type="button" onclick="setThrottle(50)" class="btn btn-secondary" style="flex:1;min-height:38px;">+50%</button>
+        <button type="button" onclick="setThrottle(100)" class="btn btn-primary" style="flex:1;min-height:38px;">+100%</button>
+        <button type="button" onclick="setThrottle(-50)" class="btn btn-secondary" style="flex:1;min-height:38px;">-50% Ré</button>
+      </div>
+    </div>
+
+    <div class="touch-slider-group">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span class="stat-label">Ângulo do Leme:</span>
+        <strong id="rudVal" style="font-size:1.15rem;color:var(--primary);">0%</strong>
+      </div>
+      <input type="range" id="rudderSlider" min="-100" max="100" value="0" class="slider-touch" oninput="updateSliders()" onchange="sendActuators()">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+        <button type="button" onclick="setRudder(-75)" class="btn btn-secondary" style="flex:1;min-height:38px;">⬅ Bombordo (-75%)</button>
+        <button type="button" onclick="setRudder(0)" class="btn btn-secondary" style="flex:1;min-height:38px;">Centro (0%)</button>
+        <button type="button" onclick="setRudder(75)" class="btn btn-secondary" style="flex:1;min-height:38px;">Estibordo (+75%) ➡</button>
+      </div>
+    </div>
   </div>
 </div>
 
+<!-- ===================================================================== -->
+<!-- TAB 3: BATERIA FROTA -->
+<!-- ===================================================================== -->
+<div class="tab-pane" id="pane_bat">
+  <div class="card">
+    <div class="card-title">
+      <span><i class="fa-solid fa-battery-full"></i> Telemetria de Bateria LiPo 4S da Frota</span>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <label class="stat-label" style="margin:0;">Rover:</label>
+        <select id="batRoverSelect" onchange="changeRover(this.value)" class="hud-select">
+          <option value="1">Rover-1</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="bat-circle-container">
+      <div id="batPct" class="bat-gauge-num" style="color:var(--green);">0%</div>
+      <div class="progress-bg" style="max-width:380px;margin:10px auto;height:18px;">
+        <div id="batBar" class="progress-bar" style="width:0%;background:var(--green);"></div>
+      </div>
+    </div>
+
+    <div class="grid-4">
+      <div class="stat-box">
+        <div class="stat-label">Tensão Total (Pack)</div>
+        <div class="stat-value" id="vTotVal">0.00 V</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Média por Célula</div>
+        <div class="stat-value" id="vCellVal" style="color:var(--primary);">0.00 V/cel</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Química</div>
+        <div class="stat-value">LiPo 4S</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Estado Pack</div>
+        <div class="stat-value" id="batHealth" style="color:var(--green);">NORMAL</div>
+      </div>
+    </div>
+
+    <div style="margin-top:20px;">
+      <div class="stat-label" style="margin-bottom:8px;">Distribuição Estimada de Tensão por Célula (LiPo 4S):</div>
+      <div class="grid-4">
+        <div class="stat-box" style="text-align:center;">
+          <div class="stat-label">Célula 1</div>
+          <div class="stat-value cell-v" id="cell1Val" style="font-size:1.15rem;color:var(--primary);">0.00 V</div>
+        </div>
+        <div class="stat-box" style="text-align:center;">
+          <div class="stat-label">Célula 2</div>
+          <div class="stat-value cell-v" id="cell2Val" style="font-size:1.15rem;color:var(--primary);">0.00 V</div>
+        </div>
+        <div class="stat-box" style="text-align:center;">
+          <div class="stat-label">Célula 3</div>
+          <div class="stat-value cell-v" id="cell3Val" style="font-size:1.15rem;color:var(--primary);">0.00 V</div>
+        </div>
+        <div class="stat-box" style="text-align:center;">
+          <div class="stat-label">Célula 4</div>
+          <div class="stat-value cell-v" id="cell4Val" style="font-size:1.15rem;color:var(--primary);">0.00 V</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Resumo da Frota Inteira -->
+  <div class="card">
+    <div class="card-title">
+      <span><i class="fa-solid fa-list-check"></i> Resumo de Energia de Toda a Frota</span>
+    </div>
+    <div id="fleetBatteryList" style="display:flex;flex-direction:column;gap:8px;">
+      <div style="color:var(--muted);text-align:center;padding:12px;">A carregar dados da frota...</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================================================================== -->
+<!-- TAB 4: GESTÃO DA PROVA & BÓIAS -->
+<!-- ===================================================================== -->
+<div class="tab-pane" id="pane_setup">
+  <!-- Estado Operacional da Base Station -->
+  <div class="card">
+    <div class="card-title">
+      <span><i class="fa-solid fa-flag-checkered"></i> Estado de Operação da Estação Base</span>
+      <span id="badgeState" class="badge" style="background:#64748b;color:#fff;font-size:0.85rem;padding:6px 14px;">
+        STORAGE - Not in use
+      </span>
+    </div>
+    <p style="color:var(--muted);font-size:0.875rem;margin-bottom:12px;">
+      Selecione o estado operacional da Estação Base para a missão atual:
+    </p>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;">
+      <button type="button" onclick="setState('STORAGE')" id="btnStateSTORAGE" class="btn" style="display:flex;flex-direction:column;align-items:flex-start;padding:12px;background:rgba(255,255,255,0.05);color:#fff;border:1px solid var(--card-border);">
+        <span style="font-size:1rem;font-weight:700;"><i class="fa-solid fa-box-archive"></i> Storage</span>
+        <span style="font-size:0.75rem;color:var(--muted);margin-top:2px;">Not in use (Standby)</span>
+      </button>
+
+      <button type="button" onclick="setState('WAITING_ROVERS')" id="btnStateWAITING_ROVERS" class="btn" style="display:flex;flex-direction:column;align-items:flex-start;padding:12px;background:rgba(255,255,255,0.05);color:#fff;border:1px solid var(--card-border);">
+        <span style="font-size:1rem;font-weight:700;"><i class="fa-solid fa-hourglass-half"></i> Waiting Rover List</span>
+        <span style="font-size:0.75rem;color:var(--muted);margin-top:2px;">Connected and waiting</span>
+      </button>
+
+      <button type="button" onclick="setState('IDLE')" id="btnStateIDLE" class="btn" style="display:flex;flex-direction:column;align-items:flex-start;padding:12px;background:rgba(255,255,255,0.05);color:#fff;border:1px solid var(--card-border);">
+        <span style="font-size:1rem;font-weight:700;"><i class="fa-solid fa-anchor"></i> Idle</span>
+        <span style="font-size:0.75rem;color:var(--muted);margin-top:2px;">Rover list ready</span>
+      </button>
+
+      <button type="button" onclick="setState('GO')" id="btnStateGO" class="btn" style="display:flex;flex-direction:column;align-items:flex-start;padding:12px;background:rgba(255,255,255,0.05);color:#fff;border:1px solid var(--card-border);">
+        <span style="font-size:1rem;font-weight:700;"><i class="fa-solid fa-rocket"></i> Go</span>
+        <span style="font-size:0.75rem;color:var(--muted);margin-top:2px;">In mission (Ativo)</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Dados da Regata -->
+  <div class="card">
+    <div class="card-title">
+      <span><i class="fa-solid fa-sailboat"></i> Dados do Percurso / Regata</span>
+    </div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label class="stat-label">ID da Regata / Prova</label>
+        <input type="text" id="raceIdInput" placeholder="ex: REGATA-TEJO-2026-R1">
+      </div>
+      <div class="form-group">
+        <label class="stat-label">Nome da Missão / Prova</label>
+        <input type="text" id="missionNameInput" placeholder="ex: Troféu de Outono - Prova 1">
+      </div>
+    </div>
+  </div>
+
+  <!-- Lista de Bóias da Missão -->
+  <div class="card">
+    <div class="card-title">
+      <span><i class="fa-solid fa-satellite-dish"></i> Lista de Bóias da Missão (MicroSD)</span>
+      <span style="font-size:0.78rem;color:var(--muted);font-weight:normal;">/config/rovers.json</span>
+    </div>
+
+    <div style="overflow-x:auto;">
+      <table id="roversTable">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Nome</th>
+            <th>MAC Address</th>
+            <th>Papel / Role</th>
+            <th>Coord. Alvo (Lat, Lng)</th>
+            <th>Status LoRa / Bat / Âncora</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody id="roversTbody">
+          <tr><td colspan="7" style="text-align:center;color:var(--muted);">A carregar lista de bóias...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;">
+      <button type="button" onclick="addRow()" class="btn btn-secondary"><i class="fa-solid fa-plus"></i> Adicionar Bóia</button>
+      <button type="button" onclick="saveRovers()" class="btn btn-primary" style="padding:10px 20px;"><i class="fa-solid fa-floppy-disk"></i> Guardar Lista no MicroSD</button>
+      <button type="button" onclick="clearRovers()" class="btn btn-danger" style="background:#78350f;"><i class="fa-solid fa-rotate-left"></i> Repor Pré-definições</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================================================================== -->
+<!-- MODAL DE SELEÇÃO RÁPIDA DE ESTADO -->
+<!-- ===================================================================== -->
+<div class="modal-overlay" id="stateModal" onclick="if(event.target===this)toggleStateModal()">
+  <div class="modal-content-card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <h3 style="margin:0;font-size:1.1rem;"><i class="fa-solid fa-flag"></i> Mudar Estado Operacional</h3>
+      <button type="button" onclick="toggleStateModal()" class="btn btn-secondary" style="padding:4px 8px;font-size:0.8rem;">✕</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <button type="button" onclick="setState('STORAGE')" class="btn" style="background:#475569;color:#fff;justify-content:flex-start;padding:12px;">
+        <i class="fa-solid fa-box-archive"></i> <strong>STORAGE</strong> &mdash; Not in use (Standby)
+      </button>
+      <button type="button" onclick="setState('WAITING_ROVERS')" class="btn" style="background:#b45309;color:#fff;justify-content:flex-start;padding:12px;">
+        <i class="fa-solid fa-hourglass-half"></i> <strong>WAITING_ROVERS</strong> &mdash; Connected and waiting
+      </button>
+      <button type="button" onclick="setState('IDLE')" class="btn" style="background:#0e7490;color:#fff;justify-content:flex-start;padding:12px;">
+        <i class="fa-solid fa-anchor"></i> <strong>IDLE</strong> &mdash; Rover list ready
+      </button>
+      <button type="button" onclick="setState('GO')" class="btn" style="background:#047857;color:#fff;justify-content:flex-start;padding:12px;">
+        <i class="fa-solid fa-rocket"></i> <strong>GO</strong> &mdash; In mission (Ativo)
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Banner Toast de Notificação -->
+<div id="toastBanner" class="toast-banner">
+  <i class="fa-solid fa-satellite-dish"></i> <span id="toastMsg">Notificação</span>
+</div>
+
+<!-- ===================================================================== -->
+<!-- SCRIPTS DA PÁGINA UNIFICADA DE MISSÃO -->
+<!-- ===================================================================== -->
 <script>
+// --- ESTADO GLOBAL ---
+let selectedRoverId = 1;
 let currentRoversData = [];
+let currentMissionData = null;
 const rolesList = ['largada CR', 'largada', 'boia 1', 'boia 2', 'boia 3', 'boia 4', 'chegada CR', 'chegada'];
+
+// Estado do Mapa Leaflet
+let map = null;
+let osmLayer = null;
+let satLayer = null;
+let isSat = false;
+let isDragging = false;
+let roverMarkers = {};
+let targetMarkers = {};
+let targetLines = {};
+let hasCenteredInitial = false;
+
+// --- GESTÃO DE ABAS / TABS ---
+function switchMissionTab(tabId) {
+  const tabs = ['map', 'cmd', 'bat', 'setup'];
+  tabs.forEach(t => {
+    const pane = document.getElementById('pane_' + t);
+    const btn = document.getElementById('segTab_' + t);
+    if (pane) pane.classList.toggle('active', t === tabId);
+    if (btn) btn.classList.toggle('active', t === tabId);
+  });
+
+  // Atualiza hash na URL para permitir bookmark direto (#map, #cmd, #bat, #setup)
+  try {
+    history.replaceState(null, '', '#' + tabId);
+  } catch(e) {}
+
+  if (tabId === 'map') {
+    if (!map) {
+      initMap();
+    } else {
+      map.invalidateSize();
+      setTimeout(() => { if (map) map.invalidateSize(); }, 150);
+    }
+  }
+}
+
+// --- MODAL DE ESTADO ---
+function toggleStateModal() {
+  const m = document.getElementById('stateModal');
+  if (!m) return;
+  m.style.display = (m.style.display === 'flex') ? 'none' : 'flex';
+}
 
 function updateStateButtons(st) {
   const badge = document.getElementById('badgeState');
+  const topText = document.getElementById('topStateText');
+  const topPill = document.getElementById('stateBadgePill');
   const btnIds = ['STORAGE', 'WAITING_ROVERS', 'IDLE', 'GO'];
   const colors = {
     'STORAGE': { bg: '#475569', border: '#94a3b8', desc: 'Not in use (Standby)' },
@@ -149,11 +1043,16 @@ function updateStateButtons(st) {
     'IDLE': { bg: '#0e7490', border: '#06b6d4', desc: 'Rover list ready' },
     'GO': { bg: '#047857', border: '#10b981', desc: 'In mission (Ativo)' }
   };
-  
   const c = colors[st] || colors['STORAGE'];
+
   if (badge) {
     badge.style.background = c.border;
     badge.innerText = st + ' - ' + c.desc;
+  }
+  if (topText) topText.innerText = st;
+  if (topPill) {
+    topPill.style.background = c.bg;
+    topPill.style.borderColor = c.border;
   }
 
   btnIds.forEach(id => {
@@ -180,80 +1079,337 @@ function setState(st) {
   .then(res => {
     if (res.status === 'ok') {
       updateStateButtons(res.operation_state);
-      loadMissionData();
+      const m = document.getElementById('stateModal');
+      if (m) m.style.display = 'none';
+      showToast('Estado da Base alterado para: ' + res.operation_state);
+      loadAllData();
     }
   });
 }
 
-let currentSelectedRoverId = 0;
+// --- SELEÇÃO DE ROVER ---
+function changeRover(id) {
+  selectedRoverId = parseInt(id);
 
-function loadMissionData() {
-  fetch('/api/mission')
-    .then(r => r.json())
-    .then(data => {
-      if (data.operation_state) {
-        updateStateButtons(data.operation_state);
-      }
-      if (data.selected_rover_id !== undefined) {
-        currentSelectedRoverId = data.selected_rover_id;
-      }
-      if (data.race_id && document.activeElement !== document.getElementById('raceIdInput')) {
-        document.getElementById('raceIdInput').value = data.race_id;
-      }
-      if (data.mission_name && document.activeElement !== document.getElementById('missionNameInput')) {
-        document.getElementById('missionNameInput').value = data.mission_name;
-      }
+  ['mapRoverSelect', 'targetRoverSelect', 'batRoverSelect'].forEach(selId => {
+    const el = document.getElementById(selId);
+    if (el) el.value = selectedRoverId;
+  });
 
-      if (data.rovers && Array.isArray(data.rovers)) {
-        renderRoversTable(data.rovers);
-      }
-    })
-    .catch(() => {});
+  document.querySelectorAll('.fleet-chip').forEach(el => {
+    el.classList.toggle('active', el.id === 'chip_' + selectedRoverId);
+  });
+
+  fetch('/api/select_rover', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rover_id: selectedRoverId })
+  }).then(() => loadAllData(true));
 }
 
-function renderRoversTable(rovers) {
-  currentRoversData = rovers;
-  const tbody = document.getElementById('roversTbody');
-  if (!tbody) return;
+// --- COMANDOS & ATUADORES ---
+function updateSliders() {
+  const thr = document.getElementById('throttleSlider');
+  const rud = document.getElementById('rudderSlider');
+  if (thr) document.getElementById('thrVal').innerText = thr.value + '%';
+  if (rud) document.getElementById('rudVal').innerText = rud.value + '%';
+}
 
-  if (tbody.contains(document.activeElement)) return;
+function setThrottle(v) {
+  const thr = document.getElementById('throttleSlider');
+  if (thr) thr.value = v;
+  updateSliders();
+  sendActuators();
+}
+
+function setRudder(v) {
+  const rud = document.getElementById('rudderSlider');
+  if (rud) rud.value = v;
+  updateSliders();
+  sendActuators();
+}
+
+function sendActuators() {
+  const t = parseInt(document.getElementById('throttleSlider')?.value || 0);
+  const r = parseInt(document.getElementById('rudderSlider')?.value || 0);
+  fetch('/api/control/actuator', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({throttle: t, rudder: r})
+  });
+}
+
+function sendAction(a) {
+  fetch('/api/control/action', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({action: a, rover_id: selectedRoverId})
+  }).then(r => r.json()).then(res => {
+    showToast(res.msg || 'Comando enviado ao Rover ' + selectedRoverId);
+  });
+}
+
+function sendEmergencyStop() {
+  setThrottle(0);
+  setRudder(0);
+  sendAction(2); // ACTION_STOP
+  showToast('🛑 PARAGEM DE EMERGÊNCIA ENVIADA!', true);
+}
+
+// --- MAPA LEAFLET ---
+function initMap() {
+  if (map || typeof L === 'undefined') return;
+
+  const defaultLat = 38.7071;
+  const defaultLng = -9.1355;
+
+  map = L.map('fleetMap', {
+    center: [defaultLat, defaultLng],
+    zoom: 16,
+    zoomControl: false,
+    attributionControl: false
+  });
+
+  L.control.zoom({ position: 'topright' }).addTo(map);
+
+  osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+  satLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 });
+
+  if (navigator.geolocation && !hasCenteredInitial) {
+    navigator.geolocation.getCurrentPosition(pos => {
+      if (!hasCenteredInitial && (!currentRoversData.length || (currentRoversData[0].lat === 0 && currentRoversData[0].lng === 0))) {
+        map.setView([pos.coords.latitude, pos.coords.longitude], 16);
+      }
+    }, () => {}, { timeout: 3000, enableHighAccuracy: false });
+  }
+
+  loadAllData();
+}
+
+function toggleMapLayer() {
+  if (!map) return;
+  if (isSat) {
+    map.removeLayer(satLayer);
+    map.addLayer(osmLayer);
+    document.getElementById('layerBtn').innerHTML = '<i class="fa-solid fa-layer-group"></i> Sat';
+    isSat = false;
+  } else {
+    map.removeLayer(osmLayer);
+    map.addLayer(satLayer);
+    document.getElementById('layerBtn').innerHTML = '<i class="fa-solid fa-map"></i> Mapa';
+    isSat = true;
+  }
+}
+
+function centerMapOnRovers() {
+  if (!map) return;
+  const sel = currentRoversData.find(r => r.id === selectedRoverId);
+  if (sel && (sel.lat !== 0 || sel.lng !== 0)) {
+    map.setView([sel.lat, sel.lng], 17);
+    return;
+  }
+  const valid = currentRoversData.filter(r => r.lat !== 0 || r.lng !== 0);
+  if (valid.length > 0) {
+    const group = valid.map(r => [r.lat, r.lng]);
+    if (group.length === 1) map.setView(group[0], 17);
+    else map.fitBounds(L.latLngBounds(group).pad(0.2));
+  }
+}
+
+function createRoverIconHtml(rover, isSelected) {
+  const isOnline = !!rover.is_online;
+  const heading = rover.heading_deg || 0;
+  const code = rover.code ? rover.code.replace('ROVER-', 'R') : ('R' + rover.id);
+
+  return `
+    <div class="rover-icon-container">
+      <div class="rover-boat-pin ${isOnline ? 'online' : 'offline'} ${isSelected ? 'selected' : ''}">
+        <div class="rover-heading-arrow" style="transform: rotate(${heading}deg);"></div>
+        <div class="rover-code-text">${code}</div>
+        <div class="rover-status-dot ${isOnline ? '' : 'offline'}"></div>
+      </div>
+    </div>
+  `;
+}
+
+function createTargetIconHtml(rover) {
+  const code = rover.code ? rover.code.replace('ROVER-', 'R') : ('R' + rover.id);
+  return `<div class="target-pin" title="Alvo ${code}">🎯</div>`;
+}
+
+function sendNewCoordinates(roverId, lat, lng) {
+  const body = {
+    rover_id: roverId,
+    action: 6, // ACTION_NAVIGATE
+    lat: parseFloat(lat.toFixed(6)),
+    lng: parseFloat(lng.toFixed(6))
+  };
+
+  fetch('/api/control/action', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  })
+  .then(r => r.json())
+  .then(res => {
+    showToast(`📡 R${roverId}: Alvo enviado (${lat.toFixed(5)}, ${lng.toFixed(5)})`);
+    const rov = currentRoversData.find(r => r.id === roverId);
+    if (rov) {
+      rov.target_lat = lat;
+      rov.target_lng = lng;
+      updateRoverTargetDisplay(rov);
+    }
+  })
+  .catch(() => showToast('⚠️ Erro ao enviar coordenadas', true));
+}
+
+function sendTargetCommand(actionCode) {
+  const sel = currentRoversData.find(r => r.id === selectedRoverId);
+  if (!sel || !sel.target_lat || !sel.target_lng) {
+    showToast('⚠️ Arrasta o Rover ou Waypoint no mapa primeiro para definir o alvo!', true);
+    return;
+  }
+  sendNewCoordinates(sel.id, sel.target_lat, sel.target_lng);
+}
+
+function sendHoldStation() {
+  fetch('/api/control/action', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rover_id: selectedRoverId, action: 1 })
+  }).then(() => showToast('⚓ Rover em Manutenção de Posição (Hold)'));
+}
+
+function sendStopRover() {
+  fetch('/api/control/action', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rover_id: selectedRoverId, action: 2 })
+  }).then(() => showToast('🛑 Comando de Paragem enviado'));
+}
+
+function calcDistanceMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+}
+
+function updateRoverTargetDisplay(rov) {
+  if (!map) return;
+  const id = rov.id;
+  const hasTarget = rov.target_lat && rov.target_lng && (rov.target_lat !== 0 || rov.target_lng !== 0);
+
+  if (hasTarget) {
+    const targetLatLng = [rov.target_lat, rov.target_lng];
+
+    if (!targetMarkers[id]) {
+      const targetIcon = L.divIcon({
+        html: createTargetIconHtml(rov),
+        className: 'custom-target-icon',
+        iconSize: [28, 28],
+        iconAnchor: [14, 14]
+      });
+
+      const tMarker = L.marker(targetLatLng, { icon: targetIcon, draggable: true, autoPan: true }).addTo(map);
+
+      tMarker.on('dragstart', () => { isDragging = true; });
+      tMarker.on('drag', (e) => {
+        const p = e.target.getLatLng();
+        document.getElementById('dragHintText').innerText = `Alvo R${id}: ${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}`;
+        document.getElementById('dragHint').style.display = 'block';
+        if (targetLines[id] && roverMarkers[id]) {
+          targetLines[id].setLatLngs([roverMarkers[id].getLatLng(), p]);
+        }
+      });
+      tMarker.on('dragend', (e) => {
+        isDragging = false;
+        document.getElementById('dragHint').style.display = 'none';
+        const p = e.target.getLatLng();
+        sendNewCoordinates(id, p.lat, p.lng);
+      });
+
+      targetMarkers[id] = tMarker;
+    } else {
+      targetMarkers[id].setLatLng(targetLatLng);
+    }
+
+    if (roverMarkers[id]) {
+      const currentLatLng = roverMarkers[id].getLatLng();
+      if (!targetLines[id]) {
+        targetLines[id] = L.polyline([currentLatLng, targetLatLng], {
+          color: '#06b6d4', weight: 2, opacity: 0.8, dashArray: '6, 8'
+        }).addTo(map);
+      } else {
+        targetLines[id].setLatLngs([currentLatLng, targetLatLng]);
+      }
+    }
+  } else {
+    if (targetMarkers[id]) { map.removeLayer(targetMarkers[id]); delete targetMarkers[id]; }
+    if (targetLines[id]) { map.removeLayer(targetLines[id]); delete targetLines[id]; }
+  }
+}
+
+// Toast Notifier
+let toastTimeout = null;
+function showToast(msg, isError = false) {
+  const banner = document.getElementById('toastBanner');
+  const text = document.getElementById('toastMsg');
+  if (!banner || !text) return;
+
+  banner.style.background = isError ? '#7f1d1d' : '#064e3b';
+  banner.style.borderColor = isError ? '#ef4444' : '#10b981';
+  banner.style.color = isError ? '#fca5a5' : '#a7f3d0';
+  text.innerText = msg;
+  banner.style.display = 'block';
+
+  if (toastTimeout) clearTimeout(toastTimeout);
+  toastTimeout = setTimeout(() => { banner.style.display = 'none'; }, 3500);
+}
+
+// --- GESTÃO DE BÓIAS (TAB REGATA) ---
+function renderRoversTable(rovers) {
+  const tbody = document.getElementById('roversTbody');
+  if (!tbody || tbody.contains(document.activeElement)) return;
 
   let html = '';
-  rovers.forEach((r, idx) => {
+  rovers.forEach(r => {
     const isOnline = r.is_online;
-    const isSelected = (currentSelectedRoverId === r.id);
+    const isSelected = (selectedRoverId === r.id);
     const batCol = (r.battery_pct < 25) ? 'var(--red)' : ((r.battery_pct < 50) ? 'var(--yellow)' : 'var(--green)');
     
     let optHtml = '';
     rolesList.forEach(ro => {
-      const sel = (r.role === ro) ? 'selected' : '';
-      optHtml += `<option value="${ro}" ${sel}>${ro}</option>`;
+      optHtml += `<option value="${ro}" ${(r.role === ro) ? 'selected' : ''}>${ro}</option>`;
     });
 
     html += `<tr id="rRow_${r.id}">
       <td><strong>${r.id}</strong></td>
-      <td><input type="text" class="r-name" value="${r.name || ('Rover ' + r.id)}" style="width:120px;padding:6px;"></td>
-      <td><input type="text" class="r-mac" value="${r.mac || r.mac_address || ''}" style="width:140px;font-family:monospace;padding:6px;"></td>
-      <td><select class="r-role" style="width:120px;padding:6px;">${optHtml}</select></td>
+      <td><input type="text" class="r-name" value="${r.name || ('Rover ' + r.id)}" style="width:110px;padding:6px;"></td>
+      <td><input type="text" class="r-mac" value="${r.mac || r.mac_address || ''}" style="width:130px;font-family:monospace;padding:6px;"></td>
+      <td><select class="r-role" style="width:110px;padding:6px;">${optHtml}</select></td>
       <td>
         <div style="display:flex;gap:4px;">
-          <input type="number" step="0.000001" class="r-lat" value="${(r.target_lat || 0).toFixed(6)}" placeholder="Lat" style="width:90px;padding:6px;">
-          <input type="number" step="0.000001" class="r-lng" value="${(r.target_lng || 0).toFixed(6)}" placeholder="Lng" style="width:90px;padding:6px;">
+          <input type="number" step="0.000001" class="r-lat" value="${(r.target_lat || 0).toFixed(6)}" placeholder="Lat" style="width:85px;padding:6px;">
+          <input type="number" step="0.000001" class="r-lng" value="${(r.target_lng || 0).toFixed(6)}" placeholder="Lng" style="width:85px;padding:6px;">
         </div>
       </td>
       <td>
-        <span class="badge" style="background:${isOnline ? '#065f46' : '#7f1d1d'};color:${isOnline ? '#6ee7b7' : '#fca5a5'};">
+        <span class="badge" style="background:${isOnline ? '#065f46' : '#7f1d1d'};color:${isOnline ? '#6ee7b7' : '#fca5a5'};font-size:0.7rem;">
           ${isOnline ? 'ONLINE' : 'OFFLINE'}
         </span>
         ${isOnline ? `<strong style="color:${batCol};margin-left:4px;">${r.battery_pct}%</strong>` : ''}
-        ${isOnline && r.anchor_depth_m > 0.05 ? `<div style="font-size:0.75rem;color:var(--yellow);margin-top:2px;"><i class="fa-solid fa-anchor"></i> Âncora: ${r.anchor_depth_m.toFixed(2)}m</div>` : ''}
+        ${isOnline && r.anchor_depth_m > 0.05 ? `<div style="font-size:0.7rem;color:var(--yellow);margin-top:2px;"><i class="fa-solid fa-anchor"></i> ${r.anchor_depth_m.toFixed(2)}m</div>` : ''}
       </td>
       <td>
         <div style="display:flex;gap:4px;">
           ${isSelected 
-            ? `<button onclick="selectRover(0)" class="btn" style="background:#059669;color:#fff;padding:4px 8px;font-size:0.75rem;" title="Clique para desmarcar"><i class="fa-solid fa-check"></i> Ativo no LCD</button>` 
-            : `<button onclick="selectRover(${r.id})" class="btn btn-primary" style="padding:4px 8px;font-size:0.75rem;">Selecionar</button>`}
-          <button onclick="deleteRow(${r.id})" class="btn btn-danger" style="padding:4px 8px;font-size:0.75rem;" title="Remover Bóia">
+            ? `<button type="button" class="btn" style="background:#059669;color:#fff;padding:4px 8px;font-size:0.75rem;" title="Ativo"><i class="fa-solid fa-check"></i> Ativo</button>` 
+            : `<button type="button" onclick="changeRover(${r.id})" class="btn btn-primary" style="padding:4px 8px;font-size:0.75rem;">Selecionar</button>`}
+          <button type="button" onclick="deleteRow(${r.id})" class="btn btn-danger" style="padding:4px 8px;font-size:0.75rem;">
             <i class="fa-solid fa-trash"></i>
           </button>
         </div>
@@ -262,18 +1418,6 @@ function renderRoversTable(rovers) {
   });
 
   tbody.innerHTML = html;
-}
-
-function selectRover(id) {
-  fetch('/api/select_rover', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ rover_id: parseInt(id) })
-  })
-  .then(r => r.json())
-  .then(() => {
-    loadMissionData();
-  });
 }
 
 function deleteRow(id) {
@@ -293,18 +1437,18 @@ function addRow() {
   });
 
   tr.innerHTML = `<td><strong>${id}</strong></td>
-    <td><input type="text" class="r-name" value="WD-Boia-${id}" style="width:120px;padding:6px;"></td>
-    <td><input type="text" class="r-mac" value="00:00:00:00:00:0${id}" style="width:140px;font-family:monospace;padding:6px;"></td>
-    <td><select class="r-role" style="width:120px;padding:6px;">${optHtml}</select></td>
+    <td><input type="text" class="r-name" value="WD-Boia-${id}" style="width:110px;padding:6px;"></td>
+    <td><input type="text" class="r-mac" value="00:00:00:00:00:0${id}" style="width:130px;font-family:monospace;padding:6px;"></td>
+    <td><select class="r-role" style="width:110px;padding:6px;">${optHtml}</select></td>
     <td>
       <div style="display:flex;gap:4px;">
-        <input type="number" step="0.000001" class="r-lat" value="0.000000" style="width:90px;padding:6px;">
-        <input type="number" step="0.000001" class="r-lng" value="0.000000" style="width:90px;padding:6px;">
+        <input type="number" step="0.000001" class="r-lat" value="0.000000" style="width:85px;padding:6px;">
+        <input type="number" step="0.000001" class="r-lng" value="0.000000" style="width:85px;padding:6px;">
       </div>
     </td>
-    <td><span class="badge" style="background:#334155;color:#94a3b8;">NOVO</span></td>
+    <td><span class="badge" style="background:#334155;color:#94a3b8;font-size:0.7rem;">NOVO</span></td>
     <td>
-      <button onclick="deleteRow(${id})" class="btn btn-danger" style="padding:4px 8px;font-size:0.75rem;">
+      <button type="button" onclick="deleteRow(${id})" class="btn btn-danger" style="padding:4px 8px;font-size:0.75rem;">
         <i class="fa-solid fa-trash"></i>
       </button>
     </td>`;
@@ -335,8 +1479,8 @@ function saveRovers() {
   })
   .then(r => r.json())
   .then(res => {
-    alert('Lista de ' + res.rover_count + ' bóias guardada no MicroSD com sucesso!');
-    loadMissionData();
+    showToast('Lista de ' + res.rover_count + ' bóias guardada no MicroSD!');
+    loadAllData();
   })
   .catch(err => alert('Erro ao gravar: ' + err));
 }
@@ -345,12 +1489,226 @@ function clearRovers() {
   if (confirm('Tem a certeza que deseja repor a lista de bóias para os valores padrão?')) {
     fetch('/api/mission/clear', { method: 'POST' })
       .then(r => r.json())
-      .then(() => loadMissionData());
+      .then(() => loadAllData());
   }
 }
 
-document.addEventListener('DOMContentLoaded', loadMissionData);
-setInterval(loadMissionData, 2000);
+// --- ATUALIZAÇÃO CONTÍNUA DE TELEMETRIA ---
+function loadAllData(forceMapCenter = false) {
+  // 1. Carrega dados de telemetria em tempo real
+  fetch('/api/status')
+    .then(r => r.json())
+    .then(data => {
+      currentRoversData = data.rovers || [];
+      const sel = data.selected || (currentRoversData.length ? currentRoversData.find(r => r.id === selectedRoverId) || currentRoversData[0] : null);
+      if (sel) selectedRoverId = sel.id;
+
+      // Dropdowns e Chips
+      let chipHtml = '';
+      let optHtml = '';
+      currentRoversData.forEach(r => {
+        const isSel = (r.id === selectedRoverId);
+        const code = r.code ? r.code.replace('ROVER-', 'R') : ('R' + r.id);
+        const dotCls = r.is_online ? 'online' : 'offline';
+        const p = r.battery_pct !== undefined ? r.battery_pct : 0;
+        
+        chipHtml += `<span class="fleet-chip ${isSel ? 'active' : ''}" id="chip_${r.id}" onclick="changeRover(${r.id})">
+          <i class="fa-solid fa-sailboat"></i> ${code} <span class="dot ${dotCls}"></span> <b>${p}%</b>
+        </span>`;
+
+        optHtml += `<option value="${r.id}" ${isSel ? 'selected' : ''}>${code} (${p}%)</option>`;
+      });
+
+      if (chipHtml) document.getElementById('fleetChipsBar').innerHTML = chipHtml;
+      ['mapRoverSelect', 'targetRoverSelect', 'batRoverSelect'].forEach(selId => {
+        const el = document.getElementById(selId);
+        if (el && optHtml) el.innerHTML = optHtml;
+      });
+
+      // Atualiza HUD do Mapa
+      if (sel) {
+        const isOnline = !!sel.is_online;
+        const fixBadge = document.getElementById('fixStatusBadge');
+        if (fixBadge) {
+          fixBadge.innerText = isOnline ? '● ONLINE' : '○ OFFLINE';
+          fixBadge.style.color = isOnline ? 'var(--green)' : 'var(--red)';
+          fixBadge.style.borderColor = isOnline ? 'var(--green)' : 'var(--red)';
+        }
+
+        const p = sel.battery_pct || 0;
+        const batCol = p < 25 ? 'var(--red)' : (p < 50 ? 'var(--yellow)' : 'var(--green)');
+        document.getElementById('batVal').innerText = p + '%';
+        document.getElementById('speedVal').innerText = (sel.speed_knots || 0).toFixed(1) + ' kn';
+        document.getElementById('headingVal').innerText = (sel.heading_deg || 0).toFixed(0) + '°';
+        document.getElementById('rssiVal').innerText = (sel.rssi || 0) + ' dBm';
+
+        // Coordenadas na barra inferior
+        document.getElementById('curCoordTxt').innerText = `${(sel.lat || 0).toFixed(6)}, ${(sel.lng || 0).toFixed(6)}`;
+        if (sel.target_lat && sel.target_lng && (sel.target_lat !== 0 || sel.target_lng !== 0)) {
+          const dist = calcDistanceMeters(sel.lat, sel.lng, sel.target_lat, sel.target_lng);
+          document.getElementById('tgtCoordTxt').innerText = `${sel.target_lat.toFixed(5)}, ${sel.target_lng.toFixed(5)} (${dist}m)`;
+        } else {
+          document.getElementById('tgtCoordTxt').innerText = 'Nenhum alvo definido';
+        }
+
+        // Atualiza Comandos
+        document.getElementById('curMotor').innerText = sel.motor_status !== undefined ? sel.motor_status : 'idle';
+        document.getElementById('curAnchor').innerText = sel.anchor_status !== undefined ? sel.anchor_status : 'retracted';
+        document.getElementById('curDepth').innerText = (sel.anchor_depth_m || 0).toFixed(1) + ' m';
+        document.getElementById('curRssi').innerText = (sel.rssi || 0) + ' dBm';
+
+        // Atualiza Bateria
+        const v = sel.battery_voltage || 0;
+        const vc = (v / 4.0);
+        document.getElementById('batPct').innerText = p + '%';
+        document.getElementById('batPct').style.color = batCol;
+        document.getElementById('batBar').style.width = p + '%';
+        document.getElementById('batBar').style.background = batCol;
+        document.getElementById('vTotVal').innerText = v.toFixed(2) + ' V';
+        document.getElementById('vCellVal').innerText = vc.toFixed(2) + ' V/cel';
+        document.querySelectorAll('.cell-v').forEach(el => el.innerText = vc.toFixed(2) + ' V');
+
+        const h = document.getElementById('batHealth');
+        if (h) {
+          h.innerText = p < 20 ? 'CRÍTICO' : (p < 40 ? 'BAIXA' : 'NORMAL');
+          h.style.color = batCol;
+        }
+      }
+
+      // Resumo de Bateria de Toda a Frota
+      let batListHtml = '';
+      currentRoversData.forEach(r => {
+        const bp = r.battery_pct || 0;
+        const bCol = bp < 25 ? 'var(--red)' : (bp < 50 ? 'var(--yellow)' : 'var(--green)');
+        const code = r.code ? r.code.replace('ROVER-', 'Rover ') : ('Rover ' + r.id);
+        batListHtml += `
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid var(--card-border);border-radius:8px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span class="dot ${r.is_online ? 'online' : 'offline'}"></span>
+              <strong>${code}</strong>
+              <span style="font-size:0.75rem;color:var(--muted);">(${r.role || 'Boia'})</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;">
+              <span style="font-family:monospace;font-size:0.85rem;">${(r.battery_voltage || 0).toFixed(2)}V</span>
+              <strong style="color:${bCol};width:42px;text-align:right;">${bp}%</strong>
+              <div class="progress-bg" style="width:60px;height:10px;margin:0;">
+                <div class="progress-bar" style="width:${bp}%;background:${bCol};"></div>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+      if (batListHtml) document.getElementById('fleetBatteryList').innerHTML = batListHtml;
+
+      // Marcadores do Mapa
+      if (!isDragging && map) {
+        let validCoords = [];
+        currentRoversData.forEach(r => {
+          const isSel = (r.id === selectedRoverId);
+          const hasFix = (r.lat !== 0 || r.lng !== 0);
+          if (!hasFix) return;
+
+          const latLng = [r.lat, r.lng];
+          validCoords.push(latLng);
+
+          const icon = L.divIcon({
+            html: createRoverIconHtml(r, isSel),
+            className: 'custom-rover-icon',
+            iconSize: [38, 38],
+            iconAnchor: [19, 19]
+          });
+
+          if (!roverMarkers[r.id]) {
+            const marker = L.marker(latLng, { icon: icon, draggable: true, autoPan: true, zIndexOffset: isSel ? 1000 : 500 }).addTo(map);
+
+            marker.on('dragstart', () => {
+              isDragging = true;
+              selectedRoverId = r.id;
+              document.getElementById('dragHintText').innerText = `Arrasta ${r.code || ('R' + r.id)} para novo alvo...`;
+              document.getElementById('dragHint').style.display = 'block';
+            });
+            marker.on('drag', (e) => {
+              const pos = e.target.getLatLng();
+              document.getElementById('dragHintText').innerText = `${r.code || ('R' + r.id)} -> ${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}`;
+              document.getElementById('tgtCoordTxt').innerText = `${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)} (Novo)`;
+              if (targetLines[r.id]) targetLines[r.id].setLatLngs([[r.lat, r.lng], pos]);
+            });
+            marker.on('dragend', (e) => {
+              isDragging = false;
+              document.getElementById('dragHint').style.display = 'none';
+              const pos = e.target.getLatLng();
+              marker.setLatLng([r.lat, r.lng]);
+              sendNewCoordinates(r.id, pos.lat, pos.lng);
+            });
+            marker.on('click', () => {
+              if (selectedRoverId !== r.id) changeRover(r.id);
+            });
+
+            roverMarkers[r.id] = marker;
+          } else {
+            roverMarkers[r.id].setLatLng(latLng);
+            roverMarkers[r.id].setIcon(icon);
+            roverMarkers[r.id].setZIndexOffset(isSel ? 1000 : 500);
+          }
+
+          updateRoverTargetDisplay(r);
+        });
+
+        if ((!hasCenteredInitial && validCoords.length > 0) || forceMapCenter) {
+          centerMapOnRovers();
+          hasCenteredInitial = true;
+        }
+      }
+    })
+    .catch(() => {});
+
+  // 2. Carrega dados de missão persistentes (Regata e Estado)
+  fetch('/api/mission')
+    .then(r => r.json())
+    .then(mdata => {
+      currentMissionData = mdata;
+      if (mdata.operation_state) {
+        updateStateButtons(mdata.operation_state);
+      }
+      if (mdata.race_id && document.activeElement !== document.getElementById('raceIdInput')) {
+        document.getElementById('raceIdInput').value = mdata.race_id;
+      }
+      if (mdata.mission_name && document.activeElement !== document.getElementById('missionNameInput')) {
+        document.getElementById('missionNameInput').value = mdata.mission_name;
+      }
+      if (mdata.rovers && Array.isArray(mdata.rovers)) {
+        renderRoversTable(mdata.rovers);
+      }
+    })
+    .catch(() => {});
+}
+
+// Inicialização Geral
+document.addEventListener('DOMContentLoaded', () => {
+  const hash = (location.hash || '').replace('#', '').toLowerCase();
+  if (hash === 'cmd' || hash === 'control' || hash === 'comandos') {
+    switchMissionTab('cmd');
+  } else if (hash === 'bat' || hash === 'battery' || hash === 'bateria') {
+    switchMissionTab('bat');
+  } else if (hash === 'setup' || hash === 'regata' || hash === 'fleet' || hash === 'boias') {
+    switchMissionTab('setup');
+  } else {
+    switchMissionTab('map');
+  }
+
+  loadAllData(true);
+  setInterval(() => {
+    if (!isDragging) loadAllData();
+  }, 1500);
+});
+
+window.addEventListener('hashchange', () => {
+  const hash = (location.hash || '').replace('#', '').toLowerCase();
+  if (hash === 'cmd' || hash === 'control' || hash === 'comandos') switchMissionTab('cmd');
+  else if (hash === 'bat' || hash === 'battery' || hash === 'bateria') switchMissionTab('bat');
+  else if (hash === 'setup' || hash === 'regata' || hash === 'fleet' || hash === 'boias') switchMissionTab('setup');
+  else if (hash === 'map' || hash === 'gps') switchMissionTab('map');
+});
 </script>
 
   </main>

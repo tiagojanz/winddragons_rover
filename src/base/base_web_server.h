@@ -345,28 +345,28 @@ private:
         });
         _server.on("/gps", [this]() { 
             if (_wifi.isAPMode()) { _server.sendHeader("Location", "/wifi"); _server.send(302, "text/plain", ""); return; }
-            if (tryServeSdFile("/www/gps.html") || tryServeSdFile("/www/index.html")) return;
-            handleGpsPage(); 
+            _server.sendHeader("Location", "/mission#map");
+            _server.send(302, "text/plain", "");
         });
         _server.on("/battery", [this]() { 
             if (_wifi.isAPMode()) { _server.sendHeader("Location", "/wifi"); _server.send(302, "text/plain", ""); return; }
-            if (tryServeSdFile("/www/battery.html")) return;
-            handleBatteryPage(); 
+            _server.sendHeader("Location", "/mission#battery");
+            _server.send(302, "text/plain", "");
         });
         _server.on("/control", [this]() { 
             if (_wifi.isAPMode()) { _server.sendHeader("Location", "/wifi"); _server.send(302, "text/plain", ""); return; }
-            if (tryServeSdFile("/www/control.html")) return;
-            handleControlPage(); 
+            _server.sendHeader("Location", "/mission#control");
+            _server.send(302, "text/plain", "");
         });
         _server.on("/mission", [this]() {
             if (_wifi.isAPMode()) { _server.sendHeader("Location", "/wifi"); _server.send(302, "text/plain", ""); return; }
-            if (tryServeSdFile("/www/mission.html")) return;
+            if (tryServeSdFile("/www/mission.html") || tryServeSdFile("/www/index.html")) return;
             handleMissionPage();
         });
         _server.on("/regata", [this]() {
             if (_wifi.isAPMode()) { _server.sendHeader("Location", "/wifi"); _server.send(302, "text/plain", ""); return; }
-            if (tryServeSdFile("/www/mission.html")) return;
-            handleMissionPage();
+            _server.sendHeader("Location", "/mission#setup");
+            _server.send(302, "text/plain", "");
         });
         _server.on("/sd", [this]() {
             if (tryServeSdFile("/www/sd.html")) return;
@@ -615,9 +615,6 @@ private:
             html += "<a href='/portal' class='nav-item " + String(activeTab == "portal" ? "active" : "") + "'>☁️ Portal</a>";
             html += "<a href='/config' class='nav-item " + String(activeTab == "config" ? "active" : "") + "'>⚙️ Configuração</a>";
             html += "<a href='/wifi' class='nav-item " + String(activeTab == "wifi" ? "active" : "") + "'>📡 WiFi</a>";
-            html += "<a href='/gps' class='nav-item " + String(activeTab == "gps" ? "active" : "") + "'>📍 GPS Frota</a>";
-            html += "<a href='/battery' class='nav-item " + String(activeTab == "battery" ? "active" : "") + "'>🔋 Bateria</a>";
-            html += "<a href='/control' class='nav-item " + String(activeTab == "control" ? "active" : "") + "'>🎮 Comandos</a>";
             html += "<a href='/sd' class='nav-item " + String(activeTab == "sd" ? "active" : "") + "'>💾 Cartão SD</a>";
         }
         html += "</div>";
@@ -916,127 +913,16 @@ private:
     }
 
     // -------------------------------------------------------------
-    // PÁGINA 2: GPS E NAVEGAÇÃO
+    // PÁGINAS REDIRECIONADAS PARA A MISSÃO UNIFICADA
     // -------------------------------------------------------------
     void handleGpsPage() {
-        FleetRover *r = _fleet.getSelectedRover();
-        String html = getHtmlHeader("GPS & Telemetria", "gps");
-
-        html += "<div class='card'>";
-        html += "<div class='card-title'>";
-        html += "<span>📍 Posicionamento e Rota Náutica</span>";
-        html += "<select id='roverSelect' onchange='changeRover(this.value)' style='width:auto;display:inline-block;padding:4px 10px;'>";
-        for (const auto &rov : _fleet.getRovers()) {
-            html += "<option value='" + String(rov.id) + "' " + String((r && r->id == rov.id) ? "selected" : "") + ">" + String(rov.code) + (rov.is_online ? " [ONLINE]" : " [OFFLINE]") + "</option>";
-        }
-        html += "</select></div>";
-
-        html += "<div class='grid-4'>";
-        html += "<div class='stat-box'><div class='stat-label'>Estado Fix</div><div class='stat-value' id='fixStatus' style='color:" + String((r && r->is_online) ? "var(--green)" : "var(--red)") + "'>";
-        html += (r && r->is_online) ? "ONLINE" : "OFFLINE";
-        html += "</div></div>";
-        html += "<div class='stat-box'><div class='stat-label'>Velocidade</div><div class='stat-value' id='speedVal'>" + String(r ? r->speed_knots : 0.0f, 1) + " kn</div></div>";
-        html += "<div class='stat-box'><div class='stat-label'>Rumo Proa</div><div class='stat-value' id='headingVal'>" + String(r ? r->heading_deg : 0.0f, 0) + "&deg;</div></div>";
-        html += "<div class='stat-box'><div class='stat-label'>Sinal LoRa</div><div class='stat-value' id='rssiVal'>" + String(r ? r->rssi : 0) + " dBm</div></div>";
-        html += "</div>";
-
-        // Coordenadas
-        html += "<div class='grid-2' style='margin-top:16px;'>";
-        html += "<div class='stat-box'><div class='stat-label'>Latitude</div><div class='stat-value' id='latVal' style='font-size:1.6rem;color:var(--primary);'>" + String(r ? r->lat : 0.0, 6) + "</div></div>";
-        html += "<div class='stat-box'><div class='stat-label'>Longitude</div><div class='stat-value' id='lngVal' style='font-size:1.6rem;color:var(--primary);'>" + String(r ? r->lng : 0.0, 6) + "</div></div>";
-        html += "</div>";
-
-        // Bússola e Mapa
-        html += "<div style='display:flex;gap:12px;margin-top:16px;flex-wrap:wrap;'>";
-        String mapsUrl = "https://www.google.com/maps?q=" + String(r ? r->lat : 0.0, 6) + "," + String(r ? r->lng : 0.0, 6);
-        html += "<a id='mapsLink' href='" + mapsUrl + "' target='_blank' class='btn btn-primary'>🗺️ Ver no Google Maps</a>";
-        String osmUrl = "https://www.openstreetmap.org/?mlat=" + String(r ? r->lat : 0.0, 6) + "&mlon=" + String(r ? r->lng : 0.0, 6) + "#map=17/" + String(r ? r->lat : 0.0, 6) + "/" + String(r ? r->lng : 0.0, 6);
-        html += "<a id='osmLink' href='" + osmUrl + "' target='_blank' class='btn btn-secondary'>🌐 Ver no OpenStreetMap</a>";
-        html += "</div></div>";
-
-        // Script de atualização automática
-        html += "<script>";
-        html += "function changeRover(id){fetch('/api/select_rover',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rover_id:parseInt(id)})}).then(()=>location.reload());}";
-        html += "setInterval(()=>{fetch('/api/status').then(r=>r.json()).then(data=>{const sel=data.selected;";
-        html += "if(!sel)return;";
-        html += "document.getElementById('latVal').innerText=sel.lat.toFixed(6);";
-        html += "document.getElementById('lngVal').innerText=sel.lng.toFixed(6);";
-        html += "document.getElementById('speedVal').innerText=sel.speed_knots.toFixed(1)+' kn';";
-        html += "document.getElementById('headingVal').innerText=sel.heading_deg.toFixed(0)+'°';";
-        html += "document.getElementById('rssiVal').innerText=sel.rssi+' dBm';";
-        html += "const st=document.getElementById('fixStatus');if(sel.is_online){st.innerText='ONLINE';st.style.color='var(--green)';}else if(data.lora_ready){st.innerText='RÁDIO OK (ESCUTA)';st.style.color='var(--primary)';}else if(data.lora_enabled){st.innerText='FALHA RÁDIO';st.style.color='var(--red)';}else{st.innerText='REPOUSO';st.style.color='var(--muted)';}";
-        html += "document.getElementById('mapsLink').href='https://www.google.com/maps?q='+sel.lat+','+sel.lng;";
-        html += "document.getElementById('osmLink').href='https://www.openstreetmap.org/?mlat='+sel.lat+'&mlon='+sel.lng+'#map=17/'+sel.lat+'/'+sel.lng;";
-        html += "});},1500);";
-        html += "</script>";
-
-        html += getHtmlFooter();
-        _server.send(200, "text/html", html);
+        _server.sendHeader("Location", "/mission#map");
+        _server.send(302, "text/plain", "");
     }
 
-    // -------------------------------------------------------------
-    // PÁGINA 3: MONITOR DE BATERIA
-    // -------------------------------------------------------------
     void handleBatteryPage() {
-        FleetRover *r = _fleet.getSelectedRover();
-        String html = getHtmlHeader("Monitor de Bateria", "battery");
-
-        uint8_t pct = r ? r->battery_pct : 0;
-        float vTot = r ? r->battery_voltage : 0.0f;
-        float vCell = vTot / 4.0f;
-
-        html += "<div class='card'>";
-        html += "<div class='card-title'>";
-        html += "<span>🔋 Telemetria de Bateria LiPo 4S</span>";
-        html += "<select onchange='changeRover(this.value)' style='width:auto;display:inline-block;padding:4px 10px;'>";
-        html += "<option value='0' " + String(!r ? "selected" : "") + ">-- Nenhum Rover Selecionado --</option>";
-        for (const auto &rov : _fleet.getRovers()) {
-            html += "<option value='" + String(rov.id) + "' " + String((r && r->id == rov.id) ? "selected" : "") + ">" + String(rov.code) + "</option>";
-        }
-        html += "</select></div>";
-
-        // Indicador grande de percentagem
-        String barColor = pct < 25 ? "var(--red)" : (pct < 50 ? "var(--yellow)" : "var(--green)");
-        html += "<div style='text-align:center;padding:20px 0;'>";
-        html += "<div id='batPct' style='font-size:3.5rem;font-weight:800;color:" + barColor + ";'>" + String(pct) + "%</div>";
-        html += "<div class='progress-bg' style='max-width:400px;margin:0 auto;'><div id='batBar' class='progress-bar' style='width:" + String(pct) + "%;background:" + barColor + ";'></div></div>";
-        html += "</div>";
-
-        html += "<div class='grid-4'>";
-        html += "<div class='stat-box'><div class='stat-label'>Tensão Total (Pack)</div><div class='stat-value' id='vTotVal' style='color:var(--text);'>" + String(vTot, 2) + " V</div></div>";
-        html += "<div class='stat-box'><div class='stat-label'>Média por Célula</div><div class='stat-value' id='vCellVal' style='color:var(--primary);'>" + String(vCell, 2) + " V/cel</div></div>";
-        html += "<div class='stat-box'><div class='stat-label'>Química / Tipo</div><div class='stat-value'>LiPo 4S</div></div>";
-        html += "<div class='stat-box'><div class='stat-label'>Estado Pack</div><div class='stat-value' id='batHealth' style='color:" + barColor + ";'>";
-        html += pct < 20 ? "CRÍTICO" : (pct < 40 ? "BAIXA" : "NORMAL");
-        html += "</div></div>";
-        html += "</div>";
-
-        // Tabela representativa das 4 células
-        html += "<div style='margin-top:20px;'>";
-        html += "<div class='stat-label' style='margin-bottom:8px;'>Distribuição Estimada Células (4S):</div>";
-        html += "<div class='grid-4'>";
-        for (int c = 1; c <= 4; ++c) {
-            html += "<div class='stat-box' style='text-align:center;'><div class='stat-label'>Célula " + String(c) + "</div><div class='stat-value cell-v' style='font-size:1.2rem;color:var(--primary);'>" + String(vCell, 2) + " V</div></div>";
-        }
-        html += "</div></div></div>";
-
-        html += "<script>";
-        html += "function changeRover(id){fetch('/api/select_rover',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rover_id:parseInt(id)})}).then(()=>location.reload());}";
-        html += "setInterval(()=>{fetch('/api/status').then(r=>r.json()).then(data=>{const sel=data.selected;";
-        html += "if(!sel)return;";
-        html += "const p=sel.battery_pct;const v=sel.battery_voltage;const vc=(v/4.0);";
-        html += "const col=p<25?'var(--red)':(p<50?'var(--yellow)':'var(--green)');";
-        html += "document.getElementById('batPct').innerText=p+'%';document.getElementById('batPct').style.color=col;";
-        html += "document.getElementById('batBar').style.width=p+'%';document.getElementById('batBar').style.background=col;";
-        html += "document.getElementById('vTotVal').innerText=v.toFixed(2)+' V';";
-        html += "document.getElementById('vCellVal').innerText=vc.toFixed(2)+' V/cel';";
-        html += "document.querySelectorAll('.cell-v').forEach(el=>el.innerText=vc.toFixed(2)+' V');";
-        html += "const h=document.getElementById('batHealth');h.innerText=p<20?'CRÍTICO':(p<40?'BAIXA':'NORMAL');h.style.color=col;";
-        html += "});},1500);";
-        html += "</script>";
-
-        html += getHtmlFooter();
-        _server.send(200, "text/html", html);
+        _server.sendHeader("Location", "/mission#battery");
+        _server.send(302, "text/plain", "");
     }
 
     // -------------------------------------------------------------
@@ -1207,95 +1093,9 @@ private:
         _server.send(200, "text/html", html);
     }
 
-    // -------------------------------------------------------------
-    // PÁGINA 4: COMANDAR A BOIA (SERVOS, MOTOR, ÂNCORA, ETC.)
-    // -------------------------------------------------------------
     void handleControlPage() {
-        FleetRover *r = _fleet.getSelectedRover();
-        String html = getHtmlHeader("Comandar Boia", "control");
-
-        html += "<div class='card'>";
-        html += "<div class='card-title'>";
-        html += "<span>🎮 Centro de Comando Remoto</span>";
-        html += "<select id='targetRoverSelect' onchange='changeRover(this.value)' style='width:auto;display:inline-block;padding:4px 10px;'>";
-        html += "<option value='0' " + String(!r ? "selected" : "") + ">-- Nenhum Rover Selecionado --</option>";
-        for (const auto &rov : _fleet.getRovers()) {
-            html += "<option value='" + String(rov.id) + "' " + String((r && r->id == rov.id) ? "selected" : "") + ">" + String(rov.code) + "</option>";
-        }
-        html += "</select></div>";
-
-        // Status atual do Rover Alvo
-        html += "<div class='grid-4' style='margin-bottom:16px;'>";
-        html += "<div class='stat-box'><div class='stat-label'>Modo Motor</div><div class='stat-value' id='curMotor' style='color:var(--yellow);font-size:1.1rem;'>" + String(r ? get_motor_status_str(r->motor_status) : "idle") + "</div></div>";
-        html += "<div class='stat-box'><div class='stat-label'>Estado Âncora</div><div class='stat-value' id='curAnchor' style='color:var(--primary);font-size:1.1rem;'>" + String(r ? get_anchor_status_str(r->anchor_status) : "retracted") + "</div></div>";
-        html += "<div class='stat-box'><div class='stat-label'>Profundidade</div><div class='stat-value' id='curDepth'>" + String(r ? r->anchor_depth_m : 0.0f, 1) + " m</div></div>";
-        html += "<div class='stat-box'><div class='stat-label'>Ligação Rádio</div><div class='stat-value' id='curRssi' style='color:var(--green);'>" + String(r ? r->rssi : 0) + " dBm</div></div>";
-        html += "</div></div>";
-
-        // Card: Propulsão & Leme (Sliders & Presets)
-        html += "<div class='card'>";
-        html += "<div class='card-title'>Motor Principal (ESC) & Leme de Direção</div>";
-        html += "<div class='grid-2'>";
-        
-        // Coluna Motor
-        html += "<div>";
-        html += "<div class='stat-label'>Aceleração ESC: <span id='thrVal' style='font-size:1.1rem;color:var(--primary);'>0%</span></div>";
-        html += "<input type='range' id='throttleSlider' min='-100' max='100' value='0' class='slider' oninput='updateSliders()' onchange='sendActuators()'>";
-        html += "<div class='btn-group' style='margin-top:12px;'>";
-        html += "<button onclick='setThrottle(0)' class='btn btn-secondary'>0% (Stop)</button>";
-        html += "<button onclick='setThrottle(25)' class='btn btn-secondary'>+25%</button>";
-        html += "<button onclick='setThrottle(50)' class='btn btn-secondary'>+50%</button>";
-        html += "<button onclick='setThrottle(100)' class='btn btn-primary'>+100%</button>";
-        html += "<button onclick='setThrottle(-50)' class='btn btn-secondary'>-50% (Ré)</button>";
-        html += "</div></div>";
-
-        // Coluna Leme
-        html += "<div>";
-        html += "<div class='stat-label'>Ângulo do Leme: <span id='rudVal' style='font-size:1.1rem;color:var(--primary);'>0%</span></div>";
-        html += "<input type='range' id='rudderSlider' min='-100' max='100' value='0' class='slider' oninput='updateSliders()' onchange='sendActuators()'>";
-        html += "<div class='btn-group' style='margin-top:12px;'>";
-        html += "<button onclick='setRudder(-75)' class='btn btn-secondary'>⬅ Bombordo (-75%)</button>";
-        html += "<button onclick='setRudder(0)' class='btn btn-secondary'>Centro (0%)</button>";
-        html += "<button onclick='setRudder(75)' class='btn btn-secondary'>Estibordo (+75%) ➡</button>";
-        html += "</div></div>";
-
-        html += "</div></div>";
-
-        // Card: Guincho de Âncora & Cremalheira
-        html += "<div class='card'>";
-        html += "<div class='card-title'>Guincho da Âncora & Cremalheira de Travão</div>";
-        html += "<div class='btn-group'>";
-        html += "<button onclick='sendAction(3)' class='btn btn-primary'>⚓ Lançar Âncora (Soltar)</button>";
-        html += "<button onclick='sendAction(4)' class='btn btn-primary'>⬆ Recolher Âncora (Guincho)</button>";
-        html += "<button onclick='sendAction(5)' class='btn btn-secondary'>🛑 Parar Guincho</button>";
-        html += "</div></div>";
-
-        // Card: Modos Operacionais & Emergência
-        html += "<div class='card'>";
-        html += "<div class='card-title'>Modos de Navegação & Emergência</div>";
-        html += "<div class='btn-group'>";
-        html += "<button onclick='sendAction(1)' class='btn' style='background:#0284c7;color:#fff;'>📍 Hold Station (GPS)</button>";
-        html += "<button onclick='sendAction(7)' class='btn' style='background:#7c3aed;color:#fff;'>🏠 Return to Launch (RTL)</button>";
-        html += "<button onclick='sendAction(10)' class='btn btn-secondary'>🕹️ Modo Manual</button>";
-        html += "<button onclick='sendAction(8)' class='btn' style='background:var(--yellow);color:#0f172a;'>🚨 Alarme Sonoro / Strobe</button>";
-        html += "<button onclick='sendEmergencyStop()' class='btn btn-danger' style='font-size:1rem;padding:12px 24px;'>🛑 PARAGEM DE EMERGÊNCIA</button>";
-        html += "</div></div>";
-
-        html += "<script>";
-        html += "function updateSliders(){document.getElementById('thrVal').innerText=document.getElementById('throttleSlider').value+'%';document.getElementById('rudVal').innerText=document.getElementById('rudderSlider').value+'%';}";
-        html += "function setThrottle(v){document.getElementById('throttleSlider').value=v;updateSliders();sendActuators();}";
-        html += "function setRudder(v){document.getElementById('rudderSlider').value=v;updateSliders();sendActuators();}";
-        html += "function sendActuators(){const t=parseInt(document.getElementById('throttleSlider').value);const r=parseInt(document.getElementById('rudderSlider').value);";
-        html += "fetch('/api/control/actuator',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({throttle:t,rudder:r})});}";
-        html += "function sendAction(a){const rid=parseInt(document.getElementById('targetRoverSelect').value);";
-        html += "fetch('/api/control/action',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:a,rover_id:rid})})";
-        html += ".then(r=>r.json()).then(res=>alert(res.msg));}";
-        html += "function sendEmergencyStop(){setThrottle(0);setRudder(0);sendAction(2);}";
-        html += "function changeRover(id){fetch('/api/select_rover',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rover_id:parseInt(id)})}).then(()=>location.reload());}";
-        html += "</script>";
-
-        html += getHtmlFooter();
-        _server.send(200, "text/html", html);
+        _server.sendHeader("Location", "/mission#control");
+        _server.send(302, "text/plain", "");
     }
 
     // -------------------------------------------------------------

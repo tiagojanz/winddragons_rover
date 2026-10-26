@@ -852,3 +852,19 @@ input:checked + .slider-toggle {
 input:checked + .slider-toggle:before {
   transform: translateX(20px);
 }
+
+/* Mobile Responsiveness Helpers */
+@media (max-width: 640px) {
+  .badge-hide-mobile {
+    display: none !important;
+  }
+  .navbar {
+    padding: 8px 10px;
+    gap: 6px;
+  }
+  .nav-links {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
