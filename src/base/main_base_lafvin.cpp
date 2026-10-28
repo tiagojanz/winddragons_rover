@@ -232,57 +232,61 @@ void setup() {
 }
 
 void transmitControlOrCommand() {
-    // Prioridade 1: Comandos de Ação pendentes (da Cloud ou Web, ex: DROP_ANCHOR)
+    // Prioridade 1: Comandos de Ação pendentes (da Cloud, Web ou Menu LCD, ex: DROP_ANCHOR)
     if (fleet.hasPendingCommand()) {
         QueuedCommand qCmd = fleet.popPendingCommand();
+        uint8_t targetId = (qCmd.target_rover_id > 0) ? qCmd.target_rover_id : fleet.getSelectedRoverId();
+        if (targetId == 0) targetId = 1;
         // Encaminhar para o Coprocessador C6 via UART:
         // CMD:ACTION:<target_id>:<action>:<cmd_id>:<depth>:<dur>:<lat7>:<lng7>
         char cmdBuf[128];
         snprintf(cmdBuf, sizeof(cmdBuf), "CMD:ACTION:%u:%u:%u:%u:%u:%ld:%ld\n",
-                 qCmd.target_rover_id, qCmd.action, qCmd.command_id,
+                 targetId, qCmd.action, qCmd.command_id,
                  qCmd.depth_cm, qCmd.duration_s,
                  (long)qCmd.target_lat, (long)qCmd.target_lng);
         interSerial.print(cmdBuf);
         interSerial.flush();
         printLog("[BASE LAFVIN] >>> Disparado Comando de Acao #%u (%s) -> Rover #%u via UART C6\n",
-                 qCmd.command_id, get_action_str(qCmd.action), qCmd.target_rover_id);
-        return;
-    }
-
-    // Em modo STORAGE, não emite controlo contínuo de joystick para os rovers
-    if (fleet.getOperationState() == BASE_OP_STORAGE && !webServer.isWebControlActive()) {
+                 qCmd.command_id, get_action_str(qCmd.action), targetId);
         return;
     }
 
     // Prioridade 2: Transmissão de controlo manual ao rover selecionado
-    if (!fleet.hasSelectedRover()) {
-        return;
-    }
+    uint8_t targetRoverId = fleet.getSelectedRoverId();
+    if (targetRoverId == 0) targetRoverId = 1;
 
     int8_t thr = 0;
     int8_t rud = 0;
     int8_t jog = 0;
+    bool webActive = webServer.isWebControlActive();
 
-    // Em páginas de menu ou não-controlo, envia neutro
-    if (currentScreen == SCREEN_MENU || display.getCurrentPage() != BASE_PAGE_ROVER) {
-        thr = 0;
-        rud = 0;
-        jog = 0;
-    } else if (webServer.isWebControlActive()) {
+    if (webActive) {
         thr = webServer.getWebThrottle();
         rud = webServer.getWebRudder();
         jog = webServer.getWebAnchorJog();
-    } else {
+    } else if (currentScreen != SCREEN_MENU) {
         thr = joystick.getThrottle();
         rud = joystick.getRudder();
         jog = joystick.getAnchorJog();
     }
 
+    static uint8_t neutralStopCount = 0;
+    bool manualDeflected = (thr != 0 || rud != 0 || jog != 0);
+
+    if (manualDeflected || webActive) {
+        neutralStopCount = 3; // Garante envio de 3 pacotes neutros ao largar o joystick/controlo web
+    } else if (neutralStopCount > 0) {
+        neutralStopCount--;
+    } else {
+        // Em repouso: não inunda o canal LoRa nem sobrescreve estados autónomos/âncora do Rover
+        return;
+    }
+
     // Encaminhar para o Coprocessador C6 via UART:
     // CMD:CTRL:<target_id>:<thr>:<rud>:<jog>:<mode>
     char ctrlBuf[64];
-    snprintf(ctrlBuf, sizeof(ctrlBuf), "CMD:CTRL:%d:%d:%d:%d:%d\n",
-             fleet.getSelectedRoverId(), thr, rud, jog, currentNavMode);
+    snprintf(ctrlBuf, sizeof(ctrlBuf), "CMD:CTRL:%u:%d:%d:%d:%d\n",
+             targetRoverId, thr, rud, jog, currentNavMode);
     interSerial.print(ctrlBuf);
 }
 
@@ -427,36 +431,26 @@ void handleInputsAndMenu(uint32_t now, bool &forceDisplay) {
             switch (menuSelectedIndex) {
                 case 0: // MODO MANUAL
                     currentNavMode = 0;
+                    fleet.queueCommand(fleet.getSelectedRoverId(), ++localCmdId, ACTION_MANUAL);
                     menuFeedback = "MODO MANUAL OK";
                     break;
                 case 1: // HOLD STATION (ANCORA VIRTUAL)
                     currentNavMode = 1;
+                    fleet.queueCommand(fleet.getSelectedRoverId(), ++localCmdId, ACTION_HOLD_STATION);
                     menuFeedback = "HOLD STATION OK";
                     break;
                 case 2: // LANCAR ANCORA
-                    if (!fleet.hasSelectedRover()) {
-                        menuFeedback = "SEM ROVER ATIVO";
-                    } else {
-                        fleet.queueCommand(fleet.getSelectedRoverId(), ++localCmdId, ACTION_DROP_ANCHOR, 500);
-                        menuFeedback = "ANCORA A DESCER";
-                    }
+                    fleet.queueCommand(fleet.getSelectedRoverId(), ++localCmdId, ACTION_DROP_ANCHOR, 500);
+                    menuFeedback = "ANCORA A DESCER";
                     break;
                 case 3: // RECOLHER ANCORA
-                    if (!fleet.hasSelectedRover()) {
-                        menuFeedback = "SEM ROVER ATIVO";
-                    } else {
-                        fleet.queueCommand(fleet.getSelectedRoverId(), ++localCmdId, ACTION_RETRIEVE_ANCHOR);
-                        menuFeedback = "A RECOLHER...";
-                    }
+                    fleet.queueCommand(fleet.getSelectedRoverId(), ++localCmdId, ACTION_RETRIEVE_ANCHOR);
+                    menuFeedback = "A RECOLHER...";
                     break;
                 case 4: // PARAR MOTORES
-                    if (!fleet.hasSelectedRover()) {
-                        menuFeedback = "SEM ROVER ATIVO";
-                    } else {
-                        fleet.queueCommand(fleet.getSelectedRoverId(), ++localCmdId, ACTION_STOP);
-                        currentNavMode = 0;
-                        menuFeedback = "MOTORES PARADOS";
-                    }
+                    fleet.queueCommand(fleet.getSelectedRoverId(), ++localCmdId, ACTION_STOP);
+                    currentNavMode = 0;
+                    menuFeedback = "MOTORES PARADOS";
                     break;
                 case 5: // ALTERNAR ESTADO BASE (STORAGE -> WAITING -> IDLE -> GO)
                     {

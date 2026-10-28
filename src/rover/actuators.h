@@ -464,8 +464,10 @@ public:
                 Serial.printf("[ACT-GUINCHO] CORTE IMEDIATO: Fim de curso atingido no GPIO %d! Guincho parado no topo.\n", PIN_ANCHOR_DETECTOR);
                 stopWinch();
             }
-            zeroAnchorCounter();
-            anchorState = ANCHOR_RETRACTED;
+            if (anchorState != ANCHOR_DEPLOYING && !isRackLifted) {
+                zeroAnchorCounter();
+                anchorState = ANCHOR_RETRACTED;
+            }
         }
 
         // Handle alarm timeout and strobe oscillation (100ms on / 100ms off)

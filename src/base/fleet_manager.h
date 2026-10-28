@@ -273,7 +273,10 @@ public:
 
     // --- Telemetria e Status ---
     void updateTelemetry(const PacketTelemetry &pkt, int16_t rssi) {
-        for (auto &r : rovers) {
+        if (pkt.rover_id == 0 || pkt.rover_id == BROADCAST_ROVER_ID) return;
+
+        for (size_t i = 0; i < rovers.size(); ++i) {
+            auto &r = rovers[i];
             if (r.id == pkt.rover_id) {
                 r.lat = pkt.lat_deg7 / 10000000.0;
                 r.lng = pkt.lng_deg7 / 10000000.0;
@@ -287,8 +290,40 @@ public:
                 r.rssi = rssi;
                 r.last_seen_ms = millis();
                 r.is_online = true;
+                if (!hasSelectedRover()) {
+                    selectedRoverIndex = (int16_t)i;
+                }
                 return;
             }
+        }
+
+        // Auto-registo dinâmico caso o Rover ainda não esteja na lista da Base
+        if (rovers.size() < MAX_FLEET_ROVERS) {
+            FleetRover r;
+            memset(&r, 0, sizeof(r));
+            r.id = pkt.rover_id;
+            snprintf(r.code, sizeof(r.code), "ROVER-%02d", r.id);
+            snprintf(r.name, sizeof(r.name), "Rover %02d", r.id);
+            snprintf(r.mac, sizeof(r.mac), "00:00:00:00:00:%02X", r.id);
+            strncpy(r.role, "boia 1", sizeof(r.role) - 1);
+            r.lat = pkt.lat_deg7 / 10000000.0;
+            r.lng = pkt.lng_deg7 / 10000000.0;
+            r.speed_knots = (pkt.speed_cm_s / 51.4444f);
+            r.heading_deg = pkt.heading_deg10 / 10.0f;
+            r.battery_pct = pkt.battery_pct;
+            r.battery_voltage = pkt.battery_mv / 1000.0f;
+            r.motor_status = pkt.motor_status;
+            r.anchor_status = pkt.anchor_status;
+            r.anchor_depth_m = pkt.anchor_depth_cm / 100.0f;
+            r.rssi = rssi;
+            r.last_seen_ms = millis();
+            r.is_online = true;
+            rovers.push_back(r);
+            if (!hasSelectedRover()) {
+                selectedRoverIndex = (int16_t)(rovers.size() - 1);
+            }
+            Serial.printf("[MISSION] Auto-registado ROVER-%02d via telemetria LoRa (RSSI: %d dBm)\n",
+                          r.id, rssi);
         }
     }
 
@@ -351,8 +386,10 @@ public:
     }
 
     uint8_t getSelectedRoverId() const {
-        if (!hasSelectedRover()) return 0;
-        return rovers[selectedRoverIndex].id;
+        if (hasSelectedRover()) {
+            return rovers[selectedRoverIndex].id;
+        }
+        return rovers.empty() ? 1 : rovers[0].id;
     }
 
     // --- Fila de Comandos LoRa ---
@@ -528,6 +565,9 @@ public:
                 _roversFromPortal = true;
                 if (isRoverListDifferent(newList)) {
                     rovers = newList;
+                    if (!hasSelectedRover() && !rovers.empty()) {
+                        selectedRoverIndex = 0;
+                    }
                     listChanged = true;
                     Serial.printf("[MISSION] Lista de rovers atualizada pelo Portal (%u rovers)\n", rovers.size());
 
@@ -638,6 +678,25 @@ public:
                 }
                 prefs.end();
             }
+        }
+
+        // Se não carregou nenhum rover (sem SD ou NVS vazia), inicializar slot padrão ROVER-01
+        if (rovers.empty()) {
+            FleetRover r;
+            memset(&r, 0, sizeof(r));
+            r.id = 1;
+            snprintf(r.code, sizeof(r.code), "ROVER-01");
+            snprintf(r.name, sizeof(r.name), "Rover 01");
+            snprintf(r.mac, sizeof(r.mac), "00:00:00:00:00:01");
+            strncpy(r.role, "largada CR", sizeof(r.role) - 1);
+            r.battery_voltage = 12.0f;
+            r.is_online = false;
+            rovers.push_back(r);
+        }
+
+        // Selecionar automaticamente o primeiro rover caso nenhum esteja selecionado
+        if (!hasSelectedRover() && !rovers.empty()) {
+            selectedRoverIndex = 0;
         }
 
         // Se ainda não existia configuração e o SD está disponível, salvar inicial

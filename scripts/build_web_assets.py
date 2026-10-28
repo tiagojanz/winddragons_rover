@@ -16,6 +16,22 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 WWW_DIR = BASE_DIR / "data" / "www"
 WWW_DIR.mkdir(parents=True, exist_ok=True)
 
+def _read_header_version(header_name, define_key, fallback="2.1.0"):
+    hpath = BASE_DIR / "include" / header_name
+    if hpath.is_file():
+        with open(hpath, "r", encoding="utf-8") as f:
+            for line in f:
+                if f"#define {define_key}" in line:
+                    parts = line.split('"')
+                    if len(parts) >= 2:
+                        return parts[1].lstrip("v")
+    return fallback
+
+ROVER_VER_RAW = _read_header_version("rover_version.h", "ROVER_VERSION_STR", "2.1.0")
+ROVER_VER_STR = f"v{ROVER_VER_RAW}"
+BASE_VER_RAW = _read_header_version("base_version.h", "BASE_FIRMWARE_VERSION_STR", "2.1.0")
+BASE_VER_STR = f"v{BASE_VER_RAW}"
+
 # ----------------------------------------------------------------------
 # 1. STYLE.CSS
 # ----------------------------------------------------------------------
@@ -1066,14 +1082,14 @@ def generate_html_page(title, active_tab, body_content):
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{title} - WindDragons Rover</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <link rel="stylesheet" href="/style.css?v=2.1.3">
+  <link rel="stylesheet" href="/style.css?v={ROVER_VER_RAW}">
   <script>
     (function(){{
       var t = localStorage.getItem('wd_theme') || 'dark';
       document.documentElement.setAttribute('data-theme', t);
     }})();
   </script>
-  <script src="/app.js?v=2.1.1"></script>
+  <script src="/app.js?v={ROVER_VER_RAW}"></script>
 </head>
 <body>
   <header class="navbar">
@@ -1087,7 +1103,7 @@ def generate_html_page(title, active_tab, body_content):
     </nav>
     <div class="nav-actions">
       <a href="/config" id="navVersionBadge" class="badge" style="background:rgba(6,182,212,0.12);border:1px solid rgba(6,182,212,0.3);color:var(--primary);text-decoration:none;font-size:0.75rem;display:inline-flex;align-items:center;gap:6px;" title="Ver detalhes de firmware nas Configurações">
-        <i class="fa-solid fa-code-branch"></i> <span id="navLafvinVer">Lafvin: v2.1.0</span> &bull; <span id="navC6Ver">C6: ...</span>
+        <i class="fa-solid fa-code-branch"></i> <span id="navLafvinVer">Lafvin: {ROVER_VER_STR}</span> &bull; <span id="navC6Ver">C6: ...</span>
       </a>
       <span id="navWifiBadge" class="badge badge-sta">
         <i class="fa-solid fa-wifi"></i> A carregar...
@@ -1106,11 +1122,11 @@ def generate_html_page(title, active_tab, body_content):
   <footer style="text-align:center;color:var(--muted);font-size:0.75rem;margin-top:24px;display:flex;justify-content:center;align-items:center;gap:12px;flex-wrap:wrap;padding:0 16px;">
     <span>WindDragons Autonomous Surface Rover / Buoy &copy; 2026</span>
     <span>&bull;</span>
-    <span>Master Lafvin: <b style="color:var(--green);" id="footerLafvinVer">v2.1.0</b></span>
+    <span>Master Lafvin: <b style="color:var(--green);" id="footerLafvinVer">{ROVER_VER_STR}</b></span>
     <span>&bull;</span>
     <span>Coprocessador C6: <b style="color:var(--yellow);" id="footerC6Ver">--</b></span>
     <span>&bull;</span>
-    <span>Pacote Bundle: <b style="color:var(--primary);" id="footerBundleVer">v2.1.0</b></span>
+    <span>Pacote Bundle: <b style="color:var(--primary);" id="footerBundleVer">{ROVER_VER_STR}</b></span>
   </footer>
 </body>
 </html>
@@ -1136,7 +1152,7 @@ def generate_base_html_page(title, active_tab, body_content, extra_head=""):
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>{title} - WindDragons Base Station</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <link rel="stylesheet" href="/style.css?v=2.1.3">
+  <link rel="stylesheet" href="/style.css?v={BASE_VER_RAW}">
   {extra_head}
   <script>
     (function(){{
@@ -1144,7 +1160,7 @@ def generate_base_html_page(title, active_tab, body_content, extra_head=""):
       document.documentElement.setAttribute('data-theme', t);
     }})();
   </script>
-  <script src="/app.js?v=2.1.2"></script>
+  <script src="/app.js?v={BASE_VER_RAW}"></script>
 </head>
 <body>
   <header class="navbar">
@@ -1158,7 +1174,7 @@ def generate_base_html_page(title, active_tab, body_content, extra_head=""):
     </nav>
     <div class="nav-actions">
       <a href="/config" id="navVersionBadge" class="badge badge-hide-mobile" style="background:rgba(6,182,212,0.12);border:1px solid rgba(6,182,212,0.3);color:var(--primary);text-decoration:none;font-size:0.75rem;display:inline-flex;align-items:center;gap:6px;" title="Ver versões das placas e atualização OTA na página de Configuração">
-        <i class="fa-solid fa-code-branch"></i> <span id="navLafvinVer">Lafvin: v2.1.0</span> &bull; <span id="navC6Ver">C6: ...</span>
+        <i class="fa-solid fa-code-branch"></i> <span id="navLafvinVer">Lafvin: {BASE_VER_STR}</span> &bull; <span id="navC6Ver">C6: ...</span>
       </a>
       <span id="navOpStateBadge" class="badge" style="background:#64748b;color:#fff;font-weight:700;">
         <i class="fa-solid fa-flag"></i> <span id="navOpStateText">STORAGE</span>
@@ -1183,11 +1199,11 @@ def generate_base_html_page(title, active_tab, body_content, extra_head=""):
   <footer style="text-align:center;color:var(--muted);font-size:0.75rem;margin-top:24px;display:flex;justify-content:center;align-items:center;gap:12px;flex-wrap:wrap;padding:0 16px;">
     <span>WindDragons Telemetry Base Station &copy; 2026</span>
     <span>&bull;</span>
-    <span>Master Lafvin: <b style="color:var(--green);" id="footerLafvinVer">v2.1.0</b></span>
+    <span>Master Lafvin: <b style="color:var(--green);" id="footerLafvinVer">{BASE_VER_STR}</b></span>
     <span>&bull;</span>
     <span>Coprocessador C6: <b style="color:var(--yellow);" id="footerC6Ver">--</b></span>
     <span>&bull;</span>
-    <span>Pacote Bundle: <b style="color:var(--primary);" id="footerBundleVer">v2.1.0</b></span>
+    <span>Pacote Bundle: <b style="color:var(--primary);" id="footerBundleVer">{BASE_VER_STR}</b></span>
   </footer>
 </body>
 </html>
@@ -2124,6 +2140,25 @@ CONFIG_CONTENT = """
     </div>
   </div>
 
+  <div class="card" style="border:1px solid #f59e0b;">
+    <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+      <span><i class="fa-solid fa-gamepad"></i> Joystick Analógico Físico Onboard (GPIO 3 / GPIO 0)</span>
+      <span id="joyCfgBadge" class="badge" style="background:#065f46;color:#6ee7b7;font-size:0.82rem;">ATIVO (MONTADO)</span>
+    </div>
+    <p style="color:var(--muted);font-size:0.875rem;margin-bottom:14px;">
+      Ative ou desative a leitura do joystick analógico físico na placa do Rover. <strong>Desative esta opção nas situações em que o joystick não está fisicamente montado</strong> para evitar leituras flutuantes nos pinos ADC (GPIO 3 e GPIO 0) e acionamentos involuntários do motor ou leme.
+    </p>
+    <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between;">
+      <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:rgba(15,23,42,0.6);border:1px solid #334155;border-radius:8px;flex:1;min-width:260px;">
+        <input type="checkbox" id="cfg_joystick_enabled" checked onchange="saveJoystickConfig(this.checked)" style="width:20px;height:20px;margin:0;cursor:pointer;">
+        <label for="cfg_joystick_enabled" style="cursor:pointer;font-size:0.95rem;font-weight:600;">
+          Habilitar Joystick Analógico Físico no Rover
+          <div style="font-size:0.75rem;font-weight:normal;color:var(--muted);margin-top:2px;">Desmarque quando o Rover operar sem joystick físico soldado/ligado na PCB.</div>
+        </label>
+      </div>
+    </div>
+  </div>
+
   <div class="card" style="border:1px solid #10b981;">
     <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
       <span><i class="fa-solid fa-sliders"></i> Calibração do Servo "Travão da Cremalheira" (GPIO 21)</span>
@@ -2428,6 +2463,30 @@ function saveAnchorConfig() {
   .catch(() => {});
 }
 
+function updateJoyCfgBadge(en) {
+  const b = document.getElementById('joyCfgBadge');
+  if (!b) return;
+  b.innerText = en ? 'ATIVO (MONTADO)' : 'DESATIVADO (NÃO MONTADO)';
+  b.style.background = en ? '#065f46' : '#78350f';
+  b.style.color = en ? '#6ee7b7' : '#fde68a';
+}
+
+function saveJoystickConfig(en) {
+  updateJoyCfgBadge(en);
+  fetch('/api/control/joystick/config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ joystick_enabled: !!en })
+  })
+  .then(r => r.json())
+  .then(res => {
+    const msg = res.msg || (en ? 'Joystick físico ativado!' : 'Joystick físico desativado!');
+    if (typeof showToast === 'function') showToast(msg);
+    showStatus(msg);
+  })
+  .catch(() => {});
+}
+
 function loadConfig() {
   fetch('/api/rover/config')
     .then(r => r.json())
@@ -2438,6 +2497,10 @@ function loadConfig() {
       onBrightSlide(data.screen_brightness || 80);
       document.getElementById('cfg_ssid').value = data.ap_ssid || 'WindDragon-AP';
       document.getElementById('cfg_pass').value = data.ap_password || '12345678';
+      if (data.joystick_enabled !== undefined && document.getElementById('cfg_joystick_enabled')) {
+        document.getElementById('cfg_joystick_enabled').checked = !!data.joystick_enabled;
+        updateJoyCfgBadge(!!data.joystick_enabled);
+      }
       if (data.rack_angle_engaged !== undefined && document.getElementById('cfg_rack_engaged')) {
         document.getElementById('cfg_rack_engaged').value = data.rack_angle_engaged;
         const rs = document.getElementById('rackTestSlider');
@@ -2476,6 +2539,7 @@ function saveAllConfig(e) {
   const bright = parseInt(document.getElementById('cfg_bright').value);
   const ssid = document.getElementById('cfg_ssid').value;
   const pass = document.getElementById('cfg_pass').value;
+  const joyEn = document.getElementById('cfg_joystick_enabled')?.checked ?? true;
   const rackEng = parseInt(document.getElementById('cfg_rack_engaged')?.value ?? 0);
   const rackRel = parseInt(document.getElementById('cfg_rack_released')?.value ?? 90);
   const rackInv = document.getElementById('cfg_rack_inverted')?.checked ?? true;
@@ -2490,6 +2554,7 @@ function saveAllConfig(e) {
       screen_brightness: bright,
       ap_ssid: ssid,
       ap_password: pass,
+      joystick_enabled: joyEn,
       rack_angle_engaged: rackEng,
       rack_angle_released: rackRel,
       rack_inverted: rackInv,
@@ -7036,17 +7101,17 @@ def main():
     print(f"  [+] {WWW_DIR / 'style.css'} ({len(STYLE_CSS)} bytes)")
 
     with open(WWW_DIR / "app.js", "w", encoding="utf-8") as f:
-        f.write(APP_JS.strip() + "\n")
+        f.write(APP_JS.replace("v2.1.0", ROVER_VER_STR).strip() + "\n")
     print(f"  [+] {WWW_DIR / 'app.js'} ({len(APP_JS)} bytes)")
 
     # 2. Páginas do Rover
-    gps_rover = generate_html_page("Telemetria GPS", "gps", GPS_CONTENT)
+    gps_rover = generate_html_page("Telemetria GPS", "gps", GPS_CONTENT.replace("v2.1.0", ROVER_VER_STR))
     bat_rover = generate_html_page("Monitor da Bateria LiPo 4S", "battery", BATTERY_CONTENT)
     ctrl_rover = generate_html_page("Comandar Boia", "control", CONTROL_CONTENT)
     cfg_rover = generate_html_page(
         "Configuração do Rover",
         "config",
-        CONFIG_CONTENT.replace("<!-- Secção OTA (Dual ESP32-C6) -->", ROVER_LORA_CARD + "\n" + ROVER_CONSOLE_CARD + "\n<!-- Secção OTA (Dual ESP32-C6) -->")
+        CONFIG_CONTENT.replace("v2.1.0", ROVER_VER_STR).replace("<!-- Secção OTA (Dual ESP32-C6) -->", ROVER_LORA_CARD + "\n" + ROVER_CONSOLE_CARD + "\n<!-- Secção OTA (Dual ESP32-C6) -->")
     )
     wifi_rover = generate_html_page("Configuração WiFi", "wifi", WIFI_CONTENT)
     sd_rover = generate_html_page("Explorador do Cartão MicroSD", "sd", SD_CONTENT)
@@ -7081,11 +7146,11 @@ def main():
     }
   </script>
 """
-    mission_base = generate_base_html_page("Missão & Frota", "mission", BASE_MISSION_CONTENT, extra_head=extra_head_mission)
-    portal_base = generate_base_html_page("Estado da Ligação ao Portal", "portal", BASE_PORTAL_CONTENT)
-    config_base = generate_base_html_page("Configuração da Base Station", "config", BASE_CONFIG_CONTENT)
-    wifi_base = generate_base_html_page("Configuração WiFi da Base", "wifi", BASE_WIFI_CONTENT)
-    sd_base = generate_base_html_page("Explorador MicroSD da Base", "sd", BASE_SD_CONTENT)
+    mission_base = generate_base_html_page("Missão & Frota", "mission", BASE_MISSION_CONTENT.replace("v2.1.0", BASE_VER_STR), extra_head=extra_head_mission)
+    portal_base = generate_base_html_page("Estado da Ligação ao Portal", "portal", BASE_PORTAL_CONTENT.replace("v2.1.0", BASE_VER_STR))
+    config_base = generate_base_html_page("Configuração da Base Station", "config", BASE_CONFIG_CONTENT.replace("v2.1.0", BASE_VER_STR))
+    wifi_base = generate_base_html_page("Configuração WiFi da Base", "wifi", BASE_WIFI_CONTENT.replace("v2.1.0", BASE_VER_STR))
+    sd_base = generate_base_html_page("Explorador MicroSD da Base", "sd", BASE_SD_CONTENT.replace("v2.1.0", BASE_VER_STR))
 
     redirect_gps = """<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><meta http-equiv="refresh" content="0; url=/mission#map"><script>location.replace('/mission#map');</script></head><body style="background:#0b1329;color:#fff;font-family:sans-serif;text-align:center;padding:50px;">A redirecionar para Missão (Mapa)...</body></html>"""
     redirect_bat = """<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><meta http-equiv="refresh" content="0; url=/mission#battery"><script>location.replace('/mission#battery');</script></head><body style="background:#0b1329;color:#fff;font-family:sans-serif;text-align:center;padding:50px;">A redirecionar para Missão (Bateria)...</body></html>"""

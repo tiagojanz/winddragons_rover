@@ -28,6 +28,7 @@
 // Configuração NVS para o Rover ID
 Preferences c6Prefs;
 uint8_t roverId = 1;
+bool joystickEnabled = true;
 
 // Periféricos
 GPSTracker gps;
@@ -53,9 +54,7 @@ volatile bool packetReceived = false;
 #if defined(ESP8266) || defined(ESP32)
 ICACHE_RAM_ATTR
 #endif
-void onDio0Rx() {
-  packetReceived = true;
-}
+void onDio0Rx() { packetReceived = true; }
 
 // Estatísticas LoRa Rover (Comunicações com a Base Station)
 uint32_t rxPollCount = 0;
@@ -66,13 +65,15 @@ uint32_t lastRxBaseMs = 0;
 HardwareSerial interSerial(1);
 
 void sendLoraStatToMaster() {
-  uint32_t agoSec = (lastRxBaseMs > 0) ? (millis() - lastRxBaseMs) / 1000 : 999999;
+  uint32_t agoSec =
+      (lastRxBaseMs > 0) ? (millis() - lastRxBaseMs) / 1000 : 999999;
   char statLine[128];
-  // Formato: LORA_STAT:<status>:<txTelems>:<rxPolls>:<lastRxSecAgo>:<rssi>:<snr>:<hasContact>
+  // Formato:
+  // LORA_STAT:<status>:<txTelems>:<rxPolls>:<lastRxSecAgo>:<rssi>:<snr>:<hasContact>
   snprintf(statLine, sizeof(statLine), "LORA_STAT:%s:%u:%u:%lu:%.1f:%.1f:%d\n",
-           loraReady ? "OK" : "ERR",
-           txTelemCount, rxPollCount, (unsigned long)agoSec,
-           lastRssi, lastSnr, (lastRxBaseMs > 0 && agoSec < 10) ? 1 : 0);
+           loraReady ? "OK" : "ERR", txTelemCount, rxPollCount,
+           (unsigned long)agoSec, lastRssi, lastSnr,
+           (lastRxBaseMs > 0 && agoSec < 10) ? 1 : 0);
   interSerial.print(statLine);
 }
 
@@ -185,8 +186,9 @@ void sendLoRaTelemetry() {
   packet.anchor_status = actuators.getAnchorStatus();
   packet.anchor_depth_cm = actuators.getAnchorDepthCm();
   packet.last_cmd_id = lastExecutedCommandId;
-  packet.checksum = calculate_checksum(reinterpret_cast<const uint8_t*>(&packet),
-                                       sizeof(packet) - sizeof(packet.checksum));
+  packet.checksum =
+      calculate_checksum(reinterpret_cast<const uint8_t *>(&packet),
+                         sizeof(packet) - sizeof(packet.checksum));
 
   txTelemCount++;
   radio.standby();
@@ -214,7 +216,9 @@ void processIncomingLoRa(uint8_t *buffer, int len) {
   lastControlReceivedTime = millis();
 
   if (msgType == MSG_POLL_REQUEST) {
-    printLog("[C6 ROVER] <<< LoRa Poll da Base recebido! A responder com telemetria (TX #%u)\n", telemetrySeq);
+    printLog("[C6 ROVER] <<< LoRa Poll da Base recebido! A responder com "
+             "telemetria (TX #%u)\n",
+             telemetrySeq);
     sendLoRaTelemetry();
     sendLoraStatToMaster();
     return;
@@ -223,22 +227,61 @@ void processIncomingLoRa(uint8_t *buffer, int len) {
   if (msgType == MSG_MANUAL_CONTROL &&
       len >= (int)sizeof(PacketManualControl)) {
     PacketManualControl *ctrl = reinterpret_cast<PacketManualControl *>(buffer);
+    uint16_t calc = calculate_checksum(
+        buffer, sizeof(PacketManualControl) - sizeof(ctrl->checksum));
+    if (ctrl->checksum != 0 && calc != ctrl->checksum)
+      return;
+
     actuators.setThrottle(ctrl->throttle);
     actuators.setRudder(ctrl->rudder);
-    if (ctrl->anchor_jog != 0)
+    static int8_t lastLoRaJog = 0;
+    if (ctrl->anchor_jog != lastLoRaJog || ctrl->anchor_jog != 0) {
       actuators.jogWinch(ctrl->anchor_jog);
-    currentMotorStatus = MOTOR_MANUAL;
+      lastLoRaJog = ctrl->anchor_jog;
+    }
+    if (ctrl->mode_request == 1) {
+      if (currentMotorStatus != MOTOR_HOLDING_STATION) {
+        stationTargetLat = gps.getLatitude();
+        stationTargetLng = gps.getLongitude();
+        currentMotorStatus = MOTOR_HOLDING_STATION;
+      }
+    } else {
+      currentMotorStatus = MOTOR_MANUAL;
+    }
     setRgbColor(0, 50, 0); // Green: Control active
+    printLog("[C6 ROVER] <<< LoRa CTRL recebido: Thr=%d%%, Rud=%d%%, Jog=%d (RSSI=%.1f dBm)\n",
+             ctrl->throttle, ctrl->rudder, ctrl->anchor_jog, lastRssi);
     sendLoraStatToMaster();
   } else if (msgType == MSG_ACTION_COMMAND &&
              len >= (int)sizeof(PacketActionCommand)) {
-    sendLoraStatToMaster();
     PacketActionCommand *cmd = reinterpret_cast<PacketActionCommand *>(buffer);
+    uint16_t calc = calculate_checksum(
+        buffer, sizeof(PacketActionCommand) - sizeof(cmd->checksum));
+    if (cmd->checksum != 0 && calc != cmd->checksum)
+      return;
+
     lastExecutedCommandId = cmd->command_id;
+    printLog("[C6 ROVER] <<< LoRa ACAO recebida: CmdID=#%u | Acao=%u (%s) | Depth=%u cm\n",
+             cmd->command_id, cmd->action, get_action_str(cmd->action),
+             cmd->target_depth_cm);
 
     switch (cmd->action) {
+    case ACTION_HOLD_STATION:
+      if (cmd->target_lat_deg7 != 0 && cmd->target_lng_deg7 != 0) {
+        stationTargetLat = cmd->target_lat_deg7 / 10000000.0;
+        stationTargetLng = cmd->target_lng_deg7 / 10000000.0;
+      } else {
+        stationTargetLat = gps.getLatitude();
+        stationTargetLng = gps.getLongitude();
+      }
+      currentMotorStatus = MOTOR_HOLDING_STATION;
+      break;
+    case ACTION_STOP:
+      actuators.emergencyStop();
+      currentMotorStatus = MOTOR_IDLE;
+      break;
     case ACTION_DROP_ANCHOR:
-      actuators.commandDropAnchor(cmd->target_depth_cm);
+      actuators.commandDropAnchor(cmd->target_depth_cm > 0 ? cmd->target_depth_cm : 300);
       currentMotorStatus = MOTOR_ANCHORED;
       break;
     case ACTION_RETRIEVE_ANCHOR:
@@ -266,11 +309,35 @@ void processIncomingLoRa(uint8_t *buffer, int len) {
       actuators.triggerAlarm(cmd->duration_s > 0 ? cmd->duration_s : 10);
       break;
     case ACTION_PING:
-      sendLoRaTelemetry();
+      break;
+    case ACTION_MANUAL:
+      currentMotorStatus = MOTOR_MANUAL;
+      lastControlReceivedTime = millis();
+      break;
+    case 13: // RELAX RACK
+      actuators.relaxRack();
+      break;
+    case 14: // WINCH LOWER
+      actuators.setWinchMicroseconds(1200);
+      break;
+    case 15: // ZERO ANCHOR
+      actuators.zeroAnchorCounter();
+      break;
+    case 16: // ENGAGE RACK
+      actuators.engageRack();
+      break;
+    case 17: // RELEASE RACK
+      actuators.releaseRack();
       break;
     default:
       break;
     }
+
+    // Responder imediatamente com Telemetria LoRa atualizada para a Base confirmar a ação
+    delay(15);
+    sendLoRaTelemetry();
+    lastTelemetryTime = millis();
+    sendLoraStatToMaster();
   }
 }
 
@@ -434,17 +501,19 @@ void performHttpOta(const char *ssid, const char *pass, const char *url) {
     if (pct != lastPct && (pct % 5 == 0 || pct == 100)) {
       lastPct = pct;
       blink = !blink;
-      // Alternar tom de azul durante a escrita na Flash para feedback visual dinâmico
+      // Alternar tom de azul durante a escrita na Flash para feedback visual
+      // dinâmico
       if (blink) {
-        setRgbColor(0, 0, 60);       // Azul profundo
+        setRgbColor(0, 0, 60); // Azul profundo
       } else {
-        setRgbColor(0, 30, 60);      // Azul-claro
+        setRgbColor(0, 30, 60); // Azul-claro
       }
       char progMsg[32];
       snprintf(progMsg, sizeof(progMsg), "PONG:OTA:PROGRESS:%d", pct);
       interSerial.println(progMsg);
       interSerial.flush();
-      printLog("[OTA] Progresso Flash: %d%% (%d / %d bytes)\n", pct, current, total);
+      printLog("[OTA] Progresso Flash: %d%% (%d / %d bytes)\n", pct, current,
+               total);
     }
   });
 
@@ -500,6 +569,7 @@ void setup() {
   // Carregar ID e Bateria da memória NVS
   c6Prefs.begin("rover_c6", false);
   roverId = c6Prefs.getUChar("id", 1);
+  joystickEnabled = c6Prefs.getBool("joy_en", true);
   uint8_t c6Cells = c6Prefs.getUChar("cells", 4);
   if (c6Cells == 3 || c6Cells == 4 || c6Cells == 6) {
     battery.setCellCount(c6Cells);
@@ -508,7 +578,8 @@ void setup() {
   printLog("\n=======================================================\n");
   printLog("  WINDDRAGONS ROVER-%02d: C6 COPROCESSOR (LORA+NAV+ACT)\n",
            roverId);
-  printLog("  Firmware: Coprocessador C6 %s (%s)\n", ROVER_C6_VERSION, ROVER_BUILD_DATE);
+  printLog("  Firmware: Coprocessador C6 %s (%s)\n", ROVER_C6_VERSION,
+           ROVER_BUILD_DATE);
   printLog("  Identificador NVS ativo: ROVER-%02d | Bateria: %uS\n", roverId,
            battery.getCellCount());
   printLog("=======================================================\n");
@@ -525,7 +596,8 @@ void setup() {
   interSerial.flush();
   Serial.printf("[UART] Canal serie com Lafvin iniciado nos pinos TX=%d, RX=%d "
                 "(%d baud) | FW: %s\n",
-                PIN_INTER_ESP_C6_TX, PIN_INTER_ESP_C6_RX, INTER_ESP_BAUDRATE, ROVER_C6_VERSION);
+                PIN_INTER_ESP_C6_TX, PIN_INTER_ESP_C6_RX, INTER_ESP_BAUDRATE,
+                ROVER_C6_VERSION);
 
   // 3. Monitor de Bateria LiPo (3S, 4S ou 6S)
   battery.beginDirectAdc();
@@ -591,17 +663,36 @@ void setup() {
 }
 
 void handleIncomingCommand(const char *cmdStr) {
-  if (!cmdStr || strlen(cmdStr) == 0 || strcmp(cmdStr, "NONE") == 0) return;
+  if (!cmdStr || strlen(cmdStr) == 0 || strcmp(cmdStr, "NONE") == 0)
+    return;
 
   uint32_t now = millis();
   if (strncmp(cmdStr, "CMD:JOY:", 8) == 0) {
     int thr = 0, rud = 0;
     if (sscanf(cmdStr + 8, "%d:%d", &thr, &rud) == 2) {
+      if (!joystickEnabled && (thr != 0 || rud != 0)) {
+        return;
+      }
       actuators.setThrottle(thr);
       actuators.setRudder(rud);
-      currentMotorStatus = MOTOR_MANUAL;
+      if (thr != 0 || rud != 0) {
+        currentMotorStatus = MOTOR_MANUAL;
+      }
       lastControlReceivedTime = now;
     }
+  } else if (strncmp(cmdStr, "CMD:JOY_EN:", 11) == 0) {
+    int en = atoi(cmdStr + 11);
+    joystickEnabled = (en != 0);
+    c6Prefs.putBool("joy_en", joystickEnabled);
+    if (!joystickEnabled) {
+      actuators.stopMotor();
+      actuators.centerRudder();
+      if (currentMotorStatus == MOTOR_MANUAL) {
+        currentMotorStatus = MOTOR_IDLE;
+      }
+    }
+    printLog("[C6 ROVER] Joystick fisico onboard %s\n",
+             joystickEnabled ? "ATIVADO" : "DESATIVADO (ignorado)");
   } else if (strcmp(cmdStr, "CMD:MODE:MANUAL") == 0) {
     currentMotorStatus = MOTOR_MANUAL;
     lastControlReceivedTime = now;
@@ -635,7 +726,8 @@ void handleIncomingCommand(const char *cmdStr) {
     int ang = atoi(cmdStr + 15);
     actuators.setRackAngle((uint8_t)constrain(ang, 0, 180));
   } else if (strncmp(cmdStr, "CMD:RACK_CFG:", 13) == 0) {
-    int eng = RACK_POS_ENGAGED, rel = RACK_POS_RELEASED, inv = RACK_SERVO_INVERTED_DEFAULT ? 1 : 0;
+    int eng = RACK_POS_ENGAGED, rel = RACK_POS_RELEASED,
+        inv = RACK_SERVO_INVERTED_DEFAULT ? 1 : 0;
     if (sscanf(cmdStr + 13, "%d:%d:%d", &eng, &rel, &inv) >= 2) {
       eng = constrain(eng, 0, 180);
       rel = constrain(rel, 0, 180);
@@ -644,7 +736,8 @@ void handleIncomingCommand(const char *cmdStr) {
       c6Prefs.putUChar("rck_eng", (uint8_t)eng);
       c6Prefs.putUChar("rck_rel", (uint8_t)rel);
       c6Prefs.putBool("rck_inv", invBool);
-      printLog("[C6 ROVER] Config Cremalheira gravada: Encosto=%d°, Livre=%d°, Invertido=%s\n",
+      printLog("[C6 ROVER] Config Cremalheira gravada: Encosto=%d°, Livre=%d°, "
+               "Invertido=%s\n",
                eng, rel, invBool ? "SIM" : "NAO");
     }
   } else if (strcmp(cmdStr, "CMD:EMERGENCY_STOP") == 0) {
@@ -663,7 +756,8 @@ void handleIncomingCommand(const char *cmdStr) {
     if (cells == 3 || cells == 4 || cells == 6) {
       battery.setCellCount((uint8_t)cells);
       c6Prefs.putUChar("cells", (uint8_t)cells);
-      printLog("[C6 ROVER] ★ Bateria configurada para %uS e gravada em NVS\n", cells);
+      printLog("[C6 ROVER] ★ Bateria configurada para %uS e gravada em NVS\n",
+               cells);
     }
   } else if (strncmp(cmdStr, "CMD:ALARM:", 10) == 0) {
     int dur = atoi(cmdStr + 10);
@@ -684,7 +778,9 @@ void handleIncomingCommand(const char *cmdStr) {
       actuators.setAnchorCalibration(d, (uint8_t)p);
       c6Prefs.putFloat("anc_diam", d);
       c6Prefs.putUChar("anc_pulses", (uint8_t)p);
-      printLog("[C6 ROVER] Calibracao da ancora gravada: Diam=%.1fmm, Pulsos=%d\n", d, p);
+      printLog(
+          "[C6 ROVER] Calibracao da ancora gravada: Diam=%.1fmm, Pulsos=%d\n",
+          d, p);
     }
   } else if (strncmp(cmdStr, "CMD:OTA:", 8) == 0) {
     // Formato esperado: CMD:OTA:<ssid>|<pass>|<url>
@@ -695,7 +791,8 @@ void handleIncomingCommand(const char *cmdStr) {
     const char *sep1 = strchr(p, '|');
     if (sep1) {
       size_t lenSsid = sep1 - p;
-      if (lenSsid > sizeof(otaSsid) - 1) lenSsid = sizeof(otaSsid) - 1;
+      if (lenSsid > sizeof(otaSsid) - 1)
+        lenSsid = sizeof(otaSsid) - 1;
       strncpy(otaSsid, p, lenSsid);
       otaSsid[lenSsid] = '\0';
 
@@ -703,7 +800,8 @@ void handleIncomingCommand(const char *cmdStr) {
       const char *sep2 = strchr(p2, '|');
       if (sep2) {
         size_t lenPass = sep2 - p2;
-        if (lenPass > sizeof(otaPass) - 1) lenPass = sizeof(otaPass) - 1;
+        if (lenPass > sizeof(otaPass) - 1)
+          lenPass = sizeof(otaPass) - 1;
         strncpy(otaPass, p2, lenPass);
         otaPass[lenPass] = '\0';
 
@@ -711,11 +809,13 @@ void handleIncomingCommand(const char *cmdStr) {
         otaUrl[sizeof(otaUrl) - 1] = '\0';
       }
     }
-    printLog("[C6 ROVER] >>> Comando OTA recebido! SSID='%s', URL='%s'\n", otaSsid, otaUrl);
+    printLog("[C6 ROVER] >>> Comando OTA recebido! SSID='%s', URL='%s'\n",
+             otaSsid, otaUrl);
     if (strlen(otaSsid) > 0 && strlen(otaUrl) > 0) {
       performHttpOta(otaSsid, otaPass, otaUrl);
     }
-  } else if (strncmp(cmdStr, "CMD:GET_VER", 11) == 0 || strncmp(cmdStr, "CMD:VER", 7) == 0) {
+  } else if (strncmp(cmdStr, "CMD:GET_VER", 11) == 0 ||
+             strncmp(cmdStr, "CMD:VER", 7) == 0) {
     interSerial.println("PONG:VER:" ROVER_C6_VERSION);
     interSerial.flush();
   }
@@ -823,11 +923,11 @@ void loop() {
           }
 
           // Resposta rica de telemetria para o Lafvin Master:
-          // PONG:<seq>:<batMv>:<batA>:<batPct>:<lat7>:<lng7>:<spd>:<head>:<sats>:<fix>:<motSt>:<rud>:<thr>:<winch>:<rack>:<depth>:<loraSt>:<rssi>:<snr>
+          // PONG:<seq>:<batMv>:<batA>:<batPct>:<lat7>:<lng7>:<spd>:<head>:<sats>:<fix>:<motSt>:<rud>:<thr>:<winch>:<rack>:<depth>:<loraSt>:<rssi>:<snr>:<ancSt>
           char pong[256];
           snprintf(pong, sizeof(pong),
                    "PONG:%u:%u:%.2f:%u:%ld:%ld:%.1f:%.1f:%u:%u:%u:%d:%d:%d:%d:%"
-                   "u:%s:%.1f:%.1f\n",
+                   "u:%s:%.1f:%.1f:%u\n",
                    seq, battery.getVoltageMv(), battery.getCurrentAmps(),
                    battery.getPercentage(), (long)gps.getLatDeg7(),
                    (long)gps.getLngDeg7(), gps.getSpeedKnots(),
@@ -836,7 +936,7 @@ void loop() {
                    actuators.getThrottle(), actuators.getWinchPulseUs(),
                    actuators.isRackReleased() ? 1 : 0,
                    actuators.getAnchorDepthCm(), loraReady ? "RF_OK" : "RF_ERR",
-                   lastRssi, lastSnr);
+                   lastRssi, lastSnr, actuators.getAnchorStatus());
           interSerial.print(pong);
           sendLoraStatToMaster();
           printLog("[C6 ROVER] <<< %s | >>> PONG: Bat=%.2fV (%d%%) LoRa=%s | "
@@ -887,16 +987,19 @@ void loop() {
     } else if (cmd == "RACK RELEASE") {
       actuators.releaseRack();
       printLog("[C6] Trinco da cremalheira SOLTO (%u graus, inv=%d)\n",
-               actuators.getRackAngleReleased(), actuators.isRackInverted() ? 1 : 0);
+               actuators.getRackAngleReleased(),
+               actuators.isRackInverted() ? 1 : 0);
     } else if (cmd == "RACK ENGAGE") {
       actuators.engageRack();
       printLog("[C6] Trinco da cremalheira TRAVADO (%u graus, inv=%d)\n",
-               actuators.getRackAngleEngaged(), actuators.isRackInverted() ? 1 : 0);
+               actuators.getRackAngleEngaged(),
+               actuators.isRackInverted() ? 1 : 0);
     } else if (cmd == "RACK RELAX") {
       actuators.relaxRack();
       printLog("[C6] Trinco relaxado\n");
     } else if (cmd.startsWith("RACK_CFG ")) {
-      int eng = RACK_POS_ENGAGED, rel = RACK_POS_RELEASED, inv = RACK_SERVO_INVERTED_DEFAULT ? 1 : 0;
+      int eng = RACK_POS_ENGAGED, rel = RACK_POS_RELEASED,
+          inv = RACK_SERVO_INVERTED_DEFAULT ? 1 : 0;
       if (sscanf(cmd.c_str() + 9, "%d %d %d", &eng, &rel, &inv) >= 2) {
         eng = constrain(eng, 0, 180);
         rel = constrain(rel, 0, 180);
@@ -905,12 +1008,15 @@ void loop() {
         c6Prefs.putUChar("rck_eng", (uint8_t)eng);
         c6Prefs.putUChar("rck_rel", (uint8_t)rel);
         c6Prefs.putBool("rck_inv", invBool);
-        printLog("[C6] Calibracao Cremalheira: Encosto=%d°, Livre=%d°, Invertido=%d\n", eng, rel, invBool ? 1 : 0);
+        printLog("[C6] Calibracao Cremalheira: Encosto=%d°, Livre=%d°, "
+                 "Invertido=%d\n",
+                 eng, rel, invBool ? 1 : 0);
       }
     } else if (cmd.startsWith("RACK ")) {
       int ang = cmd.substring(5).toInt();
       actuators.setRackAngle((uint8_t)constrain(ang, 0, 180));
-      printLog("[C6] Trinco da cremalheira movido para %d graus\n", constrain(ang, 0, 180));
+      printLog("[C6] Trinco da cremalheira movido para %d graus\n",
+               constrain(ang, 0, 180));
     } else if (cmd.startsWith("ALARM ") || cmd == "ALARM") {
       int dur = 10;
       if (cmd.startsWith("ALARM "))

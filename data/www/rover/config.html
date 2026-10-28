@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Configuração do Rover - WindDragons Rover</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <link rel="stylesheet" href="/style.css?v=2.1.3">
+  <link rel="stylesheet" href="/style.css?v=2.1.1">
   <script>
     (function(){
       var t = localStorage.getItem('wd_theme') || 'dark';
@@ -32,7 +32,7 @@
     </nav>
     <div class="nav-actions">
       <a href="/config" id="navVersionBadge" class="badge" style="background:rgba(6,182,212,0.12);border:1px solid rgba(6,182,212,0.3);color:var(--primary);text-decoration:none;font-size:0.75rem;display:inline-flex;align-items:center;gap:6px;" title="Ver detalhes de firmware nas Configurações">
-        <i class="fa-solid fa-code-branch"></i> <span id="navLafvinVer">Lafvin: v2.1.0</span> &bull; <span id="navC6Ver">C6: ...</span>
+        <i class="fa-solid fa-code-branch"></i> <span id="navLafvinVer">Lafvin: v2.1.1</span> &bull; <span id="navC6Ver">C6: ...</span>
       </a>
       <span id="navWifiBadge" class="badge badge-sta">
         <i class="fa-solid fa-wifi"></i> A carregar...
@@ -138,6 +138,25 @@
           <button type="button" onclick="togglePass()" class="btn btn-secondary" style="padding:0 12px;font-size:0.85rem;"><i id="passEye" class="fa-solid fa-eye"></i></button>
         </div>
         <small style="color:var(--muted);font-size:0.75rem;margin-top:4px;display:block;">Segurança WPA2-PSK para acesso local</small>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="border:1px solid #f59e0b;">
+    <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+      <span><i class="fa-solid fa-gamepad"></i> Joystick Analógico Físico Onboard (GPIO 3 / GPIO 0)</span>
+      <span id="joyCfgBadge" class="badge" style="background:#065f46;color:#6ee7b7;font-size:0.82rem;">ATIVO (MONTADO)</span>
+    </div>
+    <p style="color:var(--muted);font-size:0.875rem;margin-bottom:14px;">
+      Ative ou desative a leitura do joystick analógico físico na placa do Rover. <strong>Desative esta opção nas situações em que o joystick não está fisicamente montado</strong> para evitar leituras flutuantes nos pinos ADC (GPIO 3 e GPIO 0) e acionamentos involuntários do motor ou leme.
+    </p>
+    <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between;">
+      <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:rgba(15,23,42,0.6);border:1px solid #334155;border-radius:8px;flex:1;min-width:260px;">
+        <input type="checkbox" id="cfg_joystick_enabled" checked onchange="saveJoystickConfig(this.checked)" style="width:20px;height:20px;margin:0;cursor:pointer;">
+        <label for="cfg_joystick_enabled" style="cursor:pointer;font-size:0.95rem;font-weight:600;">
+          Habilitar Joystick Analógico Físico no Rover
+          <div style="font-size:0.75rem;font-weight:normal;color:var(--muted);margin-top:2px;">Desmarque quando o Rover operar sem joystick físico soldado/ligado na PCB.</div>
+        </label>
       </div>
     </div>
   </div>
@@ -648,7 +667,7 @@ function escapeConsoleHtml(s) {
       <div style="color:var(--muted);font-size:0.75rem;text-transform:uppercase;font-weight:600;margin-bottom:4px;">
         <i class="fa-solid fa-microchip" style="color:var(--primary);margin-right:6px;"></i>Master Lafvin (LCD+SD+WiFi)
       </div>
-      <div id="fwLafvinVer" style="font-size:1.3rem;font-weight:700;color:var(--green);">v2.1.0</div>
+      <div id="fwLafvinVer" style="font-size:1.3rem;font-weight:700;color:var(--green);">v2.1.1</div>
       <div style="color:var(--muted);font-size:0.7rem;margin-top:2px;">ST7789 Display & Servidor Web</div>
     </div>
     <div style="background:rgba(15,23,42,0.7);padding:14px;border-radius:8px;border:1px solid var(--card-border);">
@@ -839,6 +858,30 @@ function saveAnchorConfig() {
   .catch(() => {});
 }
 
+function updateJoyCfgBadge(en) {
+  const b = document.getElementById('joyCfgBadge');
+  if (!b) return;
+  b.innerText = en ? 'ATIVO (MONTADO)' : 'DESATIVADO (NÃO MONTADO)';
+  b.style.background = en ? '#065f46' : '#78350f';
+  b.style.color = en ? '#6ee7b7' : '#fde68a';
+}
+
+function saveJoystickConfig(en) {
+  updateJoyCfgBadge(en);
+  fetch('/api/control/joystick/config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ joystick_enabled: !!en })
+  })
+  .then(r => r.json())
+  .then(res => {
+    const msg = res.msg || (en ? 'Joystick físico ativado!' : 'Joystick físico desativado!');
+    if (typeof showToast === 'function') showToast(msg);
+    showStatus(msg);
+  })
+  .catch(() => {});
+}
+
 function loadConfig() {
   fetch('/api/rover/config')
     .then(r => r.json())
@@ -849,6 +892,10 @@ function loadConfig() {
       onBrightSlide(data.screen_brightness || 80);
       document.getElementById('cfg_ssid').value = data.ap_ssid || 'WindDragon-AP';
       document.getElementById('cfg_pass').value = data.ap_password || '12345678';
+      if (data.joystick_enabled !== undefined && document.getElementById('cfg_joystick_enabled')) {
+        document.getElementById('cfg_joystick_enabled').checked = !!data.joystick_enabled;
+        updateJoyCfgBadge(!!data.joystick_enabled);
+      }
       if (data.rack_angle_engaged !== undefined && document.getElementById('cfg_rack_engaged')) {
         document.getElementById('cfg_rack_engaged').value = data.rack_angle_engaged;
         const rs = document.getElementById('rackTestSlider');
@@ -887,6 +934,7 @@ function saveAllConfig(e) {
   const bright = parseInt(document.getElementById('cfg_bright').value);
   const ssid = document.getElementById('cfg_ssid').value;
   const pass = document.getElementById('cfg_pass').value;
+  const joyEn = document.getElementById('cfg_joystick_enabled')?.checked ?? true;
   const rackEng = parseInt(document.getElementById('cfg_rack_engaged')?.value ?? 0);
   const rackRel = parseInt(document.getElementById('cfg_rack_released')?.value ?? 90);
   const rackInv = document.getElementById('cfg_rack_inverted')?.checked ?? true;
@@ -901,6 +949,7 @@ function saveAllConfig(e) {
       screen_brightness: bright,
       ap_ssid: ssid,
       ap_password: pass,
+      joystick_enabled: joyEn,
       rack_angle_engaged: rackEng,
       rack_angle_released: rackRel,
       rack_inverted: rackInv,
@@ -1286,11 +1335,11 @@ document.addEventListener('DOMContentLoaded', loadConfig);
   <footer style="text-align:center;color:var(--muted);font-size:0.75rem;margin-top:24px;display:flex;justify-content:center;align-items:center;gap:12px;flex-wrap:wrap;padding:0 16px;">
     <span>WindDragons Autonomous Surface Rover / Buoy &copy; 2026</span>
     <span>&bull;</span>
-    <span>Master Lafvin: <b style="color:var(--green);" id="footerLafvinVer">v2.1.0</b></span>
+    <span>Master Lafvin: <b style="color:var(--green);" id="footerLafvinVer">v2.1.1</b></span>
     <span>&bull;</span>
     <span>Coprocessador C6: <b style="color:var(--yellow);" id="footerC6Ver">--</b></span>
     <span>&bull;</span>
-    <span>Pacote Bundle: <b style="color:var(--primary);" id="footerBundleVer">v2.1.0</b></span>
+    <span>Pacote Bundle: <b style="color:var(--primary);" id="footerBundleVer">v2.1.1</b></span>
   </footer>
 </body>
 </html>

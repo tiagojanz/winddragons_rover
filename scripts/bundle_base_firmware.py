@@ -32,21 +32,26 @@ def ensure_web_assets():
         if res.returncode != 0:
             print(f"[BUNDLE BASE] AVISO ao gerar ficheiros web: {res.stderr}")
 
-def ensure_binaries():
+def ensure_binaries(force_rebuild=True, rollback_fn=None):
     needs_build = []
-    if not os.path.isfile(C6_BIN):
+    if force_rebuild or not os.path.isfile(C6_BIN):
         needs_build.append("base_c6")
-    if not os.path.isfile(LAFVIN_BIN):
+    if force_rebuild or not os.path.isfile(LAFVIN_BIN):
         needs_build.append("base_lafvin")
     
     if needs_build:
-        print(f"[BUNDLE BASE] A compilar ambientes em falta: {', '.join(needs_build)}...")
+        print(f"[BUNDLE BASE] A compilar ambientes ({', '.join(needs_build)}) com a nova versão...")
         cmd = ["pio", "run"]
         for env in needs_build:
             cmd.extend(["-e", env])
-        res = subprocess.run(cmd, cwd=PROJECT_DIR)
-        if res.returncode != 0:
-            print("[BUNDLE BASE] ERRO: Falha na compilação do firmware.")
+        try:
+            res = subprocess.run(cmd, cwd=PROJECT_DIR)
+            if res.returncode != 0:
+                raise RuntimeError(f"Exit code {res.returncode}")
+        except Exception as e:
+            print(f"[BUNDLE BASE] ERRO: Falha na compilação do firmware ({e}).")
+            if rollback_fn:
+                rollback_fn()
             sys.exit(1)
 
 def get_base_version():
@@ -54,11 +59,65 @@ def get_base_version():
     if os.path.isfile(ver_file):
         with open(ver_file, "r", encoding="utf-8") as f:
             for line in f:
-                if "#define BASE_FIRMWARE_VERSION_STR" in line or "#define BASE_VERSION_STR" in line:
+                if "#define BASE_FIRMWARE_VERSION_STR" in line or "#define BASE_RAW_VERSION_STR" in line:
                     parts = line.split('"')
                     if len(parts) >= 2:
-                        return parts[1]
+                        v = parts[1].lstrip("v")
+                        return f"v{v}"
     return "v2.1.0"
+
+def write_base_version(major, minor, patch):
+    ver_raw = f"{major}.{minor}.{patch}"
+    ver_str = f"v{ver_raw}"
+    ver_file = os.path.join(PROJECT_DIR, "include", "base_version.h")
+    content = f"""#pragma once
+
+// =========================================================================
+// WINDDRAGONS BASE STATION - DEFINIÇÕES DE VERSÃO DE FIRMWARE
+// =========================================================================
+
+#define BASE_VERSION_MAJOR {major}
+#define BASE_VERSION_MINOR {minor}
+#define BASE_VERSION_PATCH {patch}
+
+#define BASE_RAW_VERSION_STR      "{ver_raw}"
+#define BASE_FIRMWARE_VERSION_STR "{ver_str}"
+#define BASE_LAFVIN_VERSION       "{ver_str}"
+#define BASE_C6_VERSION           "{ver_str}"
+#define BASE_BUILD_DATE           __DATE__ " " __TIME__
+
+// Aliases para compatibilidade
+#define BASE_VERSION_STR          BASE_FIRMWARE_VERSION_STR
+"""
+    with open(ver_file, "w", encoding="utf-8") as f:
+        f.write(content)
+    return ver_str
+
+def bump_base_version(bump_type="patch", explicit_ver=None):
+    old_ver = get_base_version().lstrip("v")
+    parts = [int(x) for x in old_ver.split(".") if x.isdigit()]
+    while len(parts) < 3:
+        parts.append(0)
+    major, minor, patch = parts[0], parts[1], parts[2]
+
+    if explicit_ver:
+        eparts = [int(x) for x in explicit_ver.lstrip("v").split(".") if x.isdigit()]
+        while len(eparts) < 3:
+            eparts.append(0)
+        major, minor, patch = eparts[0], eparts[1], eparts[2]
+    elif bump_type == "major":
+        major += 1
+        minor = 0
+        patch = 0
+    elif bump_type == "minor":
+        minor += 1
+        patch = 0
+    elif bump_type == "patch":
+        patch += 1
+
+    new_ver = write_base_version(major, minor, patch)
+    print(f"[BUNDLE BASE] Bump automático de versão Base: v{old_ver} -> {new_ver}")
+    return new_ver
 
 def format_size(bytes_num):
     for unit in ['B', 'KB', 'MB']:
@@ -68,13 +127,52 @@ def format_size(bytes_num):
     return f"{bytes_num:.1f} GB"
 
 def main():
-    version_str = get_base_version()
+    bump_type = "patch"
+    explicit_ver = None
+    do_bump = True
+    force_rebuild = True
+
+    args = sys.argv[1:]
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == "--no-bump":
+            do_bump = False
+        elif a == "--skip-build":
+            force_rebuild = False
+        elif a == "--major":
+            bump_type = "major"
+        elif a == "--minor":
+            bump_type = "minor"
+        elif a == "--patch":
+            bump_type = "patch"
+        elif a == "--set" and i + 1 < len(args):
+            explicit_ver = args[i + 1]
+            i += 1
+        i += 1
+
+    prev_ver = get_base_version().lstrip("v")
+    prev_parts = [int(x) for x in prev_ver.split(".") if x.isdigit()]
+    while len(prev_parts) < 3:
+        prev_parts.append(0)
+
+    def rollback_version():
+        if do_bump:
+            write_base_version(prev_parts[0], prev_parts[1], prev_parts[2])
+            ensure_web_assets()
+            print(f"[BUNDLE BASE] Versão revertida para v{prev_ver} devido a falha na compilação.")
+
+    if do_bump:
+        version_str = bump_base_version(bump_type=bump_type, explicit_ver=explicit_ver)
+    else:
+        version_str = f"v{prev_ver}"
+
     print("\n=======================================================")
     print(f"  WINDDRAGONS BASE STATION - FULL BUNDLER (FW + WEB {version_str})")
     print("=======================================================")
     
     ensure_web_assets()
-    ensure_binaries()
+    ensure_binaries(force_rebuild=force_rebuild, rollback_fn=rollback_version)
 
     if not os.path.isfile(C6_BIN) or not os.path.isfile(LAFVIN_BIN):
         print("[BUNDLE BASE] ERRO: Binários não encontrados após compilação.")

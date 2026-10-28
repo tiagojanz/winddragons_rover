@@ -1176,8 +1176,10 @@ private:
             sObj["heading_deg"] = sel->heading_deg;
             sObj["battery_pct"] = sel->battery_pct;
             sObj["battery_voltage"] = sel->battery_voltage;
-            sObj["motor_status"] = sel->motor_status;
-            sObj["anchor_status"] = sel->anchor_status;
+            sObj["motor_status"] = get_motor_status_str(sel->motor_status);
+            sObj["motor_status_id"] = sel->motor_status;
+            sObj["anchor_status"] = get_anchor_status_str(sel->anchor_status);
+            sObj["anchor_status_id"] = sel->anchor_status;
             sObj["anchor_depth_m"] = sel->anchor_depth_m;
             sObj["rssi"] = sel->rssi;
             sObj["is_online"] = sel->is_online;
@@ -1199,8 +1201,10 @@ private:
             rObj["heading_deg"] = r.heading_deg;
             rObj["battery_pct"] = r.battery_pct;
             rObj["battery_voltage"] = r.battery_voltage;
-            rObj["motor_status"] = r.motor_status;
-            rObj["anchor_status"] = r.anchor_status;
+            rObj["motor_status"] = get_motor_status_str(r.motor_status);
+            rObj["motor_status_id"] = r.motor_status;
+            rObj["anchor_status"] = get_anchor_status_str(r.anchor_status);
+            rObj["anchor_status_id"] = r.anchor_status;
             rObj["anchor_depth_m"] = r.anchor_depth_m;
             rObj["rssi"] = r.rssi;
             rObj["is_online"] = r.is_online;
@@ -1587,6 +1591,7 @@ private:
 
         uint8_t action = doc["action"] | 0;
         uint8_t targetRid = doc["rover_id"] | _fleet.getSelectedRoverId();
+        if (targetRid == 0) targetRid = 1;
         uint16_t depth = doc["depth_cm"] | 0;
         uint16_t duration = doc["duration_s"] | 0;
 

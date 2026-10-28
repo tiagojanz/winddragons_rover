@@ -234,6 +234,9 @@ void handleIncomingCommand(const char *cmdStr) {
         uint32_t targetId = 0, action = 0, cmdId = 0, depth = 0, dur = 0;
         long lat7 = 0, lng7 = 0;
         if (sscanf(cmdStr + 11, "%u:%u:%u:%u:%u:%ld:%ld", &targetId, &action, &cmdId, &depth, &dur, &lat7, &lng7) >= 3) {
+            if (targetId == 0) {
+                targetId = (selectedRoverTarget != BROADCAST_ROVER_ID && selectedRoverTarget > 0) ? selectedRoverTarget : 1;
+            }
             if (loraReady) {
                 PacketActionCommand packet;
                 memset(&packet, 0, sizeof(packet));
@@ -249,17 +252,27 @@ void handleIncomingCommand(const char *cmdStr) {
                 packet.checksum        = calculate_checksum(reinterpret_cast<const uint8_t*>(&packet),
                                                              sizeof(packet) - sizeof(packet.checksum));
 
+                selectedRoverTarget = (uint8_t)targetId;
+                lastAutoPollMs = millis(); // Evita colisão de Poll logo após enviar comando de ação
                 radio.standby();
                 radio.transmit(reinterpret_cast<uint8_t*>(&packet), sizeof(packet));
+                delay(25);
+                // Retransmissão rápida para garantir entrega em canal half-duplex
+                radio.transmit(reinterpret_cast<uint8_t*>(&packet), sizeof(packet));
+                packetReceived = false;
                 radio.startReceive();
-                printLog("[BASE C6] >>> LoRa Acao enviada: Rover #%u | Acao=%u | CmdID=%u\n", targetId, action, cmdId);
+                printLog("[BASE C6] >>> LoRa Acao enviada (2x): Rover #%u | Acao=%u (%s) | CmdID=%u | Depth=%u\n",
+                         targetId, action, get_action_str((uint8_t)action), cmdId, depth);
             }
         }
     } else if (strncmp(cmdStr, "CMD:CTRL:", 9) == 0) {
         // CMD:CTRL:<target_id>:<thr>:<rud>:<jog>:<mode>
         int targetId = 0, thr = 0, rud = 0, jog = 0, mode = 0;
         if (sscanf(cmdStr + 9, "%d:%d:%d:%d:%d", &targetId, &thr, &rud, &jog, &mode) >= 3) {
-            if (loraReady && targetId > 0) {
+            if (targetId <= 0) {
+                targetId = (selectedRoverTarget != BROADCAST_ROVER_ID && selectedRoverTarget > 0) ? selectedRoverTarget : 1;
+            }
+            if (loraReady) {
                 PacketManualControl packet;
                 memset(&packet, 0, sizeof(packet));
                 packet.magic           = LORA_MAGIC_BYTE;
@@ -277,6 +290,8 @@ void handleIncomingCommand(const char *cmdStr) {
                 radio.transmit(reinterpret_cast<uint8_t*>(&packet), sizeof(packet));
                 packetReceived = false;
                 radio.startReceive();
+                printLog("[BASE C6] >>> LoRa CTRL -> Rover #%d: Thr=%d%%, Rud=%d%%, Jog=%d\n",
+                         targetId, thr, rud, jog);
             }
         }
     } else if (strncmp(cmdStr, "CMD:POLL", 8) == 0) {
@@ -452,7 +467,6 @@ void loop() {
         char c = (char)interSerial.read();
         static char rxBuf[256];
         static size_t rxIdx = 0;
-        printLog("[UART RX RAW] 0x%02X ('%c')\n", (uint8_t)c, (c >= 32 && c <= 126) ? c : '.');
 
         if (c == '\n' || c == '\r') {
             if (rxIdx > 0) {
