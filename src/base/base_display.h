@@ -731,18 +731,18 @@ public:
         canvas->setCursor(rightX + 18, cardY + 4);
         canvas->print("SINAIS ADC & BOTOES");
 
-        // 1. EIXO X (Throttle / Propulsão - IO0)
+        // 1. EIXO Y (Throttle / Propulsão - IO0)
         canvas->setTextColor(UI_LIGHTGREY);
         canvas->setCursor(rightX + 6, cardY + 18);
-        canvas->print("X (PROP): ");
+        canvas->print("IO0(PROP): ");
         canvas->setTextColor(UI_WHITE);
-        canvas->printf("%4d", rawX);
+        canvas->printf("%4d", rawY);
         uint16_t tColor = (throttle > 0) ? UI_GREEN : ((throttle < 0) ? UI_RED : UI_LIGHTGREY);
         canvas->setTextColor(tColor);
         canvas->setCursor(rightX + 115, cardY + 18);
         canvas->printf("%+4d%%", throttle);
 
-        // Barra bipolar Eixo X (w=170, centro em x=225)
+        // Barra bipolar Eixo Y (w=170, centro em x=225)
         int barY1 = cardY + 28;
         canvas->fillRect(rightX + 6, barY1, 170, 6, UI_BLACK);
         canvas->drawRect(rightX + 6, barY1, 170, 6, UI_CARD_BG);
@@ -756,12 +756,12 @@ public:
             canvas->fillRect(barCenterX - bw, barY1 + 1, bw, 4, UI_RED);
         }
 
-        // 2. EIXO Y (Rudder / Leme - IO1)
+        // 2. EIXO X (Rudder / Leme - IO3)
         canvas->setTextColor(UI_LIGHTGREY);
         canvas->setCursor(rightX + 6, cardY + 38);
-        canvas->print("Y (LEME): ");
+        canvas->print("IO3(LEME): ");
         canvas->setTextColor(UI_WHITE);
-        canvas->printf("%4d", rawY);
+        canvas->printf("%4d", rawX);
         uint16_t rColor = (rudder != 0) ? UI_CYAN : UI_LIGHTGREY;
         canvas->setTextColor(rColor);
         canvas->setCursor(rightX + 115, cardY + 38);

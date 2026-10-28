@@ -144,7 +144,10 @@ void setup() {
 
     // 4. Inicializar Joystick
     joystick.begin();
-    display.bootLogf(UI_LIGHTGREY, 55, "[JOY ] Joystick calib. OK");
+    printLog("[JOY ] Auto-calibracao concluida: Y(IO0)=%d [%s] | X(IO3)=%d [%s]\n",
+             joystick.getCenterY(), joystick.isAxisYConnected() ? "CONECTADO" : "FLUTUANTE/ABERTO",
+             joystick.getCenterX(), joystick.isAxisXConnected() ? "CONECTADO" : "FLUTUANTE/ABERTO");
+    display.bootLogf(UI_LIGHTGREY, 55, "[JOY ] IO0:%d IO3:%d", joystick.getCenterY(), joystick.getCenterX());
 
     // 5. Configurar UART Inter-ESP (TX=GPIO 2, RX=GPIO 1) com o Coprocessador C6
     interSerial.setRxBufferSize(512);
@@ -209,25 +212,22 @@ void setup() {
     // 9. Configurações de display
     Preferences dispPrefs;
     if (dispPrefs.begin("base_display", true)) {
-        bool joyScr = dispPrefs.getBool("joy_scr", false);
+        bool joyScr = dispPrefs.getBool("joy_scr", true);
         display.setJoystickScreenEnabled(joyScr);
         uint8_t bright = dispPrefs.getUChar("brightness", display.getBrightness());
         display.setBrightness(bright);
         dispPrefs.end();
+    } else {
+        display.setJoystickScreenEnabled(true);
     }
     webServer.setDisplay(&display);
 
     // Finalizar ecrã de arranque
     display.endBootScreen(1200);
-    display.setPage(BASE_PAGE_STATION);
+    display.setPage(BASE_PAGE_JOYSTICK);
 
-    // Interrupção no botão BOOT (GPIO 9) para navegação de ecrãs
+    // Botão BOOT / Clique Joystick (GPIO 9) gerido com debounce curto/longo em BaseJoystick
     pinMode(PIN_BTN_BOOT, INPUT_PULLUP);
-    attachInterrupt(digitalPinToInterrupt(PIN_BTN_BOOT), isrBootButton, FALLING);
-#ifdef PIN_BTN_SW1
-    pinMode(PIN_BTN_SW1, INPUT_PULLUP);
-    attachInterrupt(digitalPinToInterrupt(PIN_BTN_SW1), isrBootButton, FALLING);
-#endif
     flagPageChange = false;
 }
 
@@ -373,62 +373,36 @@ void handleUartFromC6() {
     }
 }
 
-void handleInputsAndMenu(uint32_t now) {
+void handleInputsAndMenu(uint32_t now, bool &forceDisplay) {
     joystick.update();
-    bool btnModePressed = (digitalRead(PIN_BTN_MODE) == LOW);
+    static bool lastModeRaw = false;
+    bool curModeRaw = (digitalRead(PIN_BTN_MODE) == LOW);
+    bool btnModeEdge = (curModeRaw && !lastModeRaw);
+    lastModeRaw = curModeRaw;
 
     if (currentScreen == SCREEN_PAGES) {
         BaseScreenPage page = display.getCurrentPage();
 
-        if (page == BASE_PAGE_STATION) {
-            // 1º Ecrã: Nome da Estação, MAC, Estado
-            // Clique curto: avança o estado da operação (STORAGE -> WAITING -> IDLE -> GO)
-            if (joystick.wasShortClicked()) {
-                BaseOperationState cur = fleet.getOperationState();
-                BaseOperationState nxt = static_cast<BaseOperationState>((cur + 1) % 4);
-                fleet.setOperationState(nxt);
-                printLog("[BASE] Estado de operacao alterado para: %s\n", fleet.getOperationStateStr());
-            }
-            // Long Press (>700ms) ou botão MODE: Abre Menu de Controlo
-            else if (joystick.wasLongClicked() || btnModePressed) {
-                currentScreen = SCREEN_MENU;
-                menuSelectedIndex = 0;
-                lastMenuActivityMs = now;
-                menuFeedback = nullptr;
-                printLog("[BASE] Abriu Menu de Controlo\n");
-            }
+        // Clique curto no Joystick / BOOT (GPIO 9): avança para o próximo ecrã
+        if (joystick.wasShortClicked()) {
+            display.nextPage();
+            forceDisplay = true;
+            printLog("[BASE] Ecrã alterado para página %d\n", display.getCurrentPage());
+            return;
         }
-        else if (page == BASE_PAGE_WIFI) {
-            // 2º Ecrã: Conectividade WiFi
-            if (joystick.wasLongClicked()) {
-                currentScreen = SCREEN_MENU;
-                menuSelectedIndex = 0;
-                lastMenuActivityMs = now;
-                menuFeedback = nullptr;
-            } else if (btnModePressed || joystick.wasShortClicked()) {
-                display.setPage(BASE_PAGE_ROVER);
-            }
-        }
-        else if (page == BASE_PAGE_ROVER) {
-            // 3º Ecrã: Rover Selecionado (Comando e Telemetria)
-            if (fleet.hasSelectedRover()) {
-                if (joystick.wasShortClicked()) {
-                    currentNavMode = (currentNavMode == 0) ? 1 : 0;
-                    printLog("[BASE] Modo alterado para: %s\n", (currentNavMode == 1) ? "HOLD STATION" : "MANUAL");
-                }
-            }
-            if (joystick.wasLongClicked() || btnModePressed) {
-                currentScreen = SCREEN_MENU;
-                menuSelectedIndex = 0;
-                lastMenuActivityMs = now;
-                menuFeedback = nullptr;
-                printLog("[BASE] Abriu Menu de Controlo\n");
-            }
-        }
-        else if (page == BASE_PAGE_JOYSTICK) {
-            // 4º Ecrã (Opcional): Teste do Joystick
-            if (btnModePressed || joystick.wasLongClicked()) {
+
+        // Pressão longa (>700ms) no Joystick / BOOT ou botão MODE (GPIO 19): abre Menu de Controlo
+        if (joystick.wasLongClicked() || btnModeEdge) {
+            if (page == BASE_PAGE_JOYSTICK && btnModeEdge) {
                 display.setPage(BASE_PAGE_STATION);
+                forceDisplay = true;
+            } else {
+                currentScreen = SCREEN_MENU;
+                menuSelectedIndex = 0;
+                lastMenuActivityMs = now;
+                menuFeedback = nullptr;
+                forceDisplay = true;
+                printLog("[BASE] Abriu Menu de Controlo\n");
             }
         }
     } 
@@ -437,10 +411,19 @@ void handleInputsAndMenu(uint32_t now) {
         if (step != 0) {
             menuSelectedIndex = (menuSelectedIndex + step + MENU_COUNT) % MENU_COUNT;
             lastMenuActivityMs = now;
+            forceDisplay = true;
         }
 
-        if (joystick.wasShortClicked() || joystick.wasLongClicked()) {
+        if (joystick.wasLongClicked() || btnModeEdge) {
+            currentScreen = SCREEN_PAGES;
+            menuFeedback = nullptr;
+            forceDisplay = true;
+            return;
+        }
+
+        if (joystick.wasShortClicked()) {
             lastMenuActivityMs = now;
+            forceDisplay = true;
             switch (menuSelectedIndex) {
                 case 0: // MODO MANUAL
                     currentNavMode = 0;
@@ -484,6 +467,7 @@ void handleInputsAndMenu(uint32_t now) {
                     }
                     break;
                 case 6: // TESTE JOYSTICK
+                    display.setJoystickScreenEnabled(true);
                     display.setPage(BASE_PAGE_JOYSTICK);
                     currentScreen = SCREEN_PAGES;
                     break;
@@ -500,69 +484,23 @@ void handleInputsAndMenu(uint32_t now) {
         if (menuFeedback && now > menuFeedbackUntilMs) {
             currentScreen = SCREEN_PAGES;
             menuFeedback = nullptr;
+            forceDisplay = true;
         }
 
         if (now - lastMenuActivityMs > 8000) {
             currentScreen = SCREEN_PAGES;
             menuFeedback = nullptr;
+            forceDisplay = true;
         }
     }
 }
 
 void loop() {
     uint32_t now = millis();
-
-    // 0. Polling debounce para o botão BOOT
-    static bool lastBootRaw = HIGH;
-    bool currentBootRaw = (digitalRead(PIN_BTN_BOOT) == LOW);
-#ifdef PIN_BTN_SW1
-    if (digitalRead(PIN_BTN_SW1) == LOW) currentBootRaw = true;
-#endif
-    if (currentBootRaw && lastBootRaw == HIGH && (now - lastBtnPressTime > 250)) {
-        lastBtnPressTime = now;
-        flagPageChange = true;
-    }
-    lastBootRaw = currentBootRaw ? LOW : HIGH;
-
-    // 1. Navegação de Ecrãs (Botão BOOT / GPIO 9)
     bool forceDisplay = false;
-    static uint32_t joyHoldStartMs = 0;
 
-    if (display.getCurrentPage() == BASE_PAGE_JOYSTICK && currentScreen == SCREEN_PAGES) {
-        bool btnBootDown = (digitalRead(PIN_BTN_BOOT) == LOW);
-        if (btnBootDown) {
-            if (joyHoldStartMs == 0) {
-                joyHoldStartMs = now;
-            } else if (now - joyHoldStartMs >= 1000) {
-                display.setPage(BASE_PAGE_STATION);
-                forceDisplay = true;
-                joyHoldStartMs = 0;
-                flagPageChange = false;
-                printLog("[BASE] Saiu do ecrã de teste do joystick por pressão longa (>1s)\n");
-            }
-        } else {
-            joyHoldStartMs = 0;
-        }
-
-        if (flagPageChange) {
-            flagPageChange = false;
-            forceDisplay = true;
-        }
-    } else {
-        if (flagPageChange) {
-            flagPageChange = false;
-            if (currentScreen == SCREEN_MENU) {
-                currentScreen = SCREEN_PAGES;
-            } else {
-                display.nextPage();
-            }
-            forceDisplay = true;
-            printLog("[BASE] Ecrã alterado para página %d\n", display.getCurrentPage());
-        }
-    }
-
-    // 2. Processar entradas locais e máquina de estados de menu
-    handleInputsAndMenu(now);
+    // 1. Processar entradas locais (Joystick, Clique Curto = Próx. Página, Longo/MODE = Menu)
+    handleInputsAndMenu(now, forceDisplay);
 
     // 3. Processar clientes HTTP Web
     webServer.handleClient();
@@ -642,5 +580,17 @@ void loop() {
         } else if (curOp == BASE_OP_GO) {
             setRgbColor(0, 35, 0);  // Verde / Em missão
         }
+    }
+
+    // 10. Diagnóstico em Tempo Real do Pinout do Joystick via USB Serial
+    static uint32_t lastPinDiagMs = 0;
+    if (now - lastPinDiagMs >= 500) {
+        lastPinDiagMs = now;
+        int adc0 = joystick.getRawY();
+        int adc3 = joystick.getRawX();
+        printLog("[JOY PINOUT] Pad6(IO0)=%4d | Pad3(IO3)=%4d | Thr=%+4d%% Rud=%+4d%% | BTN[IO9=%d IO18=%d IO19=%d IO20=%d]\n",
+                 adc0, adc3,
+                 joystick.getThrottle(), joystick.getRudder(),
+                 digitalRead(9), digitalRead(18), digitalRead(19), digitalRead(20));
     }
 }
