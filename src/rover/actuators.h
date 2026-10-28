@@ -36,12 +36,22 @@ public:
           targetDepthCm(0), winchRetractSpeedCmPerSec(20.0f),
           gravityDropSpeedCmPerSec(80.0f),
           lastWinchUpdate(0), isRackLifted(false),
+          rackAngleEngaged(RACK_POS_ENGAGED),
+          rackAngleReleased(RACK_POS_RELEASED),
+          rackInverted(RACK_SERVO_INVERTED_DEFAULT),
+          currentRackAngle(RACK_POS_ENGAGED),
           anchorDrumDiamMm(30.0f), anchorPulsesPerRev(1),
           anchorHallPulses(0), anchorRevolutions(0.0f),
           _lastProcessedHallPulseCount(0),
           alarmActive(false), alarmEndTimeMs(0),
           lastAlarmToggleMs(0), alarmStrobeState(false),
           pwmAvailable(false), _isInitialized(false) {}
+
+    int rackAngleToPulseUs(uint8_t angle) const {
+        if (angle > 180) angle = 180;
+        uint8_t effectiveAngle = rackInverted ? (180 - angle) : angle;
+        return map(effectiveAngle, 0, 180, PWM_PULSE_MIN, PWM_PULSE_MAX);
+    }
 
     void begin() {
         _isInitialized = true;
@@ -58,7 +68,7 @@ public:
 
         #if defined(PIN_C6_SERVO_RACK) && (PIN_C6_SERVO_RACK >= 0)
         ledcAttach(PIN_C6_SERVO_RACK, ACT_PWM_FREQ, ACT_PWM_RES);
-        ledcWrite(PIN_C6_SERVO_RACK, actUsToDuty(map(RACK_POS_ENGAGED, 0, 180, PWM_PULSE_MIN, PWM_PULSE_MAX)));
+        ledcWrite(PIN_C6_SERVO_RACK, actUsToDuty(rackAngleToPulseUs(rackAngleEngaged)));
         #endif
 
         #if defined(PIN_C6_SERVO_RUD) && (PIN_C6_SERVO_RUD >= 0)
@@ -106,23 +116,26 @@ public:
     // --- Cremalheira / Rack Release Servo Controls ---
     // Levanta a cremalheira desengatando o carretel para a âncora cair livremente por gravidade
     void liftRack() {
-        setRackAngle(RACK_POS_RELEASED);
+        setRackAngle(rackAngleReleased);
         isRackLifted = true;
-        Serial.printf("[ACT-SERVO] LIFT RACK (LARGAR ANCORA) -> PCA CH %d enviado %d graus\n", PCA_CH_RACK, RACK_POS_RELEASED);
+        Serial.printf("[ACT-SERVO] LIFT RACK (LIVRE) -> PCA CH %d / GPIO %d enviado %u graus (inv=%d, %d us)\n",
+                      PCA_CH_RACK, PIN_C6_SERVO_RACK, rackAngleReleased, rackInverted ? 1 : 0, rackAngleToPulseUs(rackAngleReleased));
     }
     void releaseRack() { liftRack(); }
 
     // Baixa a cremalheira travando/engatando o carretel para travar a profundidade ou recolher
     void engageRack() {
-        setRackAngle(RACK_POS_ENGAGED);
+        setRackAngle(rackAngleEngaged);
         isRackLifted = false;
-        Serial.printf("[ACT-SERVO] ENGAGE RACK (TRAVAR ANCORA) -> PCA CH %d enviado %d graus\n", PCA_CH_RACK, RACK_POS_ENGAGED);
+        Serial.printf("[ACT-SERVO] ENGAGE RACK (TRAVAR / ENCOSTO) -> PCA CH %d / GPIO %d enviado %u graus (inv=%d, %d us)\n",
+                      PCA_CH_RACK, PIN_C6_SERVO_RACK, rackAngleEngaged, rackInverted ? 1 : 0, rackAngleToPulseUs(rackAngleEngaged));
     }
 
     // Define ângulo direto para calibração mecânica (0 a 180 graus)
     void setRackAngle(uint8_t angle) {
         if (angle > 180) angle = 180;
-        int pulseUs = map(angle, 0, 180, PWM_PULSE_MIN, PWM_PULSE_MAX);
+        currentRackAngle = angle;
+        int pulseUs = rackAngleToPulseUs(angle);
         if (pwmAvailable) {
             pwm.writeMicroseconds(PCA_CH_RACK, pulseUs);
         }
@@ -131,12 +144,37 @@ public:
             ledcWrite(PIN_C6_SERVO_RACK, actUsToDuty(pulseUs));
         }
         #endif
-        isRackLifted = (angle > 45);
+        isRackLifted = (abs((int)angle - (int)rackAngleReleased) < abs((int)angle - (int)rackAngleEngaged));
         if (_isInitialized) {
-            Serial.printf("[ACT-SERVO] CALIBRACAO -> PCA CH %d / GPIO %d enviado %d graus (%d us)\n", PCA_CH_RACK, PIN_C6_SERVO_RACK, angle, pulseUs);
-            Serial0.printf("[ACT-SERVO] CALIBRACAO -> PCA CH %d / GPIO %d enviado %d graus (%d us)\n", PCA_CH_RACK, PIN_C6_SERVO_RACK, angle, pulseUs);
+            Serial.printf("[ACT-SERVO] CALIBRACAO -> PCA CH %d / GPIO %d enviado %u graus (efetivo=%u°, inv=%d, %d us)\n",
+                          PCA_CH_RACK, PIN_C6_SERVO_RACK, angle, rackInverted ? (180 - angle) : angle, rackInverted ? 1 : 0, pulseUs);
+            Serial0.printf("[ACT-SERVO] CALIBRACAO -> PCA CH %d / GPIO %d enviado %u graus (efetivo=%u°, inv=%d, %d us)\n",
+                           PCA_CH_RACK, PIN_C6_SERVO_RACK, angle, rackInverted ? (180 - angle) : angle, rackInverted ? 1 : 0, pulseUs);
         }
     }
+
+    void setRackConfig(uint8_t engagedAngle, uint8_t releasedAngle, bool inverted, bool applyNow = true) {
+        if (engagedAngle > 180) engagedAngle = 180;
+        if (releasedAngle > 180) releasedAngle = 180;
+        rackAngleEngaged = engagedAngle;
+        rackAngleReleased = releasedAngle;
+        rackInverted = inverted;
+        if (applyNow && _isInitialized) {
+            if (isRackLifted) {
+                liftRack();
+            } else {
+                engageRack();
+            }
+        } else if (!_isInitialized) {
+            currentRackAngle = isRackLifted ? rackAngleReleased : rackAngleEngaged;
+        }
+    }
+
+    uint8_t getRackAngleEngaged() const { return rackAngleEngaged; }
+    uint8_t getRackAngleReleased() const { return rackAngleReleased; }
+    bool isRackInverted() const { return rackInverted; }
+    uint8_t getCurrentRackAngle() const { return currentRackAngle; }
+    int getCurrentRackPulseUs() const { return rackAngleToPulseUs(currentRackAngle); }
 
     // Desativa o pulso do servo para relaxar o motor e evitar aquecimento em stall
     void relaxRack() {
@@ -479,6 +517,7 @@ public:
         currentRudder = rud;
         currentWinchPulseUs = winchUs;
         isRackLifted = rackLifted;
+        currentRackAngle = rackLifted ? rackAngleReleased : rackAngleEngaged;
         anchorState = anchorSt;
         currentDepthCm = depth;
         float cmPerPulse = (3.14159265f * (anchorDrumDiamMm / 10.0f)) / (float)(anchorPulsesPerRev > 0 ? anchorPulsesPerRev : 1);
@@ -503,6 +542,10 @@ private:
     float gravityDropSpeedCmPerSec;
     uint32_t lastWinchUpdate;
     bool isRackLifted;
+    uint8_t rackAngleEngaged;
+    uint8_t rackAngleReleased;
+    bool rackInverted;
+    uint8_t currentRackAngle;
 
     float anchorDrumDiamMm;
     uint8_t anchorPulsesPerRev;

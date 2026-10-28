@@ -8,9 +8,9 @@ class GPSTracker {
 public:
     GPSTracker(HardwareSerial& port = Serial0) 
         : gpsSerial(port), isHwEnabled(false),
-          currentRxPin(17), currentTxPin(16),
-          currentBaud(GPS_BAUDRATE), isLocked(false),
-          lastScanTime(0), scanStep(0), rawIdx(0),
+          currentRxPin(PIN_LAFVIN_GPS_RX), currentTxPin(PIN_LAFVIN_GPS_TX),
+          currentBaud(GPS_BAUDRATE), isLocked(true),
+          lastScanTime(0), lastRxByteTime(0), scanStep(0), rawIdx(0),
           totalBytesReceived(0),
           manualLat(0.0), manualLng(0.0), manualSpeed(0.0f),
           manualHeading(0.0f), manualSats(0), manualFix(false),
@@ -19,17 +19,25 @@ public:
         lastValidSentence[0] = '\0';
     }
 
-    void begin(bool enableHw = true, uint32_t baud = GPS_BAUDRATE, int rxPin = 17, int txPin = 16) {
+    void begin(bool enableHw = true, uint32_t baud = GPS_BAUDRATE, int rxPin = PIN_LAFVIN_GPS_RX, int txPin = PIN_LAFVIN_GPS_TX) {
         isHwEnabled = enableHw;
         currentBaud = baud;
         currentRxPin = rxPin;
         currentTxPin = txPin;
-        isLocked = false;
+        isLocked = true;
         scanStep = 0;
         rawIdx = 0;
         totalBytesReceived = 0;
         lastScanTime = millis();
+        lastRxByteTime = millis();
         if (isHwEnabled) {
+            // Desacopla UART0 padrão do ESP32-C6 (TX=16, RX=17) e liberta GPIO 16 para ser RX de entrada
+            gpsSerial.end();
+            delay(50);
+            pinMode(currentRxPin, INPUT_PULLUP);
+            pinMode(currentTxPin, OUTPUT);
+            digitalWrite(currentTxPin, HIGH);
+            gpsSerial.setRxBufferSize(1024);
             gpsSerial.begin(currentBaud, SERIAL_8N1, currentRxPin, currentTxPin);
             Serial.printf("[GPS] Serial0 UART ativo: RX=GPIO%d, TX=GPIO%d (%lu baud)\n",
                           currentRxPin, currentTxPin, (unsigned long)currentBaud);
@@ -39,25 +47,35 @@ public:
     void update() {
         if (!isHwEnabled) return;
 
+        static uint32_t lastDiagMs = 0;
+        static uint32_t lastBytesCount = 0;
+        static uint32_t lastNmeaPrint = 0;
+
         while (gpsSerial.available() > 0) {
             char c = (char)gpsSerial.read();
             totalBytesReceived++;
+            lastRxByteTime = millis();
 
-            // Captura de texto NMEA raw para validação imediata
+            // Captura e imprime sentenças NMEA
             if (c == '$') {
                 rawIdx = 0;
                 rawSentence[rawIdx++] = c;
             } else if (rawIdx > 0 && rawIdx < sizeof(rawSentence) - 1) {
                 if (c == '\n' || c == '\r') {
                     rawSentence[rawIdx] = '\0';
-                    if (rawIdx >= 6 && rawSentence[0] == '$' && 
-                        (rawSentence[1] == 'G' || rawSentence[1] == 'P' || rawSentence[1] == 'B')) {
+                    if (rawIdx >= 6 && rawSentence[0] == '$') {
                         strncpy(lastValidSentence, rawSentence, sizeof(lastValidSentence) - 1);
                         lastValidSentence[sizeof(lastValidSentence) - 1] = '\0';
-                        if (!isLocked) {
+                        if (millis() - lastNmeaPrint >= 1000) {
+                            lastNmeaPrint = millis();
+                            Serial.printf("[NMEA] %s\n", lastValidSentence);
+                        }
+                        if (!isLocked && (strncmp(rawSentence, "$GN", 3) == 0 ||
+                                          strncmp(rawSentence, "$GP", 3) == 0 ||
+                                          strncmp(rawSentence, "$BD", 3) == 0)) {
                             isLocked = true;
-                            Serial.printf("[GPS] ★★★ NMEA detectado: %s (RX=GPIO%d @ %lu baud) ★★★\n",
-                                          lastValidSentence, currentRxPin, (unsigned long)currentBaud);
+                            Serial.printf("\n★★★ GPS NMEA CONFIRMADO: RX=GPIO%d, TX=GPIO%d @ %lu baud ★★★\n\n",
+                                          currentRxPin, currentTxPin, (unsigned long)currentBaud);
                         }
                     }
                     rawIdx = 0;
@@ -67,27 +85,44 @@ public:
             }
 
             gps.encode(c);
+            if (!isLocked && (gps.sentencesWithFix() > 0 || gps.location.isValid() || gps.passedChecksum() >= 2)) {
+                isLocked = true;
+                Serial.printf("\n★★★ GPS FIX DETETADO: RX=GPIO%d, TX=GPIO%d @ %lu baud ★★★\n\n",
+                              currentRxPin, currentTxPin, (unsigned long)currentBaud);
+            }
         }
 
-        // Se após 6 segundos não detetar NMEA válido na configuração padrão (RX=17 @ 115200),
-        // testa as alternativas (9600 baud ou pinos invertidos)
-        if (!isLocked) {
-            uint32_t now = millis();
-            if (now - lastScanTime >= 6000) {
-                lastScanTime = now;
-                scanStep = (scanStep + 1) % 4;
-                switch (scanStep) {
-                    case 0: currentRxPin = 17; currentTxPin = 16; currentBaud = 115200; break;
-                    case 1: currentRxPin = 17; currentTxPin = 16; currentBaud = 9600; break;
-                    case 2: currentRxPin = 16; currentTxPin = 17; currentBaud = 115200; break;
-                    case 3: currentRxPin = 16; currentTxPin = 17; currentBaud = 9600; break;
-                }
-                rawIdx = 0;
-                gpsSerial.end();
-                delay(50);
-                gpsSerial.begin(currentBaud, SERIAL_8N1, currentRxPin, currentTxPin);
-                Serial.printf("[GPS] A tentar alternativa: RX=GPIO%d, TX=GPIO%d a %lu baud...\n",
-                              currentRxPin, currentTxPin, (unsigned long)currentBaud);
+        uint32_t now = millis();
+
+        // Watchdog de recuperação: se passarem >5s sem receber bytes, re-inicializa UART0
+        if (now - lastRxByteTime >= 5000) {
+            lastRxByteTime = now;
+            gpsSerial.end();
+            delay(50);
+            pinMode(currentRxPin, INPUT_PULLUP);
+            pinMode(currentTxPin, OUTPUT);
+            digitalWrite(currentTxPin, HIGH);
+            gpsSerial.setRxBufferSize(1024);
+            gpsSerial.begin(currentBaud, SERIAL_8N1, currentRxPin, currentTxPin);
+            Serial.printf("[GPS] Watchdog: UART reinicializada RX=GPIO%d, TX=GPIO%d (%lu baud)\n",
+                          currentRxPin, currentTxPin, (unsigned long)currentBaud);
+        }
+
+        // Relatório de status a cada 2.0s
+        if (now - lastDiagMs >= 2000) {
+            lastDiagMs = now;
+            uint32_t dBytes = totalBytesReceived - lastBytesCount;
+            lastBytesCount = totalBytesReceived;
+
+            if (hasFix()) {
+                Serial.printf("[GPS] ★ FIX 3D: Sats=%u | Lat=%.6f Lng=%.6f | Vel=%.1f nós | Chars=%lu | CS_OK=%lu\n",
+                              gps.satellites.value(), gps.location.lat(), gps.location.lng(),
+                              gps.speed.knots(), (unsigned long)gps.charsProcessed(), (unsigned long)gps.passedChecksum());
+            } else {
+                Serial.printf("[GPS] A procurar satelites... | Sats=%u | Bytes=%lu (+%lu) | CS_OK=%lu\n",
+                              gps.satellites.isValid() ? gps.satellites.value() : 0,
+                              (unsigned long)totalBytesReceived, (unsigned long)dBytes,
+                              (unsigned long)gps.passedChecksum());
             }
         }
     }
@@ -104,10 +139,10 @@ public:
 
     bool hasFix() {
         if (isHwEnabled && (isLocked || gps.charsProcessed() > 0)) {
-            return gps.location.isValid() && gps.location.age() < 3000;
+            return gps.location.isValid() && gps.location.age() < 5000;
         }
         if (hasManualData) return manualFix;
-        return gps.location.isValid() && gps.location.age() < 3000;
+        return gps.location.isValid() && gps.location.age() < 5000;
     }
 
     double getLatitude() {
@@ -152,10 +187,10 @@ public:
 
     uint8_t getSatellites() {
         if (isHwEnabled && (isLocked || gps.charsProcessed() > 0)) {
-            return gps.satellites.isValid() ? gps.satellites.value() : 0;
+            return (gps.satellites.isValid() && gps.satellites.age() < 5000) ? (uint8_t)gps.satellites.value() : 0;
         }
         if (hasManualData) return manualSats;
-        return gps.satellites.isValid() ? gps.satellites.value() : 0;
+        return (gps.satellites.isValid() && gps.satellites.age() < 5000) ? (uint8_t)gps.satellites.value() : 0;
     }
 
     uint8_t getFixQuality() {
@@ -246,6 +281,7 @@ private:
     uint8_t currentRateHz = 1;
     bool isLocked;
     uint32_t lastScanTime;
+    uint32_t lastRxByteTime;
     uint8_t scanStep;
     char rawSentence[128];
     char lastValidSentence[128];

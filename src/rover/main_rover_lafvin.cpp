@@ -130,6 +130,7 @@ void setup() {
     battery.setCellCount(roverConfig.getBatteryCells());
     battery.setCapacityMah(roverConfig.getBatteryCapacityMah());
     actuators.setAnchorCalibration(roverConfig.getAnchorDrumDiamMm(), roverConfig.getAnchorPulsesPerRev());
+    actuators.setRackConfig(roverConfig.getRackAngleEngaged(), roverConfig.getRackAngleReleased(), roverConfig.isRackInverted(), false);
     webServer.setCommandQueueCallback([](const char* cmd) {
         if (cmd && strlen(cmd) > 0) {
             if (strncmp(cmd, "CMD:OTA:", 8) == 0) {
@@ -225,13 +226,13 @@ void setup() {
     joyCenterY = (int)(sumY / 30);
     printLog("[JOYSTICK] Auto-calibracao de centro concluida: X0=%d, Y0=%d\n", joyCenterX, joyCenterY);
 
-    // 9. Configurar GPS Quectel LC29H no Header J2 (Pad 9=GPIO 17 [TX do GPS], Pad 8=GPIO 16 [RX do GPS])
-    gps.begin(true, GPS_BAUDRATE, 17, 16);
-    printLog("[GPS ] Quectel LC29H inicializado no Lafvin (RX=GPIO 17, TX=GPIO 16 a %d baud)\n",
-             GPS_BAUDRATE);
-
     roverDisplay.bootLogf(UI_GREEN, 100, "[BOOT] Sistema Pronto!");
-    roverDisplay.endBootScreen(1200);
+    roverDisplay.endBootScreen(600);
+
+    // 9. Configurar GPS Quectel LC29H no Header J2 (RX=GPIO 16, TX=GPIO 17)
+    gps.begin(true, GPS_BAUDRATE, PIN_LAFVIN_GPS_RX, PIN_LAFVIN_GPS_TX);
+    printLog("[GPS ] Quectel LC29H inicializado no Lafvin (RX=GPIO %d, TX=GPIO %d a %d baud)\n",
+             PIN_LAFVIN_GPS_RX, PIN_LAFVIN_GPS_TX, GPS_BAUDRATE);
 }
 
 void loop() {
@@ -262,9 +263,15 @@ void loop() {
         int rawX = analogRead(PIN_JOYSTICK_X);
         int rawY = analogRead(PIN_JOYSTICK_Y);
 
-        int deadband = 100; // Zona morta equilibrada
-        int diffX = rawX - joyCenterX;
-        int diffY = rawY - joyCenterY;
+        static float filtX = 0, filtY = 0;
+        static bool filtInit = false;
+        if (!filtInit) { filtX = rawX; filtY = rawY; filtInit = true; }
+        filtX = 0.75f * filtX + 0.25f * (float)rawX;
+        filtY = 0.75f * filtY + 0.25f * (float)rawY;
+
+        int deadband = 500; // Zona morta com filtro anti-ruído ADC
+        int diffX = (int)filtX - joyCenterX;
+        int diffY = (int)filtY - joyCenterY;
 
         static int maxSeenRight = 1450;
         static int maxSeenLeft  = 1450;
@@ -301,13 +308,12 @@ void loop() {
             joyActive = true;
             actuators.setRudder((int8_t)rud);
             actuators.setThrottle((int8_t)thr);
-            if (abs(rud - lastSentRud) >= 2 || abs(thr - lastSentThr) >= 2) {
+            if (abs(rud - lastSentRud) >= 3 || abs(thr - lastSentThr) >= 3) {
                 lastSentRud = rud;
                 lastSentThr = thr;
                 interSerial.printf("CMD:JOY:%d:%d\n", thr, rud);
                 interSerial.flush();
                 snprintf(queuedWebCommand, sizeof(queuedWebCommand), "CMD:JOY:%d:%d", thr, rud);
-                printLog("[JOYSTICK] Ativo (X=%d Y=%d) -> Leme: %d%% | Motor: %d%%\n", rawX, rawY, rud, thr);
             }
         } else if (joyActive) {
             joyActive = false;
@@ -318,7 +324,6 @@ void loop() {
             interSerial.println("CMD:JOY:0:0");
             interSerial.flush();
             snprintf(queuedWebCommand, sizeof(queuedWebCommand), "CMD:JOY:0:0");
-            printLog("[JOYSTICK] Centro (X=%d Y=%d) -> Leme: 0% | Motor: 0%\n", rawX, rawY);
         }
     }
 
@@ -374,6 +379,12 @@ void loop() {
                     printLog("[LAFVIN ROVER] ★ Versao Coprocessador C6: %s\n", rxBuf + 9);
                     webServer.setC6Version(rxBuf + 9);
                     roverDisplay.setC6Version(rxBuf + 9);
+                    // Sincronizar calibração da cremalheira e âncora com o Coprocessador C6
+                    interSerial.printf("CMD:RACK_CFG:%u:%u:%d\n",
+                                       roverConfig.getRackAngleEngaged(),
+                                       roverConfig.getRackAngleReleased(),
+                                       roverConfig.isRackInverted() ? 1 : 0);
+                    interSerial.flush();
                 } else if (strncmp(rxBuf, "PONG:", 5) == 0) {
                     lastUartRxTime = now;
                     uint32_t seq = 0, batMv = 0, batPct = 0, sats = 0, fix = 0, motSt = 0, depth = 0;

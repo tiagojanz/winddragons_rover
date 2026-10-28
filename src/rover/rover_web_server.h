@@ -345,6 +345,7 @@ private:
         _server.on("/api/control/action", [this]() { handleApiAction(); });
         _server.on("/api/control/winch", [this]() { handleApiControlWinch(); });
         _server.on("/api/control/anchor/config", [this]() { handleApiAnchorConfig(); });
+        _server.on("/api/control/rack/config", [this]() { handleApiRackConfig(); });
 
         // Gestão do Cartão SD
         _server.on("/api/sd/list", [this]() { handleApiSdList(); });
@@ -829,6 +830,51 @@ private:
         html += "</div>";
         html += "</div></div>";
 
+        // Card 4.1: Calibração do Travão da Cremalheira (Sweet Spot de Encosto, Ponto Livre e Direção)
+        html += "<div class='card' style='border:1px solid #10b981;'>";
+        html += "<div class='card-title' style='display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;'>";
+        html += "<span><i class='fa-solid fa-sliders'></i> Calibração do Servo \"Travão da Cremalheira\" (GPIO 21)</span>";
+        html += "<span id='rackDirBadge' class='badge' style='background:" + String(_config.isRackInverted() ? "#065f46;color:#6ee7b7;" : "#1e293b;color:var(--muted);") + "'>" + String(_config.isRackInverted() ? "DIREÇÃO: INVERTIDA" : "DIREÇÃO: NORMAL") + "</span>";
+        html += "</div>";
+        html += "<p style='color:var(--muted);font-size:0.85rem;margin-bottom:12px;'>Ajuste a direção de atuação do servo, o <b>sweet spot de encosto da cremalheira</b> (travada) e o <b>ponto onde fica livre</b> (solta).</p>";
+        html += "<div style='display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;margin-bottom:14px;'>";
+        html += "<div><label style='display:block;font-size:0.8rem;color:var(--muted);margin-bottom:4px;'>Sweet Spot Encosto / Travada (°):</label>";
+        html += "<div style='display:flex;gap:6px;'><input type='number' id='cfg_rack_engaged' min='0' max='180' value='" + String(_config.getRackAngleEngaged()) + "' style='width:95px;margin:0;'>";
+        html += "<button type='button' onclick='testRackPoint(\"engaged\")' class='btn btn-secondary' style='padding:8px 12px;'>Testar</button></div></div>";
+        html += "<div><label style='display:block;font-size:0.8rem;color:var(--muted);margin-bottom:4px;'>Ponto Livre / Solta (°):</label>";
+        html += "<div style='display:flex;gap:6px;'><input type='number' id='cfg_rack_released' min='0' max='180' value='" + String(_config.getRackAngleReleased()) + "' style='width:95px;margin:0;'>";
+        html += "<button type='button' onclick='testRackPoint(\"released\")' class='btn btn-secondary' style='padding:8px 12px;'>Testar</button></div></div>";
+        html += "<div style='display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(15,23,42,0.6);border:1px solid #334155;border-radius:8px;'>";
+        html += "<input type='checkbox' id='cfg_rack_inverted' " + String(_config.isRackInverted() ? "checked" : "") + " onchange='saveRackConfig()' style='width:18px;height:18px;margin:0;cursor:pointer;'>";
+        html += "<label for='cfg_rack_inverted' style='cursor:pointer;font-size:0.88rem;font-weight:600;'>Inverter Direção do Servo</label></div>";
+        html += "<button type='button' onclick='saveRackConfig()' class='btn btn-primary'><i class='fa-solid fa-floppy-disk'></i> Guardar Calibração Cremalheira</button>";
+        html += "</div>";
+        html += "<div style='background:rgba(15,23,42,0.6);border:1px solid #334155;border-radius:8px;padding:12px;'>";
+        html += "<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;'>";
+        html += "<span class='stat-label'>Teste / Pesquisa de Sweet Spot Ao Vivo (0° a 180°):</span>";
+        html += "<span id='rackLiveAngleVal' style='font-weight:700;color:var(--primary);'>" + String(_actuators.getCurrentRackAngle()) + "° (" + String(_actuators.getCurrentRackPulseUs()) + " µs)</span></div>";
+        html += "<input type='range' id='rackTestSlider' min='0' max='180' step='1' value='" + String(_actuators.getCurrentRackAngle()) + "' class='slider' oninput='onRackTestSlide(this.value)'>";
+        html += "<div class='btn-group' style='margin-top:10px;'>";
+        html += "<button type='button' onclick='stepRackTest(-5)' class='btn btn-secondary'>-5°</button>";
+        html += "<button type='button' onclick='stepRackTest(-1)' class='btn btn-secondary'>-1°</button>";
+        html += "<button type='button' onclick='stepRackTest(1)' class='btn btn-secondary'>+1°</button>";
+        html += "<button type='button' onclick='stepRackTest(5)' class='btn btn-secondary'>+5°</button>";
+        html += "<button type='button' onclick='useCurrentAsRack(\"engaged\")' class='btn btn-secondary' style='background:#065f46;color:#fff;'>Usar Atual como Encosto</button>";
+        html += "<button type='button' onclick='useCurrentAsRack(\"released\")' class='btn btn-secondary' style='background:#92400e;color:#fff;'>Usar Atual como Livre</button>";
+        html += "<button type='button' onclick='relaxRackServo()' class='btn btn-secondary' style='background:#475569;color:#fff;'>Relaxar Servo</button>";
+        html += "</div></div></div>";
+
+        // Card 4.2: Calibração do Tambor do Guincho (Sensor Hall DRV5032 - GPIO 20)
+        html += "<div class='card' style='border:1px solid #0284c7;'>";
+        html += "<div class='card-title'><span><i class='fa-solid fa-compass-drafting'></i> Calibração do Tambor do Guincho (Sensor Hall DRV5032 - GPIO 20)</span></div>";
+        html += "<div style='display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;'>";
+        html += "<div><label style='display:block;font-size:0.8rem;color:var(--muted);margin-bottom:4px;'>Diâmetro do Tambor (mm):</label>";
+        html += "<input type='number' id='cfg_drum_diam' step='0.5' min='5' max='500' value='" + String(_config.getAnchorDrumDiamMm(), 1) + "' style='width:130px;margin:0;'></div>";
+        html += "<div><label style='display:block;font-size:0.8rem;color:var(--muted);margin-bottom:4px;'>Pulsos por Volta (Ímanes):</label>";
+        html += "<input type='number' id='cfg_pulses_per_rev' min='1' max='24' value='" + String(_config.getAnchorPulsesPerRev()) + "' style='width:110px;margin:0;'></div>";
+        html += "<button type='button' onclick='saveAnchorConfig()' class='btn btn-primary'><i class='fa-solid fa-floppy-disk'></i> Guardar Calibração do Tambor</button>";
+        html += "</div></div>";
+
         // Card 5: Ações de Gravação & Gestão
         html += "<div class='card' style='border-color:var(--primary);'>";
         html += "<div class='card-title'><span><i class='fa-solid fa-floppy-disk'></i> Gravar e Sincronizar</span></div>";
@@ -845,7 +891,7 @@ private:
 
         // Script interativo
         html += "<script>";
-        html += "let slideTimer=null;";
+        html += "let slideTimer=null,rackTimer=null;";
         html += "function onBrightSlide(v){";
         html += "  document.getElementById('brightDisplayVal').innerText=v+'%';";
         html += "  document.getElementById('brightValBadge').innerText=v+'%';";
@@ -880,16 +926,32 @@ private:
         html += "  d.innerHTML=(isErr?'<i class=\"fa-solid fa-circle-xmark\"></i> ':'<i class=\"fa-solid fa-circle-check\"></i> ')+msg;";
         html += "  setTimeout(()=>{d.style.display='none';},6000);";
         html += "}";
+        html += "function onRackTestSlide(v){const el=document.getElementById('rackLiveAngleVal');if(el)el.innerText=v+'°';if(rackTimer)clearTimeout(rackTimer);rackTimer=setTimeout(()=>{fetch('/api/control/rack/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({test_angle:parseInt(v)})});},40);}";
+        html += "function stepRackTest(d){const s=document.getElementById('rackTestSlider');if(!s)return;let v=Math.max(0,Math.min(180,(parseInt(s.value)||0)+d));s.value=v;onRackTestSlide(v);}";
+        html += "function testRackPoint(which){const id=which==='engaged'?'cfg_rack_engaged':'cfg_rack_released';const v=parseInt(document.getElementById(id).value)||0;const s=document.getElementById('rackTestSlider');if(s)s.value=v;onRackTestSlide(v);}";
+        html += "function useCurrentAsRack(which){const s=document.getElementById('rackTestSlider');if(!s)return;const id=which==='engaged'?'cfg_rack_engaged':'cfg_rack_released';document.getElementById(id).value=s.value;saveRackConfig();}";
+        html += "function relaxRackServo(){fetch('/api/control/action',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:13})}).then(r=>r.json()).then(res=>showStatus(res.msg||'Servo relaxado!'));}";
+        html += "function saveRackConfig(){const eng=parseInt(document.getElementById('cfg_rack_engaged').value)||0;const rel=parseInt(document.getElementById('cfg_rack_released').value)||90;const inv=document.getElementById('cfg_rack_inverted').checked;";
+        html += "fetch('/api/control/rack/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({angle_engaged:eng,angle_released:rel,inverted:inv})})";
+        html += ".then(r=>r.json()).then(res=>{showStatus(res.msg||'Calibração da cremalheira guardada!');const b=document.getElementById('rackDirBadge');if(b){b.innerText=inv?'DIREÇÃO: INVERTIDA':'DIREÇÃO: NORMAL';b.style.background=inv?'#065f46':'#1e293b';b.style.color=inv?'#6ee7b7':'var(--muted)';}});}";
+        html += "function saveAnchorConfig(){const d=parseFloat(document.getElementById('cfg_drum_diam').value)||30.0;const p=parseInt(document.getElementById('cfg_pulses_per_rev').value)||1;";
+        html += "fetch('/api/control/anchor/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({diam_mm:d,pulses_per_rev:p})})";
+        html += ".then(r=>r.json()).then(res=>showStatus(res.msg||'Calibração do tambor guardada!'));}";
         html += "function saveAllConfig(e){";
         html += "  e.preventDefault();";
         html += "  const id=parseInt(document.getElementById('cfg_id').value);";
         html += "  const ssid=document.getElementById('cfg_ssid').value;";
         html += "  const pass=document.getElementById('cfg_pass').value;";
         html += "  const bright=parseInt(document.getElementById('cfg_bright').value);";
+        html += "  const rEng=parseInt(document.getElementById('cfg_rack_engaged')?.value??0);";
+        html += "  const rRel=parseInt(document.getElementById('cfg_rack_released')?.value??90);";
+        html += "  const rInv=document.getElementById('cfg_rack_inverted')?.checked??true;";
+        html += "  const dDiam=parseFloat(document.getElementById('cfg_drum_diam')?.value??30.0);";
+        html += "  const pRev=parseInt(document.getElementById('cfg_pulses_per_rev')?.value??1);";
         html += "  fetch('/api/rover/config',{";
         html += "    method:'POST',";
         html += "    headers:{'Content-Type':'application/json'},";
-        html += "    body:JSON.stringify({rover_id:id,ap_ssid:ssid,ap_password:pass,screen_brightness:bright})";
+        html += "    body:JSON.stringify({rover_id:id,ap_ssid:ssid,ap_password:pass,screen_brightness:bright,rack_angle_engaged:rEng,rack_angle_released:rRel,rack_inverted:rInv,anchor_drum_diam_mm:dDiam,anchor_pulses_per_rev:pRev})";
         html += "  }).then(r=>r.json()).then(res=>{";
         html += "    if(res.success){";
         html += "      showStatus(res.msg||'Configurações guardadas com sucesso no ficheiro /config.json!');";
@@ -1200,40 +1262,15 @@ private:
 
         // Card: Guincho de Âncora & Cremalheira (Modo ON / OFF e Direto)
         html += "<div class='card'>";
-        html += "<div class='card-title'><i class='fa-solid fa-anchor'></i> Guincho da Âncora (GPIO 19) & Trinco (GPIO 23)</div>";
+        html += "<div class='card-title'><i class='fa-solid fa-anchor'></i> Guincho da Âncora (GPIO 23) & Travão da Cremalheira (GPIO 21)</div>";
         html += "<div class='btn-group'>";
         html += "<button onclick='sendAction(4)' class='btn btn-primary'><i class='fa-solid fa-play'></i> LIGAR Puxar (1800 µs)</button>";
         html += "<button onclick='sendAction(14)' class='btn btn-secondary'><i class='fa-solid fa-rotate-left'></i> LIGAR Descer (1200 µs)</button>";
         html += "<button onclick='cutWinchSignal()' class='btn btn-danger' style='background:#dc2626;font-weight:700;'><i class='fa-solid fa-power-off'></i> CORTAR SINAL (OFF / 0V)</button>";
-        html += "<button onclick='sendAction(6)' class='btn btn-secondary'><i class='fa-solid fa-lock'></i> Alternar Trinco</button>";
-        html += "<button onclick='sendAction(13)' class='btn btn-secondary' style='background:#475569;color:#fff;'><i class='fa-solid fa-feather'></i> Relaxar Trinco</button>";
-        html += "</div></div>";
-
-        // Card: Calibração de Frequência / Neutro do Guincho (GPIO 19)
-        html += "<div class='card' style='border:1px solid #0284c7;'>";
-        html += "<div class='card-title'><i class='fa-solid fa-sliders'></i> Calibração de Frequência / Controlo ON-OFF (GPIO 19)</div>";
-        html += "<p style='color:var(--muted);font-size:0.85rem;margin-bottom:12px;'>Arraste o slider para testar pulsos PWM, ou clique no botão vermelho para <b>cortar por completo o sinal (0V)</b>.</p>";
-        
-        html += "<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;'>";
-        html += "<span class='stat-label'>Sinal PWM no GPIO 19:</span>";
-        html += "<span id='winchVal' style='font-size:1.6rem;font-weight:700;color:var(--primary);'>" + String(_actuators.getWinchPulseUs() > 0 ? (String(_actuators.getWinchPulseUs()) + " µs (ON)") : "OFF (0V - Cortado)") + "</span>";
-        html += "</div>";
-
-        html += "<input type='range' id='winchSlider' min='1000' max='2000' step='1' value='" + String(_actuators.getWinchPulseUs() > 0 ? _actuators.getWinchPulseUs() : 1500) + "' class='slider' oninput='onWinchInput(this.value)' onchange='sendWinchPulse(this.value)'>";
-
-        html += "<div class='btn-group' style='margin-top:12px;'>";
-        html += "<button onclick='stepWinch(-50)' class='btn btn-secondary'>-50 µs</button>";
-        html += "<button onclick='stepWinch(-5)' class='btn btn-secondary'>-5 µs</button>";
-        html += "<button onclick='stepWinch(-1)' class='btn btn-secondary'>-1 µs</button>";
-        html += "<button onclick='setWinchDirect(1500)' class='btn btn-secondary' style='background:#334155;color:#fff;'>1500 µs</button>";
-        html += "<button onclick='stepWinch(1)' class='btn btn-secondary'>+1 µs</button>";
-        html += "<button onclick='stepWinch(5)' class='btn btn-secondary'>+5 µs</button>";
-        html += "<button onclick='stepWinch(50)' class='btn btn-secondary'>+50 µs</button>";
-        html += "</div>";
-
-        html += "<div class='btn-group' style='margin-top:14px;'>";
-        html += "<button onclick='cutWinchSignal()' class='btn btn-danger' style='background:#ef4444;font-size:1rem;padding:12px 20px;'><i class='fa-solid fa-power-off'></i> CORTAR SINAL COMPLETO (OFF / 0V)</button>";
-        html += "<button onclick='saveCurrentAsNeutral()' class='btn btn-primary' style='background:#059669;'><i class='fa-solid fa-check'></i> Guardar como Neutro Padrão</button>";
+        html += "<button onclick='sendAction(16)' class='btn btn-primary' style='background:#059669;color:#fff;'><i class='fa-solid fa-lock'></i> Travar Cremalheira (Encosto)</button>";
+        html += "<button onclick='sendAction(17)' class='btn btn-secondary' style='background:#d97706;color:#fff;'><i class='fa-solid fa-lock-open'></i> Libertar Cremalheira (Livre)</button>";
+        html += "<button onclick='sendAction(6)' class='btn btn-secondary'><i class='fa-solid fa-rotate'></i> Alternar Travão</button>";
+        html += "<button onclick='sendAction(13)' class='btn btn-secondary' style='background:#475569;color:#fff;'><i class='fa-solid fa-feather'></i> Relaxar Servo</button>";
         html += "</div></div>";
 
         // Card: Contador de Cabo da Âncora (Sensor Hall DRV5032)
@@ -1248,16 +1285,9 @@ private:
         html += "<div class='stat-box'><div class='stat-label'>Total de Pulsos</div><div class='stat-value' id='hallPulsesVal' style='font-size:1.4rem;font-weight:700;'>" + String(_actuators.getAnchorHallPulses()) + "</div></div>";
         html += "<div class='stat-box'><div class='stat-label'>Perímetro / Volta</div><div class='stat-value' id='hallCircVal' style='color:var(--yellow);font-size:1.2rem;font-weight:600;'>" + String((3.14159f * _config.getAnchorDrumDiamMm() / 10.0f), 1) + " cm</div></div>";
         html += "</div>";
-        html += "<div style='background:rgba(15,23,42,0.6);border:1px solid #334155;border-radius:8px;padding:14px;'>";
-        html += "<div style='font-weight:600;font-size:0.95rem;margin-bottom:10px;color:var(--text);'><i class='fa-solid fa-gear'></i> Calibração do Tambor do Guincho</div>";
-        html += "<div style='display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;'>";
-        html += "<div><label style='display:block;font-size:0.8rem;color:var(--muted);margin-bottom:4px;'>Diâmetro do Tambor (mm):</label>";
-        html += "<input type='number' id='cfgDrumDiam' step='0.5' min='5' max='500' value='" + String(_config.getAnchorDrumDiamMm(), 1) + "' style='background:#0f172a;border:1px solid #334155;color:#fff;padding:8px 12px;border-radius:6px;width:130px;font-size:1rem;'></div>";
-        html += "<div><label style='display:block;font-size:0.8rem;color:var(--muted);margin-bottom:4px;'>Pulsos por Volta (Ímanes):</label>";
-        html += "<input type='number' id='cfgPulsesPerRev' min='1' max='24' value='" + String(_config.getAnchorPulsesPerRev()) + "' style='background:#0f172a;border:1px solid #334155;color:#fff;padding:8px 12px;border-radius:6px;width:110px;font-size:1rem;'></div>";
-        html += "<button type='button' onclick='saveAnchorConfig()' class='btn btn-primary' style='padding:10px 18px;'><i class='fa-solid fa-floppy-disk'></i> Guardar Calibração</button>";
+        html += "<div class='btn-group'>";
         html += "<button type='button' onclick='zeroAnchorCounter()' class='btn btn-secondary' style='background:#0284c7;color:#fff;'><i class='fa-solid fa-rotate-left'></i> Zerar Contador (0.0 m)</button>";
-        html += "</div></div></div>";
+        html += "</div></div>";
 
         // Card: Modos Operacionais & Emergência
         html += "<div class='card'>";
@@ -1292,19 +1322,9 @@ private:
         html += "function sendAction(a){fetch('/api/control/action',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:a})})";
         html += ".then(r=>r.json()).then(res=>{if(res&&res.msg)showFeedback(res.msg);});}";
         html += "function zeroAnchorCounter(){sendAction(15);}";
-        html += "function saveAnchorConfig(){const d=parseFloat(document.getElementById('cfgDrumDiam').value)||30.0;const p=parseInt(document.getElementById('cfgPulsesPerRev').value)||1;";
-        html += "fetch('/api/control/anchor/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({diam_mm:d,pulses_per_rev:p})})";
-        html += ".then(r=>r.json()).then(res=>showFeedback(res.msg||'Calibração guardada!'));}";
         html += "function sendEmergencyStop(){setThrottle(0);setRudder(0);sendAction(2);}";
-        html += "let winchTimer=null;";
-        html += "function onWinchInput(v){document.getElementById('winchVal').innerText=v+' µs (ON)';if(winchTimer)clearTimeout(winchTimer);winchTimer=setTimeout(()=>{sendWinchPulse(v);},40);}";
-        html += "function sendWinchPulse(v,saveNeutral=false){fetch('/api/control/winch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pulseUs:parseInt(v),set_neutral:saveNeutral})})";
-        html += ".then(r=>r.json()).then(res=>{if(saveNeutral){showFeedback('Neutro guardado: '+res.neutralUs+' µs');}else if(parseInt(v)===0){showFeedback('Sinal cortado (OFF)');}else{document.getElementById('winchVal').innerText=v+' µs (ON)';}});};";
-        html += "function stepWinch(delta){const s=document.getElementById('winchSlider');let val=parseInt(s.value)+delta;if(val<1000)val=1000;if(val>2000)val=2000;s.value=val;document.getElementById('winchVal').innerText=val+' µs (ON)';sendWinchPulse(val);}";
-        html += "function setWinchDirect(val){const s=document.getElementById('winchSlider');s.value=val;document.getElementById('winchVal').innerText=val+' µs (ON)';sendWinchPulse(val);}";
         html += "function cutWinchSignal(){sendAction(5);fetch('/api/control/winch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pulseUs:0})})";
-        html += ".then(r=>r.json()).then(res=>{document.getElementById('winchVal').innerText='OFF (0V - Cortado)';showFeedback('Sinal PWM cortado (0V / OFF)');});}";
-        html += "function stopWinchCalib(){cutWinchSignal();}";
+        html += ".then(r=>r.json()).then(res=>{showFeedback('Sinal PWM cortado (0V / OFF)');});}";
         html += "setInterval(()=>{fetch('/api/status').then(r=>r.json()).then(data=>{const a=data.actuators;if(!a)return;";
         html += "document.getElementById('curMotor').innerText=a.motor_status_str||'';";
         html += "document.getElementById('curAnchor').innerText=a.anchor_status_str||'';";
@@ -1313,8 +1333,7 @@ private:
         html += "const hd=document.getElementById('hallDepthVal');if(hd&&a.anchor_depth_m!==undefined){hd.innerText=a.anchor_depth_m.toFixed(2)+' m ('+(a.anchor_depth_cm||0)+' cm)';}";
         html += "const hr=document.getElementById('hallRevsVal');if(hr&&a.anchor_revs!==undefined){hr.innerText=a.anchor_revs.toFixed(2);}";
         html += "const hp=document.getElementById('hallPulsesVal');if(hp&&a.anchor_pulses!==undefined){hp.innerText=a.anchor_pulses;}";
-        html += "const hc=document.getElementById('hallCircVal');if(hc&&a.anchor_drum_diam_mm!==undefined){hc.innerText=(Math.PI*a.anchor_drum_diam_mm/10.0).toFixed(1)+' cm';const di=document.getElementById('cfgDrumDiam');if(di&&!di.matches(':focus'))di.value=a.anchor_drum_diam_mm;}";
-        html += "const pi=document.getElementById('cfgPulsesPerRev');if(pi&&a.anchor_pulses_per_rev!==undefined&&!pi.matches(':focus'))pi.value=a.anchor_pulses_per_rev;";
+        html += "const hc=document.getElementById('hallCircVal');if(hc&&a.anchor_drum_diam_mm!==undefined){hc.innerText=(Math.PI*a.anchor_drum_diam_mm/10.0).toFixed(1)+' cm';}";
         html += "const lb=document.getElementById('anchorLimitBadge');if(lb){if(a.anchor_limit){lb.innerText='Fim de Curso: NO TOPO (Acionado)';lb.style.background='#059669';lb.style.color='#fff';}else{lb.innerText='Fim de Curso: LIVRE';lb.style.background='#1e293b';lb.style.color='var(--muted)';}}";
         html += "if(document.getElementById('rudVal')&&a.rudder!==undefined){document.getElementById('rudVal').innerText=a.rudder+'%';if(document.getElementById('rudderSlider'))document.getElementById('rudderSlider').value=a.rudder;}";
         html += "if(document.getElementById('thrVal')&&a.throttle!==undefined){document.getElementById('thrVal').innerText=a.throttle+'%';if(document.getElementById('throttleSlider'))document.getElementById('throttleSlider').value=a.throttle;}";
@@ -1803,6 +1822,11 @@ private:
         a["anchor_pulses_per_rev"] = _config.getAnchorPulsesPerRev();
         a["anchor_limit"] = _actuators.isAnchorAtTopLimit();
         a["rack_released"] = _actuators.isRackReleased();
+        a["rack_angle"] = _actuators.getCurrentRackAngle();
+        a["rack_angle_engaged"] = _config.getRackAngleEngaged();
+        a["rack_angle_released"] = _config.getRackAngleReleased();
+        a["rack_inverted"] = _config.isRackInverted();
+        a["rack_pulse_us"] = _actuators.getCurrentRackPulseUs();
         a["alarm_active"] = _actuators.isAlarmActive();
         a["winch_pulse_us"] = _actuators.getWinchPulseUs();
         a["winch_neutral_us"] = _actuators.getWinchNeutral();
@@ -1936,6 +1960,11 @@ private:
         doc["screen_brightness"] = _config.getScreenBrightness();
         doc["battery_cells"] = _config.getBatteryCells();
         doc["battery_capacity_mah"] = _config.getBatteryCapacityMah();
+        doc["rack_angle_engaged"] = _config.getRackAngleEngaged();
+        doc["rack_angle_released"] = _config.getRackAngleReleased();
+        doc["rack_inverted"] = _config.isRackInverted();
+        doc["anchor_drum_diam_mm"] = _config.getAnchorDrumDiamMm();
+        doc["anchor_pulses_per_rev"] = _config.getAnchorPulsesPerRev();
         doc["sd_ready"] = _sd.isReady();
         doc["has_config_file"] = (_sd.isReady() && _sd.fileExists("/config.json"));
         doc["version_lafvin"] = ROVER_LAFVIN_VERSION;
@@ -1968,6 +1997,31 @@ private:
         uint16_t cap = doc["battery_capacity_mah"] | doc["capacity_mah"] | doc["capacity"] | _config.getBatteryCapacityMah();
 
         _config.updateConfig(id, ssid, pass, bright, cells, cap);
+        if (doc["rack_angle_engaged"].is<int>() || doc["rack_angle_released"].is<int>() || doc["rack_inverted"].is<bool>()) {
+            uint8_t rEng = doc["rack_angle_engaged"] | _config.getRackAngleEngaged();
+            uint8_t rRel = doc["rack_angle_released"] | _config.getRackAngleReleased();
+            bool rInv = doc["rack_inverted"].is<bool>() ? doc["rack_inverted"].as<bool>() : _config.isRackInverted();
+            if (rEng > 180) rEng = 180;
+            if (rRel > 180) rRel = 180;
+            _config.setRackConfig(rEng, rRel, rInv);
+            _actuators.setRackConfig(rEng, rRel, rInv, true);
+            if (_commandQueueCb) {
+                char rCmd[48];
+                snprintf(rCmd, sizeof(rCmd), "CMD:RACK_CFG:%u:%u:%d", rEng, rRel, rInv ? 1 : 0);
+                _commandQueueCb(rCmd);
+            }
+        }
+        if (doc["anchor_drum_diam_mm"].is<float>() || doc["anchor_drum_diam_mm"].is<int>() || doc["anchor_pulses_per_rev"].is<int>()) {
+            float diam = doc["anchor_drum_diam_mm"] | _config.getAnchorDrumDiamMm();
+            uint8_t pulses = doc["anchor_pulses_per_rev"] | _config.getAnchorPulsesPerRev();
+            _config.setAnchorCalibration(diam, pulses);
+            _actuators.setAnchorCalibration(diam, pulses);
+            if (_commandQueueCb) {
+                char aCmd[32];
+                snprintf(aCmd, sizeof(aCmd), "CMD:ANC_CFG:%.1f:%d", diam, pulses);
+                _commandQueueCb(aCmd);
+            }
+        }
         _roverId = _config.getRoverId();
         _battery.setCellCount(cells);
         if (cap >= 500 && cap <= 50000) {
@@ -2090,9 +2144,14 @@ private:
         _roverId = _config.getRoverId();
         _battery.setCellCount(_config.getBatteryCells());
         _battery.setCapacityMah(_config.getBatteryCapacityMah());
+        _actuators.setRackConfig(_config.getRackAngleEngaged(), _config.getRackAngleReleased(), _config.isRackInverted(), true);
         if (_commandQueueCb) {
             String cmd = "CMD:BATT:" + String(_config.getBatteryCells());
             _commandQueueCb(cmd.c_str());
+            char rCmd[48];
+            snprintf(rCmd, sizeof(rCmd), "CMD:RACK_CFG:%u:%u:%d",
+                     _config.getRackAngleEngaged(), _config.getRackAngleReleased(), _config.isRackInverted() ? 1 : 0);
+            _commandQueueCb(rCmd);
         }
 
         JsonDocument res;
@@ -2410,12 +2469,22 @@ private:
                 if (_actuators.isRackReleased()) {
                     _actuators.engageRack();
                     if (_commandQueueCb) _commandQueueCb("CMD:RACK:ENGAGE");
-                    msg = "Trinco da âncora travado (0°)";
+                    msg = String("Travão da cremalheira TRAVADO (encosto: ") + _config.getRackAngleEngaged() + "°)";
                 } else {
                     _actuators.releaseRack();
                     if (_commandQueueCb) _commandQueueCb("CMD:RACK:RELEASE");
-                    msg = "Trinco da âncora solto (90°)";
+                    msg = String("Travão da cremalheira LIVRE (solto: ") + _config.getRackAngleReleased() + "°)";
                 }
+                break;
+            case 16: // Explicitly Engage Rack (Encosto / Travar)
+                _actuators.engageRack();
+                if (_commandQueueCb) _commandQueueCb("CMD:RACK:ENGAGE");
+                msg = String("Travão da cremalheira TRAVADO (encosto: ") + _config.getRackAngleEngaged() + "°)";
+                break;
+            case 17: // Explicitly Release Rack (Livre / Soltar)
+                _actuators.releaseRack();
+                if (_commandQueueCb) _commandQueueCb("CMD:RACK:RELEASE");
+                msg = String("Travão da cremalheira LIVRE (solto: ") + _config.getRackAngleReleased() + "°)";
                 break;
             case 7: // RTL
                 _motorStatus = MOTOR_RTL;
@@ -2483,6 +2552,61 @@ private:
             _commandQueueCb(cmd);
         }
         _server.send(200, "application/json", "{\"success\":true,\"msg\":\"Calibração do tambor guardada com sucesso!\"}");
+    }
+
+    void handleApiRackConfig() {
+        if (!_server.hasArg("plain")) {
+            _server.send(400, "application/json", "{\"error\":\"Missing body\"}");
+            return;
+        }
+        JsonDocument doc;
+        DeserializationError err = deserializeJson(doc, _server.arg("plain"));
+        if (err) {
+            _server.send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
+            return;
+        }
+
+        // Modo de teste ao vivo de um ângulo específico (sem necessariamente gravar em flash)
+        if (doc["test_angle"].is<int>() && !doc["angle_engaged"].is<int>() && !doc["angle_released"].is<int>() && !doc["inverted"].is<bool>()) {
+            uint8_t testAng = (uint8_t)constrain(doc["test_angle"].as<int>(), 0, 180);
+            _actuators.setRackAngle(testAng);
+            if (_commandQueueCb) {
+                char cmd[32];
+                snprintf(cmd, sizeof(cmd), "CMD:RACK:ANGLE:%u", testAng);
+                _commandQueueCb(cmd);
+            }
+            JsonDocument res;
+            res["success"] = true;
+            res["angle"] = testAng;
+            res["pulse_us"] = _actuators.getCurrentRackPulseUs();
+            res["msg"] = String("Servo da cremalheira movido para ") + testAng + "° (" + _actuators.getCurrentRackPulseUs() + " µs)";
+            String out;
+            serializeJson(res, out);
+            _server.send(200, "application/json", out);
+            return;
+        }
+
+        uint8_t eng = doc["angle_engaged"].is<int>() ? (uint8_t)constrain(doc["angle_engaged"].as<int>(), 0, 180) : _config.getRackAngleEngaged();
+        uint8_t rel = doc["angle_released"].is<int>() ? (uint8_t)constrain(doc["angle_released"].as<int>(), 0, 180) : _config.getRackAngleReleased();
+        bool inv = doc["inverted"].is<bool>() ? doc["inverted"].as<bool>() : _config.isRackInverted();
+
+        _config.setRackConfig(eng, rel, inv);
+        _actuators.setRackConfig(eng, rel, inv, true);
+        if (_commandQueueCb) {
+            char cmd[48];
+            snprintf(cmd, sizeof(cmd), "CMD:RACK_CFG:%u:%u:%d", eng, rel, inv ? 1 : 0);
+            _commandQueueCb(cmd);
+        }
+
+        JsonDocument res;
+        res["success"] = true;
+        res["angle_engaged"] = eng;
+        res["angle_released"] = rel;
+        res["inverted"] = inv;
+        res["msg"] = String("Calibração da cremalheira guardada (Encosto: ") + eng + "°, Livre: " + rel + "°, Direção: " + (inv ? "Invertida" : "Normal") + ")!";
+        String out;
+        serializeJson(res, out);
+        _server.send(200, "application/json", out);
     }
 
     // -------------------------------------------------------------
@@ -2757,6 +2881,7 @@ private:
     }
 
     void handleApiSdUploadFinish() {
+        _server.sendHeader("Connection", "close");
         if (_server.hasArg("ajax")) {
             if (_uploadSuccess) {
                 _server.send(200, "application/json", "{\"success\":true,\"msg\":\"Upload concluído com sucesso\"}");
@@ -2772,22 +2897,16 @@ private:
     void handleOtaC6UploadData() {
         HTTPUpload& upload = _server.upload();
         if (upload.status == UPLOAD_FILE_START) {
-            _server.client().setTimeout(30000);
+            _server.client().setTimeout(40000);
             _uploadSuccess = false;
             _isBusy = true;
             _c6OtaProgress = 5;
             _c6OtaState = "UPLOADING";
             _c6OtaDetail = "A receber binario c6.bin no cartao SD...";
             Serial.printf("[OTA C6] Recebendo firmware: %s\n", upload.filename.c_str());
-            if (_display) _display->showOtaScreen("COPROCESSADOR C6", "PASSO 1/2: RECEBER FICHEIRO", 5, _c6OtaDetail.c_str(), UI_CYAN);
 
             if (_sd.isReady()) {
-                if (!_sd.fileExists("/firmware")) {
-                    _sd.createDir("/firmware");
-                }
-                if (_sd.fileExists("/firmware/c6.bin")) {
-                    _sd.deleteFile("/firmware/c6.bin");
-                }
+                _sd.ensureDir("/firmware");
                 _uploadFile = _sd.openFile("/firmware/c6.bin", FILE_WRITE);
             }
         } else if (upload.status == UPLOAD_FILE_WRITE) {
@@ -2805,7 +2924,6 @@ private:
                 _c6OtaState = "SAVED";
                 _c6OtaDetail = String("Ficheiro guardado no SD (") + (upload.totalSize / 1024) + " KB)";
                 Serial.printf("[OTA C6] Firmware gravado no SD: %u bytes\n", upload.totalSize);
-                if (_display) _display->showOtaScreen("COPROCESSADOR C6", "PASSO 1/2: FICHEIRO GUARDADO", 15, _c6OtaDetail.c_str(), UI_YELLOW);
             }
             _isBusy = false;
         } else if (upload.status == UPLOAD_FILE_ABORTED) {
@@ -2819,6 +2937,7 @@ private:
     }
 
     void handleOtaC6UploadFinish() {
+        _server.sendHeader("Connection", "close");
         if (!_uploadSuccess) {
             _server.send(500, "application/json", "{\"success\":false,\"error\":\"Falha ao receber c6.bin no cartao SD\"}");
             return;
@@ -2842,17 +2961,20 @@ private:
         String otaUrl = "http://" + ip + "/firmware/c6.bin";
         String cmd = "CMD:OTA:" + ssid + "|" + pass + "|" + otaUrl;
 
+        _c6OtaProgress = 20;
+        _c6OtaState = "STARTING";
+        _c6OtaDetail = "A aguardar ligacao do Coprocessador C6...";
+
+        // Enviar resposta HTTP 200 PRIMEIRO para garantir entrega ao browser antes de ligar WiFi no C6 / desenhar LCD
+        _server.send(200, "application/json", "{\"success\":true,\"state\":\"STARTING\",\"url\":\"" + otaUrl + "\"}");
+        _server.client().flush();
+        delay(50);
+
         Serial.printf("[OTA C6] Disparando OTA para C6: %s\n", cmd.c_str());
         if (_commandQueueCb) {
             _commandQueueCb(cmd.c_str());
         }
-
-        _c6OtaProgress = 20;
-        _c6OtaState = "STARTING";
-        _c6OtaDetail = "A aguardar ligacao do Coprocessador C6...";
         if (_display) _display->showOtaScreen("COPROCESSADOR C6", "PASSO 1/2: DOWNLOAD C6", 20, _c6OtaDetail.c_str(), UI_YELLOW);
-
-        _server.send(200, "application/json", "{\"success\":true,\"state\":\"STARTING\",\"url\":\"" + otaUrl + "\"}");
     }
 
     void handleApiOtaC6Status() {

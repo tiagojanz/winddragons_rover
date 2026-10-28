@@ -436,10 +436,23 @@ void loop() {
     }
 
     // 3. Comunicação Inter-ESP UART com o Master Lafvin
+    static uint32_t lastDiagMs = 0;
+    if (now - lastDiagMs >= 2000) {
+        lastDiagMs = now;
+        printLog("[DIAG] UART Pins: RX(GPIO%d)=%d, TX(GPIO%d)=%d | loraReady=%d\n",
+                 PIN_INTER_ESP_C6_RX, digitalRead(PIN_INTER_ESP_C6_RX),
+                 PIN_INTER_ESP_C6_TX, digitalRead(PIN_INTER_ESP_C6_TX),
+                 loraReady ? 1 : 0);
+        // Enviar beacon proativo para acordar o Lafvin Master caso o handshake inicial tenha falhado
+        interSerial.println("PONG:VER:" BASE_C6_VERSION);
+        sendLoraStatToMaster();
+    }
+
     while (interSerial.available()) {
         char c = (char)interSerial.read();
         static char rxBuf[256];
         static size_t rxIdx = 0;
+        printLog("[UART RX RAW] 0x%02X ('%c')\n", (uint8_t)c, (c >= 32 && c <= 126) ? c : '.');
 
         if (c == '\n' || c == '\r') {
             if (rxIdx > 0) {
@@ -464,3 +477,4 @@ void loop() {
         }
     }
 }
+

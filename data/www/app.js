@@ -23,6 +23,7 @@ function formatBytes(bytes) {
 
 // Background status poller for updating navbar badges
 function pollGlobalStatus() {
+  if (window.otaInProgress) return;
   fetch('/api/status')
     .then(r => r.json())
     .then(data => {

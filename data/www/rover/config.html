@@ -142,9 +142,86 @@
     </div>
   </div>
 
+  <div class="card" style="border:1px solid #10b981;">
+    <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+      <span><i class="fa-solid fa-sliders"></i> Calibração do Servo "Travão da Cremalheira" (GPIO 21)</span>
+      <span id="rackDirBadge" class="badge" style="background:#065f46;color:#6ee7b7;font-size:0.82rem;">DIREÇÃO: INVERTIDA</span>
+    </div>
+    <p style="color:var(--muted);font-size:0.875rem;margin-bottom:14px;">
+      Configure a direção de atuação do servo, o <strong>sweet spot de encosto da cremalheira</strong> (travada) e o <strong>ponto onde fica livre</strong> (solta).
+    </p>
+    <div class="grid-2" style="margin-bottom:14px;">
+      <div class="form-group">
+        <label class="stat-label">Sweet Spot de Encosto / Travada (0° a 180°):</label>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:6px;">
+          <input type="number" id="cfg_rack_engaged" min="0" max="180" required value="0" style="margin:0;">
+          <button type="button" onclick="testRackPoint('engaged')" class="btn btn-secondary" style="padding:10px 14px;white-space:nowrap;" title="Mover servo para o ponto de encosto"><i class="fa-solid fa-play"></i> Testar</button>
+        </div>
+        <small style="color:var(--muted);font-size:0.75rem;margin-top:4px;display:block;">Posição onde o travão encosta/engata na cremalheira</small>
+      </div>
+      <div class="form-group">
+        <label class="stat-label">Ponto Livre / Solta (0° a 180°):</label>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:6px;">
+          <input type="number" id="cfg_rack_released" min="0" max="180" required value="90" style="margin:0;">
+          <button type="button" onclick="testRackPoint('released')" class="btn btn-secondary" style="padding:10px 14px;white-space:nowrap;" title="Mover servo para o ponto livre"><i class="fa-solid fa-play"></i> Testar</button>
+        </div>
+        <small style="color:var(--muted);font-size:0.75rem;margin-top:4px;display:block;">Posição onde a cremalheira fica livre para largar âncora</small>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:rgba(15,23,42,0.6);border:1px solid #334155;border-radius:8px;">
+        <input type="checkbox" id="cfg_rack_inverted" checked onchange="saveRackConfig()" style="width:18px;height:18px;margin:0;cursor:pointer;">
+        <label for="cfg_rack_inverted" style="cursor:pointer;font-size:0.9rem;font-weight:600;">Inverter Direção do Servo da Cremalheira</label>
+      </div>
+      <button type="button" onclick="saveRackConfig()" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> Guardar Calibração Cremalheira</button>
+    </div>
+
+    <div style="background:rgba(15,23,42,0.6);border:1px solid #334155;border-radius:8px;padding:14px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:6px;">
+        <span class="stat-label"><i class="fa-solid fa-compass-drafting"></i> Teste / Pesquisa de Sweet Spot Ao Vivo (0° a 180°):</span>
+        <span id="rackLiveAngleVal" style="font-size:1.1rem;font-weight:700;color:var(--primary);">0° (2000 µs)</span>
+      </div>
+      <input type="range" id="rackTestSlider" min="0" max="180" step="1" value="0" class="slider" oninput="isUserDraggingRack=true;onRackTestSlide(this.value)" onchange="isUserDraggingRack=false;onRackTestSlide(this.value)">
+      <div class="btn-group" style="margin-top:10px;">
+        <button type="button" onclick="stepRackTest(-5)" class="btn btn-secondary">-5°</button>
+        <button type="button" onclick="stepRackTest(-1)" class="btn btn-secondary">-1°</button>
+        <button type="button" onclick="stepRackTest(1)" class="btn btn-secondary">+1°</button>
+        <button type="button" onclick="stepRackTest(5)" class="btn btn-secondary">+5°</button>
+        <button type="button" onclick="useCurrentAsRack('engaged')" class="btn btn-secondary" style="background:#065f46;color:#fff;"><i class="fa-solid fa-lock"></i> Usar Atual como Encosto</button>
+        <button type="button" onclick="useCurrentAsRack('released')" class="btn btn-secondary" style="background:#92400e;color:#fff;"><i class="fa-solid fa-lock-open"></i> Usar Atual como Livre</button>
+        <button type="button" onclick="relaxRackServo()" class="btn btn-secondary" style="background:#475569;color:#fff;"><i class="fa-solid fa-feather"></i> Relaxar Servo</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="border:1px solid #0284c7;">
+    <div class="card-title">
+      <span><i class="fa-solid fa-compass-drafting"></i> Calibração do Tambor do Guincho (Sensor Hall DRV5032 - GPIO 20)</span>
+    </div>
+    <p style="color:var(--muted);font-size:0.875rem;margin-bottom:14px;">
+      Defina o diâmetro físico do tambor do guincho e o número de ímanes por volta para cálculo exato dos metros de cabo desenrolado.
+    </p>
+    <div class="grid-2" style="margin-bottom:12px;">
+      <div class="form-group">
+        <label class="stat-label">Diâmetro do Tambor (mm):</label>
+        <input type="number" id="cfg_drum_diam" step="0.5" min="5" max="500" required value="30.0" oninput="updateDrumPreview()">
+        <small style="color:var(--muted);font-size:0.75rem;margin-top:4px;display:block;">Perímetro calculado: <strong id="cfg_drum_circ" style="color:var(--yellow);">9.4 cm / volta</strong></small>
+      </div>
+      <div class="form-group">
+        <label class="stat-label">Pulsos por Volta (Ímanes no Tambor):</label>
+        <input type="number" id="cfg_pulses_per_rev" min="1" max="24" required value="1">
+        <small style="color:var(--muted);font-size:0.75rem;margin-top:4px;display:block;">Número de ímanes detetados pelo sensor Hall por cada rotação</small>
+      </div>
+    </div>
+    <div class="btn-group">
+      <button type="button" onclick="saveAnchorConfig()" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> Guardar Calibração do Tambor</button>
+    </div>
+  </div>
+
   <div class="card" style="border-color:var(--primary);">
     <div class="card-title">
-      <span><i class="fa-solid fa-floppy-disk"></i> Gravar e Sincronizar</span>
+      <span><i class="fa-solid fa-floppy-disk"></i> Gravar e Sincronizar Tudo</span>
     </div>
     <div id="statusMsg" style="display:none;padding:12px;border-radius:8px;margin-bottom:14px;font-size:0.9rem;"></div>
     <div class="btn-group">
@@ -217,6 +294,7 @@
 
 <script>
 function refreshRoverLoraStatus() {
+  if (window.otaInProgress) return;
   fetch('/api/lora/status')
     .then(r => r.json())
     .then(d => {
@@ -407,6 +485,7 @@ function toggleConsoleStreaming(active) {
 }
 
 function fetchConsoleLogs() {
+  if (window.otaInProgress) return;
   fetch('/api/console?since=' + consoleLastId)
     .then(r => r.json())
     .then(data => {
@@ -613,6 +692,9 @@ function escapeConsoleHtml(s) {
 
 <script>
 let slideTimer = null;
+let isUserDraggingRack = false;
+let rackSlideTimer = null;
+
 function onBrightSlide(v) {
   document.getElementById('brightDisplayVal').innerText = v + '%';
   document.getElementById('brightValBadge').innerText = v + '%';
@@ -652,6 +734,111 @@ function showStatus(msg, isErr = false) {
   setTimeout(() => { d.style.display = 'none'; }, 4000);
 }
 
+function updateRackBadge(inv) {
+  const b = document.getElementById('rackDirBadge');
+  if (!b) return;
+  b.innerText = inv ? 'DIREÇÃO: INVERTIDA' : 'DIREÇÃO: NORMAL';
+  b.style.background = inv ? '#065f46' : '#1e293b';
+  b.style.color = inv ? '#6ee7b7' : 'var(--muted)';
+}
+
+function onRackTestSlide(val) {
+  const ang = Math.max(0, Math.min(180, parseInt(val) || 0));
+  const inv = document.getElementById('cfg_rack_inverted')?.checked ?? true;
+  const eff = inv ? (180 - ang) : ang;
+  const us = Math.round(1000 + (eff / 180.0) * 1000);
+  const lbl = document.getElementById('rackLiveAngleVal');
+  if (lbl) lbl.innerText = ang + '° (' + us + ' µs)';
+  if (rackSlideTimer) clearTimeout(rackSlideTimer);
+  rackSlideTimer = setTimeout(() => {
+    fetch('/api/control/rack/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ test_angle: ang })
+    }).catch(() => {});
+  }, 40);
+}
+
+function stepRackTest(delta) {
+  const s = document.getElementById('rackTestSlider');
+  if (!s) return;
+  let v = Math.max(0, Math.min(180, (parseInt(s.value) || 0) + delta));
+  s.value = v;
+  onRackTestSlide(v);
+}
+
+function testRackPoint(which) {
+  const id = which === 'engaged' ? 'cfg_rack_engaged' : 'cfg_rack_released';
+  const v = Math.max(0, Math.min(180, parseInt(document.getElementById(id)?.value) || 0));
+  const s = document.getElementById('rackTestSlider');
+  if (s) s.value = v;
+  onRackTestSlide(v);
+}
+
+function useCurrentAsRack(which) {
+  const s = document.getElementById('rackTestSlider');
+  if (!s) return;
+  const id = which === 'engaged' ? 'cfg_rack_engaged' : 'cfg_rack_released';
+  const inp = document.getElementById(id);
+  if (inp) inp.value = s.value;
+  saveRackConfig();
+}
+
+function relaxRackServo() {
+  fetch('/api/control/action', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 13 })
+  })
+  .then(r => r.json())
+  .then(res => { if (typeof showToast === 'function') showToast(res.msg); else showStatus(res.msg); })
+  .catch(() => {});
+}
+
+function saveRackConfig() {
+  const eng = Math.max(0, Math.min(180, parseInt(document.getElementById('cfg_rack_engaged')?.value) || 0));
+  const rel = Math.max(0, Math.min(180, parseInt(document.getElementById('cfg_rack_released')?.value) || 0));
+  const inv = document.getElementById('cfg_rack_inverted')?.checked ?? true;
+  updateRackBadge(inv);
+  fetch('/api/control/rack/config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ angle_engaged: eng, angle_released: rel, inverted: inv })
+  })
+  .then(r => r.json())
+  .then(res => {
+    const msg = res.msg || 'Calibração da cremalheira guardada!';
+    if (typeof showToast === 'function') showToast(msg);
+    showStatus(msg);
+  })
+  .catch(() => {});
+}
+
+function updateDrumPreview() {
+  const d = parseFloat(document.getElementById('cfg_drum_diam')?.value) || 30.0;
+  const circ = (Math.PI * d / 10.0).toFixed(1);
+  const el = document.getElementById('cfg_drum_circ');
+  if (el) el.innerText = circ + ' cm / volta';
+}
+
+function saveAnchorConfig() {
+  const d = parseFloat(document.getElementById('cfg_drum_diam')?.value) || 30.0;
+  const p = parseInt(document.getElementById('cfg_pulses_per_rev')?.value) || 1;
+  updateDrumPreview();
+  fetch('/api/control/anchor/config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ diam_mm: d, pulses_per_rev: p })
+  })
+  .then(r => r.json())
+  .then(res => {
+    const msg = res.msg || 'Calibração do tambor guardada com sucesso!';
+    if (typeof showToast === 'function') showToast(msg);
+    showStatus(msg);
+  })
+  .catch(() => {});
+}
+
 function loadConfig() {
   fetch('/api/rover/config')
     .then(r => r.json())
@@ -662,6 +849,30 @@ function loadConfig() {
       onBrightSlide(data.screen_brightness || 80);
       document.getElementById('cfg_ssid').value = data.ap_ssid || 'WindDragon-AP';
       document.getElementById('cfg_pass').value = data.ap_password || '12345678';
+      if (data.rack_angle_engaged !== undefined && document.getElementById('cfg_rack_engaged')) {
+        document.getElementById('cfg_rack_engaged').value = data.rack_angle_engaged;
+        const rs = document.getElementById('rackTestSlider');
+        if (rs) rs.value = data.rack_angle_engaged;
+      }
+      if (data.rack_angle_released !== undefined && document.getElementById('cfg_rack_released')) {
+        document.getElementById('cfg_rack_released').value = data.rack_angle_released;
+      }
+      if (data.rack_inverted !== undefined && document.getElementById('cfg_rack_inverted')) {
+        document.getElementById('cfg_rack_inverted').checked = !!data.rack_inverted;
+        updateRackBadge(!!data.rack_inverted);
+        const ang = data.rack_angle_engaged ?? 0;
+        const eff = data.rack_inverted ? (180 - ang) : ang;
+        const us = Math.round(1000 + (eff / 180.0) * 1000);
+        const rl = document.getElementById('rackLiveAngleVal');
+        if (rl) rl.innerText = ang + '° (' + us + ' µs)';
+      }
+      if (data.anchor_drum_diam_mm !== undefined && document.getElementById('cfg_drum_diam')) {
+        document.getElementById('cfg_drum_diam').value = data.anchor_drum_diam_mm;
+        updateDrumPreview();
+      }
+      if (data.anchor_pulses_per_rev !== undefined && document.getElementById('cfg_pulses_per_rev')) {
+        document.getElementById('cfg_pulses_per_rev').value = data.anchor_pulses_per_rev;
+      }
       document.getElementById('summaryId').innerText = 'Rover-' + (data.rover_id || 1);
       document.getElementById('summarySsid').innerText = data.ap_ssid || 'WindDragon-AP';
       if (data.version_lafvin && document.getElementById('fwLafvinVer')) document.getElementById('fwLafvinVer').innerText = data.version_lafvin;
@@ -676,6 +887,11 @@ function saveAllConfig(e) {
   const bright = parseInt(document.getElementById('cfg_bright').value);
   const ssid = document.getElementById('cfg_ssid').value;
   const pass = document.getElementById('cfg_pass').value;
+  const rackEng = parseInt(document.getElementById('cfg_rack_engaged')?.value ?? 0);
+  const rackRel = parseInt(document.getElementById('cfg_rack_released')?.value ?? 90);
+  const rackInv = document.getElementById('cfg_rack_inverted')?.checked ?? true;
+  const drumDiam = parseFloat(document.getElementById('cfg_drum_diam')?.value ?? 30.0);
+  const pulsesRev = parseInt(document.getElementById('cfg_pulses_per_rev')?.value ?? 1);
 
   fetch('/api/rover/config', {
     method: 'POST',
@@ -684,7 +900,12 @@ function saveAllConfig(e) {
       rover_id: id,
       screen_brightness: bright,
       ap_ssid: ssid,
-      ap_password: pass
+      ap_password: pass,
+      rack_angle_engaged: rackEng,
+      rack_angle_released: rackRel,
+      rack_inverted: rackInv,
+      anchor_drum_diam_mm: drumDiam,
+      anchor_pulses_per_rev: pulsesRev
     })
   })
   .then(r => r.json())
@@ -757,6 +978,7 @@ async function parseZipBuffer(arrayBuffer) {
 
 async function onOtaFileSelected(file) {
   if (!file) return;
+  window.otaInProgress = true;
   const panel = document.getElementById('otaProgressPanel');
   panel.style.display = 'block';
   document.getElementById('otaLogConsole').innerHTML = '';
@@ -798,128 +1020,206 @@ async function onOtaFileSelected(file) {
   } catch (err) {
     otaLog('ERRO ao descompactar ZIP: ' + err.message, '#ef4444');
     setOtaProgress(0, 'Falha ao processar ficheiro', false);
+    window.otaInProgress = false;
     return;
   }
 
   if (!c6Blob && !lafvinBlob && webFiles.length === 0) {
     otaLog('ERRO: Nenhum firmware ou ficheiro web compatível encontrado no pacote!', '#ef4444');
     setOtaProgress(0, 'Nenhum item compatível detetado', false);
+    window.otaInProgress = false;
     return;
   }
 
-  // PASSO 1: Atualização dos ficheiros Web no Cartão MicroSD (se presentes)
-  if (webFiles.length > 0) {
-    setOtaProgress(5, 'A atualizar frontend no Cartão SD (0/' + webFiles.length + ')...');
-    otaLog('★ [Passo 1] A atualizar ' + webFiles.length + ' ficheiros web no Cartão MicroSD...', '#06b6d4');
-    let okCount = 0;
-    const createdDirs = new Set(['/', '/www']);
-    for (let i = 0; i < webFiles.length; i++) {
-      const wf = webFiles[i];
-      const parts = wf.path.split('/');
-      const fileName = parts.pop();
-      const dirPath = '/' + parts.join('/');
-      
-      // Assegura recursivamente a existência da pasta de destino no SD
-      if (dirPath && dirPath !== '/' && !createdDirs.has(dirPath)) {
-        const segs = dirPath.split('/').filter(Boolean);
-        let curr = '';
-        for (const s of segs) {
-          curr += '/' + s;
-          if (!createdDirs.has(curr)) {
-            try {
-              await fetch('/api/sd/mkdir', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ dir: curr, path: curr })
-              });
-              createdDirs.add(curr);
-            } catch(e) {}
+  try {
+    // PASSO 1: Atualização dos ficheiros Web no Cartão MicroSD (se presentes)
+    if (webFiles.length > 0) {
+      setOtaProgress(5, 'A atualizar frontend no Cartão SD (0/' + webFiles.length + ')...');
+      otaLog('★ [Passo 1] A atualizar ' + webFiles.length + ' ficheiros web no Cartão MicroSD...', '#06b6d4');
+      let okCount = 0;
+      const createdDirs = new Set(['/', '/www']);
+      for (let i = 0; i < webFiles.length; i++) {
+        const wf = webFiles[i];
+        const parts = wf.path.split('/');
+        const fileName = parts.pop();
+        const dirPath = '/' + parts.join('/');
+        
+        // Assegura recursivamente a existência da pasta de destino no SD
+        if (dirPath && dirPath !== '/' && !createdDirs.has(dirPath)) {
+          const segs = dirPath.split('/').filter(Boolean);
+          let curr = '';
+          for (const s of segs) {
+            curr += '/' + s;
+            if (!createdDirs.has(curr)) {
+              try {
+                await fetch('/api/sd/mkdir', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ dir: curr, path: curr })
+                });
+                createdDirs.add(curr);
+              } catch(e) {}
+            }
           }
         }
-      }
-      
-      const pct = 5 + Math.round((i / webFiles.length) * 15); // 5% a 20%
-      setOtaProgress(pct, 'A gravar /' + wf.path + ' (' + (i + 1) + '/' + webFiles.length + ')...');
-      
-      const blob = new Blob([wf.data], { type: 'application/octet-stream' });
-      const formData = new FormData();
-      formData.append('file', blob, fileName);
-      try {
-        const uploadUrl = '/api/sd/upload?dir=' + encodeURIComponent(dirPath) + '&ajax=1';
-        const res = await fetch(uploadUrl, { method: 'POST', body: formData });
-        const resJson = await res.json();
-        if (resJson && resJson.success) {
-          okCount++;
-        } else {
-          otaLog('  ⚠ Falha ao gravar /' + wf.path, '#f59e0b');
+        
+        const pct = 5 + Math.round((i / webFiles.length) * 15); // 5% a 20%
+        setOtaProgress(pct, 'A gravar /' + wf.path + ' (' + (i + 1) + '/' + webFiles.length + ')...');
+        
+        const blob = new Blob([wf.data], { type: 'application/octet-stream' });
+        const formData = new FormData();
+        formData.append('file', blob, fileName);
+        try {
+          const uploadUrl = '/api/sd/upload?dir=' + encodeURIComponent(dirPath) + '&ajax=1';
+          const res = await fetch(uploadUrl, { method: 'POST', body: formData });
+          const resJson = await res.json();
+          if (resJson && resJson.success) {
+            okCount++;
+          } else {
+            otaLog('  ⚠ Falha ao gravar /' + wf.path, '#f59e0b');
+          }
+        } catch (err) {
+          otaLog('  ⚠ Erro de rede em /' + wf.path + ': ' + err.message, '#f59e0b');
         }
-      } catch (err) {
-        otaLog('  ⚠ Erro de rede em /' + wf.path + ': ' + err.message, '#f59e0b');
+      }
+      otaLog('✔ ' + okCount + '/' + webFiles.length + ' ficheiros web atualizados com sucesso no MicroSD!', '#10b981');
+      // Pausa breve para libertar sockets TCP/lwIP antes de iniciar o upload pesado do binário
+      await new Promise(r => setTimeout(r, 1000));
+    }
+
+    // PASSO 2: Atualização do Coprocessador C6
+    if (c6Blob) {
+      const ok = await performC6Ota(c6Blob);
+      if (!ok) {
+        otaLog('Processo interrompido devido a erro no C6.', '#ef4444');
+        return;
       }
     }
-    otaLog('✔ ' + okCount + '/' + webFiles.length + ' ficheiros web atualizados com sucesso no MicroSD!', '#10b981');
-  }
 
-  // PASSO 2: Atualização do Coprocessador C6
-  if (c6Blob) {
-    const ok = await performC6Ota(c6Blob);
-    if (!ok) {
-      otaLog('Processo interrompido devido a erro no C6.', '#ef4444');
-      return;
+    // PASSO 3: Atualização do Master Lafvin
+    if (lafvinBlob) {
+      await performLafvinOta(lafvinBlob);
+    } else {
+      setOtaProgress(100, 'Atualização concluída com sucesso!', false);
+      otaLog('★ Todas as operações de atualização foram concluídas!', '#10b981');
     }
-  }
-
-  // PASSO 3: Atualização do Master Lafvin
-  if (lafvinBlob) {
-    await performLafvinOta(lafvinBlob);
-  } else {
-    setOtaProgress(100, 'Atualização concluída com sucesso!', false);
-    otaLog('★ Todas as operações de atualização foram concluídas!', '#10b981');
+  } finally {
+    window.otaInProgress = false;
   }
 }
 
+function uploadC6BlobOnce(blob) {
+  return new Promise((resolve) => {
+    let maxLoadedRatio = 0;
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/ota/c6', true);
+    xhr.timeout = 60000;
+
+    xhr.upload.onprogress = function(e) {
+      if (e.lengthComputable && e.total > 0) {
+        maxLoadedRatio = e.loaded / e.total;
+        const pct = 20 + Math.round(maxLoadedRatio * 15); // 20% a 35%
+        setOtaProgress(pct, '[Passo 2] A enviar c6.bin (' + Math.round(e.loaded / 1024) + '/' + Math.round(e.total / 1024) + ' KB)...');
+      }
+    };
+
+    xhr.onload = function() {
+      if (xhr.status === 200) {
+        try {
+          const json = JSON.parse(xhr.responseText);
+          resolve({ ok: !!json.success, error: json.error || null, ratio: 1 });
+        } catch (err) {
+          resolve({ ok: true, error: null, ratio: 1 });
+        }
+      } else {
+        resolve({ ok: false, error: 'HTTP ' + xhr.status, ratio: maxLoadedRatio });
+      }
+    };
+
+    xhr.onerror = function() {
+      resolve({ ok: false, error: 'Failed to fetch / corte de ligação no fim do envio', ratio: maxLoadedRatio });
+    };
+
+    xhr.ontimeout = function() {
+      resolve({ ok: false, error: 'Timeout no envio de c6.bin', ratio: maxLoadedRatio });
+    };
+
+    const formData = new FormData();
+    formData.append('file', blob, 'c6.bin');
+    xhr.send(formData);
+  });
+}
+
 async function performC6Ota(blob) {
-  setOtaProgress(15, '[Passo 1/2] A enviar c6.bin para o Master...');
-  otaLog('A enviar binário C6 (' + Math.round(blob.size/1024) + ' KB) para o cartão SD...');
+  const kb = Math.round(blob.size / 1024);
+  setOtaProgress(20, '[Passo 2] A enviar c6.bin para o Master...');
+  otaLog('A enviar binário C6 (' + kb + ' KB) para o cartão SD...');
 
-  const formData = new FormData();
-  formData.append('file', blob, 'c6.bin');
-
-  try {
-    const res = await fetch('/api/ota/c6', { method: 'POST', body: formData });
-    const json = await res.json();
-    if (!json.success) {
-      otaLog('ERRO ao enviar c6.bin: ' + (json.error || 'Erro desconhecido'), '#ef4444');
-      setOtaProgress(15, 'Falha no envio do C6', false);
-      return false;
+  let uploadSuccess = false;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    if (attempt > 1) {
+      otaLog('  ↻ Tentativa ' + attempt + '/3 de envio do c6.bin após pausa de recuperação...', '#f59e0b');
+      await new Promise(r => setTimeout(r, 2000));
     }
-    otaLog('c6.bin gravado no SD! Comando de download transmitido ao Coprocessador C6.');
-  } catch (e) {
-    otaLog('Falha de rede ao enviar c6.bin: ' + e.message, '#ef4444');
+
+    const res = await uploadC6BlobOnce(blob);
+    if (res.ok) {
+      uploadSuccess = true;
+      otaLog('✔ c6.bin gravado no SD! Comando de atualização transmitido ao Coprocessador C6.', '#10b981');
+      break;
+    }
+
+    // Se a ligação caiu perto do fim (>= 85% enviado), o Master pode já ter recebido o ficheiro
+    // e iniciado a transferência Wi-Fi para o C6 antes de fechar a resposta HTTP
+    if (res.ratio >= 0.85) {
+      otaLog('  ℹ Ligação interrompida a ' + Math.round(res.ratio * 100) + '%. A verificar se o Master já iniciou o OTA do C6...', '#06b6d4');
+      await new Promise(r => setTimeout(r, 1500));
+      try {
+        const sRes = await fetch('/api/ota/c6/status');
+        const sJson = await sRes.json();
+        if (sJson && ['SAVED', 'STARTING', 'WIFI_CONNECTING', 'DOWNLOADING', 'FLASHING', 'SUCCESS'].includes(sJson.state)) {
+          uploadSuccess = true;
+          otaLog('✔ Confirmado: Master recebeu c6.bin (Estado C6: ' + sJson.state + '). A continuar...', '#10b981');
+          break;
+        }
+      } catch (e) {}
+    }
+
+    otaLog('  ⚠ Aviso no envio de c6.bin (tentativa ' + attempt + '/3): ' + res.error, '#f59e0b');
+  }
+
+  if (!uploadSuccess) {
+    otaLog('ERRO ao enviar c6.bin após 3 tentativas.', '#ef4444');
+    setOtaProgress(20, 'Falha no envio do C6', false);
     return false;
   }
 
   // Polling do estado do C6
-  setOtaProgress(35, '[Passo 1/2] Coprocessador C6 a gravar Flash...');
+  setOtaProgress(35, '[Passo 2] Coprocessador C6 a gravar Flash...');
   otaLog('A aguardar confirmação de gravação do Coprocessador C6...');
 
-  for (let i = 0; i < 35; i++) {
+  let lastState = '';
+  for (let i = 0; i < 40; i++) {
     await new Promise(r => setTimeout(r, 1000));
     try {
       const sRes = await fetch('/api/ota/c6/status');
       const sJson = await sRes.json();
-      otaLog('  -> C6 Status: ' + sJson.state + (sJson.detail ? ' (' + sJson.detail + ')' : ''));
+      const stateKey = sJson.state + ':' + (sJson.detail || '') + ':' + (sJson.progress || 0);
+      if (stateKey !== lastState) {
+        lastState = stateKey;
+        otaLog('  -> C6 Status: ' + sJson.state + (sJson.detail ? ' (' + sJson.detail + ')' : ''));
+      }
       if (sJson.progress !== undefined && sJson.progress > 0) {
-        const pct = 15 + Math.round(sJson.progress * 0.35); // 15% -> 50%
-        setOtaProgress(pct, '[Passo 1/2] Coprocessador C6 a gravar Flash (' + sJson.progress + '%)...');
+        const pct = 35 + Math.round(sJson.progress * 0.20); // 35% -> 55%
+        setOtaProgress(pct, '[Passo 2] Coprocessador C6 a gravar Flash (' + sJson.progress + '%)...');
       }
       if (sJson.state === 'SUCCESS') {
-        setOtaProgress(50, '[Passo 1/2] Coprocessador C6 atualizado com sucesso!', false);
+        setOtaProgress(55, '[Passo 2] Coprocessador C6 atualizado com sucesso!', false);
         otaLog('✔ Coprocessador C6 gravado e reiniciado com sucesso!', '#10b981');
         await new Promise(r => setTimeout(r, 2000));
         return true;
       } else if (sJson.state && sJson.state.startsWith('FAIL')) {
-        otaLog('Falha no Coprocessador C6: ' + sJson.state, '#ef4444');
+        otaLog('Falha no Coprocessador C6: ' + sJson.state + (sJson.detail ? ' (' + sJson.detail + ')' : ''), '#ef4444');
         setOtaProgress(35, 'Falha na gravação do C6', false);
         return false;
       }

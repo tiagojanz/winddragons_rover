@@ -485,6 +485,7 @@ void setup() {
 
     // 7. Carregar configurações principais (/config.json no SD ou NVS)
     roverConfig.begin(&sdCard);
+    actuators.setRackConfig(roverConfig.getRackAngleEngaged(), roverConfig.getRackAngleReleased(), roverConfig.isRackInverted(), true);
     roverDisplay.setBrightness(roverConfig.getScreenBrightness());
     webServer.setRoverId(roverConfig.getRoverId());
     Serial.printf("[ROVER] Configuracao Ativa: ID=%u | SSID AP=%s | Brilho=%u%%\n", 

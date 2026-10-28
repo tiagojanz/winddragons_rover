@@ -107,6 +107,7 @@
 
 <script>
 function refreshBaseLoraStatus() {
+  if (window.otaInProgress) return;
   fetch('/api/lora/status')
     .then(r => r.json())
     .then(d => {
@@ -383,6 +384,7 @@ function toggleConsoleStreaming(active) {
 }
 
 function fetchConsoleLogs() {
+  if (window.otaInProgress) return;
   fetch('/api/console?since=' + consoleLastId)
     .then(r => r.json())
     .then(data => {

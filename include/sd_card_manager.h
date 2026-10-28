@@ -291,12 +291,12 @@ public:
     /**
      * Apaga um ficheiro
      */
-    bool deleteFile(const char* path) {
+    bool deleteFile(const char* path, bool refreshInfo = false) {
         if (!_initialized || !path) return false;
         prepareBus();
         bool ok = SD.remove(path);
         digitalWrite(_csPin, HIGH);
-        if (ok) refreshStorageInfo();
+        if (ok && refreshInfo) refreshStorageInfo();
         return ok;
     }
 

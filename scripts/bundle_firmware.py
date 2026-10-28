@@ -7,6 +7,7 @@ Output: dist/rover_firmware.zip
 
 import os
 import sys
+import shutil
 import zipfile
 import json
 import time
@@ -123,11 +124,13 @@ def main():
         z.write(C6_BIN, arcname="c6.bin")
         z.write(LAFVIN_BIN, arcname="lafvin.bin")
 
-        # 2. Web Assets (/www/)
+        # 2. Web Assets (/www/) - Apenas ficheiros do Rover (exclui base/, leaflet/ e mission.html da Estação Base)
         if os.path.isdir(WWW_DIR):
             for root, dirs, files in os.walk(WWW_DIR):
+                # Ignorar subpastas exclusivas da Estação Base
+                dirs[:] = [d for d in dirs if d not in ("base", "leaflet")]
                 for f in files:
-                    if f.startswith(".") or "original" in f:
+                    if f.startswith(".") or "original" in f or f == "mission.html":
                         continue
                     full_path = os.path.join(root, f)
                     rel_to_www = os.path.relpath(full_path, WWW_DIR)
@@ -154,6 +157,10 @@ def main():
 
         # 4. Manifest
         z.writestr("manifest.json", json.dumps(manifest, indent=2))
+
+    # Copia também binários isolados para dist/c6.bin e dist/lafvin.bin
+    shutil.copy2(C6_BIN, os.path.join(DIST_DIR, "c6.bin"))
+    shutil.copy2(LAFVIN_BIN, os.path.join(DIST_DIR, "lafvin.bin"))
 
     zip_size = os.path.getsize(OUTPUT_ZIP)
     print(f"[BUNDLE] Ficheiros Web    : {web_file_count} ficheiros ({format_size(web_total_bytes)})")

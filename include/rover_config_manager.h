@@ -18,6 +18,9 @@ struct RoverConfig {
     uint16_t batteryCapacityMah; // e.g. 2650 mAh
     float anchorDrumDiamMm;     // Diâmetro do tambor do guincho da âncora (mm, ex: 30.0)
     uint8_t anchorPulsesPerRev; // Número de pulsos/ímanes por volta do tambor (ex: 1)
+    uint8_t rackAngleEngaged;   // Ângulo de encosto / travado da cremalheira (0-180°)
+    uint8_t rackAngleReleased;  // Ângulo livre / solto da cremalheira (0-180°)
+    bool rackInverted;          // Inverter direção do servo da cremalheira
 };
 
 /**
@@ -35,6 +38,9 @@ public:
         _config.batteryCapacityMah = 2650;
         _config.anchorDrumDiamMm = 30.0f;
         _config.anchorPulsesPerRev = 1;
+        _config.rackAngleEngaged = RACK_POS_ENGAGED;
+        _config.rackAngleReleased = RACK_POS_RELEASED;
+        _config.rackInverted = RACK_SERVO_INVERTED_DEFAULT;
     }
 
     void begin(SDCardManager *sd = nullptr) {
@@ -62,6 +68,9 @@ public:
     uint16_t getBatteryCapacityMah() const { return _config.batteryCapacityMah; }
     float getAnchorDrumDiamMm() const { return _config.anchorDrumDiamMm; }
     uint8_t getAnchorPulsesPerRev() const { return _config.anchorPulsesPerRev; }
+    uint8_t getRackAngleEngaged() const { return _config.rackAngleEngaged; }
+    uint8_t getRackAngleReleased() const { return _config.rackAngleReleased; }
+    bool isRackInverted() const { return _config.rackInverted; }
 
     void setRoverId(uint8_t id) {
         _config.roverId = id;
@@ -95,6 +104,13 @@ public:
     void setAnchorCalibration(float diamMm, uint8_t pulsesPerRev) {
         if (diamMm >= 5.0f && diamMm <= 500.0f) _config.anchorDrumDiamMm = diamMm;
         if (pulsesPerRev >= 1 && pulsesPerRev <= 24) _config.anchorPulsesPerRev = pulsesPerRev;
+        saveConfig();
+    }
+
+    void setRackConfig(uint8_t engagedAngle, uint8_t releasedAngle, bool inverted) {
+        if (engagedAngle <= 180) _config.rackAngleEngaged = engagedAngle;
+        if (releasedAngle <= 180) _config.rackAngleReleased = releasedAngle;
+        _config.rackInverted = inverted;
         saveConfig();
     }
 
@@ -146,10 +162,16 @@ public:
             if (_config.anchorPulsesPerRev < 1 || _config.anchorPulsesPerRev > 24) {
                 _config.anchorPulsesPerRev = 1;
             }
+            _config.rackAngleEngaged = prefs.getUChar("rck_eng", RACK_POS_ENGAGED);
+            if (_config.rackAngleEngaged > 180) _config.rackAngleEngaged = RACK_POS_ENGAGED;
+            _config.rackAngleReleased = prefs.getUChar("rck_rel", RACK_POS_RELEASED);
+            if (_config.rackAngleReleased > 180) _config.rackAngleReleased = RACK_POS_RELEASED;
+            _config.rackInverted = prefs.getBool("rck_inv", RACK_SERVO_INVERTED_DEFAULT);
             prefs.end();
-            Serial.printf("[CONFIG] Carregado da memoria NVS -> ID: %u | SSID AP: %s | Brilho: %u%% | Bateria: %uS (%u mAh) | Âncora: Tambor=%.1fmm (%u p/rev)\n", 
+            Serial.printf("[CONFIG] Carregado da memoria NVS -> ID: %u | SSID AP: %s | Brilho: %u%% | Bateria: %uS (%u mAh) | Âncora: Tambor=%.1fmm (%u p/rev) | Cremalheira: Encosto=%u° Livre=%u° Inv=%d\n", 
                           _config.roverId, _config.apSsid.c_str(), _config.screenBrightness, _config.batteryCells, _config.batteryCapacityMah,
-                          _config.anchorDrumDiamMm, _config.anchorPulsesPerRev);
+                          _config.anchorDrumDiamMm, _config.anchorPulsesPerRev,
+                          _config.rackAngleEngaged, _config.rackAngleReleased, _config.rackInverted ? 1 : 0);
         }
 
         // 3. Se o cartão SD estiver presente mas ainda não possuir o /config.json, criar com valores padrão
@@ -172,6 +194,9 @@ public:
         prefs.putUShort("cap_mah", _config.batteryCapacityMah);
         prefs.putFloat("anc_diam", _config.anchorDrumDiamMm);
         prefs.putUChar("anc_pulses", _config.anchorPulsesPerRev);
+        prefs.putUChar("rck_eng", _config.rackAngleEngaged);
+        prefs.putUChar("rck_rel", _config.rackAngleReleased);
+        prefs.putBool("rck_inv", _config.rackInverted);
         prefs.end();
 
         // Guarda no Cartão MicroSD
@@ -238,10 +263,22 @@ public:
             uint8_t p = doc["anchor_pulses_per_rev"].as<uint8_t>();
             if (p >= 1 && p <= 24) _config.anchorPulsesPerRev = p;
         }
+        if (doc["rack_angle_engaged"].is<int>()) {
+            int eng = doc["rack_angle_engaged"].as<int>();
+            if (eng >= 0 && eng <= 180) _config.rackAngleEngaged = (uint8_t)eng;
+        }
+        if (doc["rack_angle_released"].is<int>()) {
+            int rel = doc["rack_angle_released"].as<int>();
+            if (rel >= 0 && rel <= 180) _config.rackAngleReleased = (uint8_t)rel;
+        }
+        if (doc["rack_inverted"].is<bool>()) {
+            _config.rackInverted = doc["rack_inverted"].as<bool>();
+        }
 
-        Serial.printf("[CONFIG] Carregado de /config.json (MicroSD) -> ID: %u | SSID AP: %s | Brilho: %u%% | Bateria: %uS (%u mAh) | Âncora: Tambor=%.1fmm (%u p/rev)\n", 
+        Serial.printf("[CONFIG] Carregado de /config.json (MicroSD) -> ID: %u | SSID AP: %s | Brilho: %u%% | Bateria: %uS (%u mAh) | Âncora: Tambor=%.1fmm (%u p/rev) | Cremalheira: Encosto=%u° Livre=%u° Inv=%d\n", 
                       _config.roverId, _config.apSsid.c_str(), _config.screenBrightness, _config.batteryCells, _config.batteryCapacityMah,
-                      _config.anchorDrumDiamMm, _config.anchorPulsesPerRev);
+                      _config.anchorDrumDiamMm, _config.anchorPulsesPerRev,
+                      _config.rackAngleEngaged, _config.rackAngleReleased, _config.rackInverted ? 1 : 0);
         return true;
     }
 
@@ -257,6 +294,9 @@ public:
         doc["battery_capacity_mah"] = _config.batteryCapacityMah;
         doc["anchor_drum_diam_mm"] = _config.anchorDrumDiamMm;
         doc["anchor_pulses_per_rev"] = _config.anchorPulsesPerRev;
+        doc["rack_angle_engaged"] = _config.rackAngleEngaged;
+        doc["rack_angle_released"] = _config.rackAngleReleased;
+        doc["rack_inverted"] = _config.rackInverted;
 
         String jsonStr;
         serializeJsonPretty(doc, jsonStr);

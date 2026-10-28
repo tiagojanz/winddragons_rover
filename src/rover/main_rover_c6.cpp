@@ -541,14 +541,18 @@ void setup() {
   // 5. Atuadores (Direct PWM / PCA9685)
   float ancDiam = c6Prefs.getFloat("anc_diam", 30.0f);
   uint8_t ancPulses = c6Prefs.getUChar("anc_pulses", 1);
+  uint8_t rckEng = c6Prefs.getUChar("rck_eng", RACK_POS_ENGAGED);
+  uint8_t rckRel = c6Prefs.getUChar("rck_rel", RACK_POS_RELEASED);
+  bool rckInv = c6Prefs.getBool("rck_inv", RACK_SERVO_INVERTED_DEFAULT);
+  actuators.setRackConfig(rckEng, rckRel, rckInv, false);
   actuators.begin();
   actuators.setAnchorCalibration(ancDiam, ancPulses);
   Serial.printf("[ACT ] Atuadores inicializados (ESC=GPIO%d, Leme=GPIO%d, "
-                "Guincho=GPIO%d, Rack=GPIO%d, FimCurso=GPIO%d, Hall=GPIO%d | "
-                "Tambor=%.1fmm)\n",
+                "Guincho=GPIO%d, Rack=GPIO%d [Encosto=%u°, Livre=%u°, Inv=%d], "
+                "FimCurso=GPIO%d, Hall=GPIO%d | Tambor=%.1fmm)\n",
                 PIN_C6_MOTOR_ESC, PIN_C6_SERVO_RUD, PIN_C6_WINCH,
-                PIN_C6_SERVO_RACK, PIN_ANCHOR_DETECTOR, PIN_ANCHOR_HALL,
-                ancDiam);
+                PIN_C6_SERVO_RACK, rckEng, rckRel, rckInv ? 1 : 0,
+                PIN_ANCHOR_DETECTOR, PIN_ANCHOR_HALL, ancDiam);
 
 // 6. Fita / Módulo de LEDs WS2812B Strobe
 #if defined(PIN_STROBE_LEDS) && (PIN_STROBE_LEDS >= 0)
@@ -627,6 +631,22 @@ void handleIncomingCommand(const char *cmdStr) {
     actuators.engageRack();
   } else if (strcmp(cmdStr, "CMD:RACK:RELAX") == 0) {
     actuators.relaxRack();
+  } else if (strncmp(cmdStr, "CMD:RACK:ANGLE:", 15) == 0) {
+    int ang = atoi(cmdStr + 15);
+    actuators.setRackAngle((uint8_t)constrain(ang, 0, 180));
+  } else if (strncmp(cmdStr, "CMD:RACK_CFG:", 13) == 0) {
+    int eng = RACK_POS_ENGAGED, rel = RACK_POS_RELEASED, inv = RACK_SERVO_INVERTED_DEFAULT ? 1 : 0;
+    if (sscanf(cmdStr + 13, "%d:%d:%d", &eng, &rel, &inv) >= 2) {
+      eng = constrain(eng, 0, 180);
+      rel = constrain(rel, 0, 180);
+      bool invBool = (inv != 0);
+      actuators.setRackConfig((uint8_t)eng, (uint8_t)rel, invBool, true);
+      c6Prefs.putUChar("rck_eng", (uint8_t)eng);
+      c6Prefs.putUChar("rck_rel", (uint8_t)rel);
+      c6Prefs.putBool("rck_inv", invBool);
+      printLog("[C6 ROVER] Config Cremalheira gravada: Encosto=%d°, Livre=%d°, Invertido=%s\n",
+               eng, rel, invBool ? "SIM" : "NAO");
+    }
   } else if (strcmp(cmdStr, "CMD:EMERGENCY_STOP") == 0) {
     actuators.emergencyStop();
     currentMotorStatus = MOTOR_IDLE;
@@ -866,13 +886,31 @@ void loop() {
       printLog("[C6] Guincho parado (0V)\n");
     } else if (cmd == "RACK RELEASE") {
       actuators.releaseRack();
-      printLog("[C6] Trinco da cremalheira SOLTO (90 graus)\n");
+      printLog("[C6] Trinco da cremalheira SOLTO (%u graus, inv=%d)\n",
+               actuators.getRackAngleReleased(), actuators.isRackInverted() ? 1 : 0);
     } else if (cmd == "RACK ENGAGE") {
       actuators.engageRack();
-      printLog("[C6] Trinco da cremalheira TRAVADO (0 graus)\n");
+      printLog("[C6] Trinco da cremalheira TRAVADO (%u graus, inv=%d)\n",
+               actuators.getRackAngleEngaged(), actuators.isRackInverted() ? 1 : 0);
     } else if (cmd == "RACK RELAX") {
       actuators.relaxRack();
       printLog("[C6] Trinco relaxado\n");
+    } else if (cmd.startsWith("RACK_CFG ")) {
+      int eng = RACK_POS_ENGAGED, rel = RACK_POS_RELEASED, inv = RACK_SERVO_INVERTED_DEFAULT ? 1 : 0;
+      if (sscanf(cmd.c_str() + 9, "%d %d %d", &eng, &rel, &inv) >= 2) {
+        eng = constrain(eng, 0, 180);
+        rel = constrain(rel, 0, 180);
+        bool invBool = (inv != 0);
+        actuators.setRackConfig((uint8_t)eng, (uint8_t)rel, invBool, true);
+        c6Prefs.putUChar("rck_eng", (uint8_t)eng);
+        c6Prefs.putUChar("rck_rel", (uint8_t)rel);
+        c6Prefs.putBool("rck_inv", invBool);
+        printLog("[C6] Calibracao Cremalheira: Encosto=%d°, Livre=%d°, Invertido=%d\n", eng, rel, invBool ? 1 : 0);
+      }
+    } else if (cmd.startsWith("RACK ")) {
+      int ang = cmd.substring(5).toInt();
+      actuators.setRackAngle((uint8_t)constrain(ang, 0, 180));
+      printLog("[C6] Trinco da cremalheira movido para %d graus\n", constrain(ang, 0, 180));
     } else if (cmd.startsWith("ALARM ") || cmd == "ALARM") {
       int dur = 10;
       if (cmd.startsWith("ALARM "))
