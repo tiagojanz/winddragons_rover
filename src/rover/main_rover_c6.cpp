@@ -144,182 +144,161 @@ void setRgbColor(uint8_t r, uint8_t g, uint8_t b) {
 void updateStrobeLeds(uint32_t now) {
 #if defined(PIN_STROBE_LEDS) && (PIN_STROBE_LEDS >= 0)
   static uint32_t lastStrobeRender = 0;
-    if (!ledForceRefresh && (now - lastStrobeRender < 25))
-      return;
+  if (!ledForceRefresh && (now - lastStrobeRender < 25))
+    return;
   lastStrobeRender = now;
 
-  static bool wasStrobeOn = false;
   static bool wasLit = false;
   static LedStripTestMode lastRenderedMode = LED_MODE_OFF;
   uint16_t nLeds = strobeLeds.numPixels();
   if (nLeds == 0)
     nLeds = ledStripCount;
 
-  // Prioridade 1: Alarme ativo (manual ou comando) -> Estroboscópio náutico
-  // branco de alta intensidade
-  if (actuators.isAlarmActive()) {
-    // Prioridade 1: Alarme ativo (manual ou comando) ou Teste Strobe Náutico ->
-    // Estroboscópio náutico branco duplo-flash
-    if (actuators.isAlarmActive() || ledTestMode == LED_MODE_STROBE) {
-      // Padrão náutico duplo-flash a cada 600ms (40ms ON, 60ms OFF, 40ms ON,
-      // 460ms OFF)
-      uint32_t phase = now % 600;
-      bool isOn = (phase < 40) || (phase >= 100 && phase < 140);
-      if (isOn != wasStrobeOn) {
-        wasStrobeOn = isOn;
-        if (isOn != wasLit || lastRenderedMode != LED_MODE_STROBE ||
-            ledForceRefresh) {
-          wasLit = isOn;
-          lastRenderedMode = LED_MODE_STROBE;
-          ledForceRefresh = false;
-          uint32_t color = isOn ? strobeLeds.Color(255, 255, 255) : 0;
-          for (int i = 0; i < NUM_STROBE_LEDS; i++) {
-            for (uint16_t i = 0; i < nLeds; i++) {
-              strobeLeds.setPixelColor(i, color);
-            }
-            strobeLeds.show();
-          }
+  // Prioridade 1: Alarme ativo (manual ou comando) ou Teste Strobe Náutico ->
+  // Estroboscópio náutico branco duplo-flash
+  if (actuators.isAlarmActive() || ledTestMode == LED_MODE_STROBE) {
+    // Padrão náutico duplo-flash a cada 600ms (40ms ON, 60ms OFF, 40ms ON,
+    // 460ms OFF)
+    uint32_t phase = now % 600;
+    bool isOn = (phase < 40) || (phase >= 100 && phase < 140);
+    if (isOn != wasLit || lastRenderedMode != LED_MODE_STROBE ||
+        ledForceRefresh) {
+      wasLit = isOn;
+      lastRenderedMode = LED_MODE_STROBE;
+      ledForceRefresh = false;
+      uint32_t color = isOn ? strobeLeds.Color(255, 255, 255) : 0;
+      for (uint16_t i = 0; i < nLeds; i++) {
+        strobeLeds.setPixelColor(i, color);
+      }
+      strobeLeds.show();
+    }
+  }
+  // Prioridade 2: Modos de Teste e Sinalização Interativos
+  else if (ledTestMode == LED_MODE_SOLID) {
+    if (lastRenderedMode != LED_MODE_SOLID || ledForceRefresh || !wasLit) {
+      wasLit = true;
+      lastRenderedMode = LED_MODE_SOLID;
+      ledForceRefresh = false;
+      uint32_t color = strobeLeds.Color(ledSolidR, ledSolidG, ledSolidB);
+      for (uint16_t i = 0; i < nLeds; i++) {
+        strobeLeds.setPixelColor(i, color);
+      }
+      strobeLeds.show();
+    }
+  } else if (ledTestMode == LED_MODE_RAINBOW) {
+    wasLit = true;
+    lastRenderedMode = LED_MODE_RAINBOW;
+    ledForceRefresh = false;
+    uint16_t baseHue = (uint16_t)((now * 24UL) & 0xFFFF);
+    for (uint16_t i = 0; i < nLeds; i++) {
+      uint16_t pixelHue = baseHue + (i * 65536UL / (nLeds > 0 ? nLeds : 1));
+      strobeLeds.setPixelColor(
+          i, strobeLeds.gamma32(strobeLeds.ColorHSV(pixelHue)));
+    }
+    strobeLeds.show();
+  } else if (ledTestMode == LED_MODE_CHASE) {
+    // Scanner bidirecional (Knight Rider) com cauda suave para testar cada LED
+    wasLit = true;
+    lastRenderedMode = LED_MODE_CHASE;
+    ledForceRefresh = false;
+    uint16_t periodSteps = (nLeds > 1) ? ((nLeds - 1) * 2) : 1;
+    uint16_t step = (now / 70) % periodSteps;
+    int head = (step < nLeds) ? step : (periodSteps - step);
+    for (uint16_t i = 0; i < nLeds; i++) {
+      int dist = abs((int)i - head);
+      if (dist == 0) {
+        strobeLeds.setPixelColor(
+            i, strobeLeds.Color(ledSolidR, ledSolidG, ledSolidB));
+      } else if (dist == 1) {
+        strobeLeds.setPixelColor(
+            i, strobeLeds.Color(ledSolidR / 4, ledSolidG / 4, ledSolidB / 4));
+      } else if (dist == 2) {
+        strobeLeds.setPixelColor(
+            i,
+            strobeLeds.Color(ledSolidR / 16, ledSolidG / 16, ledSolidB / 16));
+      } else {
+        strobeLeds.setPixelColor(i, 0);
+      }
+    }
+    strobeLeds.show();
+  } else if (ledTestMode == LED_MODE_NAV) {
+    // Luzes de Navegação Náutica: Bombordo (Vermelho) + Estibordo (Verde)
+    if (lastRenderedMode != LED_MODE_NAV || ledForceRefresh || !wasLit) {
+      wasLit = true;
+      lastRenderedMode = LED_MODE_NAV;
+      ledForceRefresh = false;
+      uint16_t half = nLeds / 2;
+      for (uint16_t i = 0; i < nLeds; i++) {
+        if (i < half) {
+          strobeLeds.setPixelColor(i, strobeLeds.Color(255, 0, 0)); // Bombordo
+        } else {
+          strobeLeds.setPixelColor(i, strobeLeds.Color(0, 255, 0)); // Estibordo
         }
-        // Prioridade 2: Modo Failsafe -> Flashing Âmbar/Vermelho a 2 Hz (250ms
-        // ON, Prioridade 2: Modos de Teste e Sinalização Interativos
-        else if (ledTestMode == LED_MODE_SOLID) {
-          if (lastRenderedMode != LED_MODE_SOLID || ledForceRefresh ||
-              !wasLit) {
-            wasLit = true;
-            lastRenderedMode = LED_MODE_SOLID;
-            ledForceRefresh = false;
-            uint32_t color = strobeLeds.Color(ledSolidR, ledSolidG, ledSolidB);
-            for (uint16_t i = 0; i < nLeds; i++) {
-              strobeLeds.setPixelColor(i, color);
-            }
-            strobeLeds.show();
-          }
-        } else if (ledTestMode == LED_MODE_RAINBOW) {
-          wasLit = true;
-          lastRenderedMode = LED_MODE_RAINBOW;
-          ledForceRefresh = false;
-          uint16_t baseHue = (uint16_t)((now * 24UL) & 0xFFFF);
-          for (uint16_t i = 0; i < nLeds; i++) {
-            uint16_t pixelHue =
-                baseHue + (i * 65536UL / (nLeds > 0 ? nLeds : 1));
-            strobeLeds.setPixelColor(
-                i, strobeLeds.gamma32(strobeLeds.ColorHSV(pixelHue)));
-          }
-          strobeLeds.show();
-        } else if (ledTestMode == LED_MODE_CHASE) {
-          // Scanner bidirecional (Knight Rider) com cauda suave para testar
-          // cada LED
-          wasLit = true;
-          lastRenderedMode = LED_MODE_CHASE;
-          ledForceRefresh = false;
-          uint16_t periodSteps = (nLeds > 1) ? ((nLeds - 1) * 2) : 1;
-          uint16_t step = (now / 70) % periodSteps;
-          int head = (step < nLeds) ? step : (periodSteps - step);
-          for (uint16_t i = 0; i < nLeds; i++) {
-            int dist = abs((int)i - head);
-            if (dist == 0) {
-              strobeLeds.setPixelColor(
-                  i, strobeLeds.Color(ledSolidR, ledSolidG, ledSolidB));
-            } else if (dist == 1) {
-              strobeLeds.setPixelColor(i, strobeLeds.Color(ledSolidR / 4,
-                                                           ledSolidG / 4,
-                                                           ledSolidB / 4));
-            } else if (dist == 2) {
-              strobeLeds.setPixelColor(i, strobeLeds.Color(ledSolidR / 16,
-                                                           ledSolidG / 16,
-                                                           ledSolidB / 16));
-            } else {
-              strobeLeds.setPixelColor(i, 0);
-            }
-          }
-          strobeLeds.show();
-        } else if (ledTestMode == LED_MODE_NAV) {
-          // Luzes de Navegação Náutica: Bombordo (Vermelho) + Estibordo (Verde)
-          if (lastRenderedMode != LED_MODE_NAV || ledForceRefresh || !wasLit) {
-            wasLit = true;
-            lastRenderedMode = LED_MODE_NAV;
-            ledForceRefresh = false;
-            uint16_t half = nLeds / 2;
-            for (uint16_t i = 0; i < nLeds; i++) {
-              if (i < half) {
-                strobeLeds.setPixelColor(
-                    i, strobeLeds.Color(255, 0, 0)); // Bombordo
-              } else {
-                strobeLeds.setPixelColor(
-                    i, strobeLeds.Color(0, 255, 0)); // Estibordo
-              }
-            }
-            strobeLeds.show();
-          }
-        } else if (ledTestMode == LED_MODE_BEACON) {
-          // Flash Âmbar / Laranja de aviso a 2 Hz
-          uint32_t phase = now % 500;
-          bool isOn = (phase < 250);
-          if (isOn != wasLit || lastRenderedMode != LED_MODE_BEACON ||
-              ledForceRefresh) {
-            wasLit = isOn;
-            lastRenderedMode = LED_MODE_BEACON;
-            ledForceRefresh = false;
-            uint32_t color = isOn ? strobeLeds.Color(255, 80, 0) : 0;
-            for (uint16_t i = 0; i < nLeds; i++) {
-              strobeLeds.setPixelColor(i, color);
-            }
-            strobeLeds.show();
-          }
-        } else if (ledTestMode == LED_MODE_POLICE) {
-          // Emergência Vermelho / Azul alternado
-          wasLit = true;
-          lastRenderedMode = LED_MODE_POLICE;
-          ledForceRefresh = false;
-          bool side = ((now / 120) % 2) == 0;
-          uint16_t half = nLeds / 2;
-          if (half == 0)
-            half = 1;
-          for (uint16_t i = 0; i < nLeds; i++) {
-            bool firstHalf = (i < half);
-            if (firstHalf == side) {
-              strobeLeds.setPixelColor(i, strobeLeds.Color(255, 0, 0));
-            } else {
-              strobeLeds.setPixelColor(i, strobeLeds.Color(0, 40, 255));
-            }
-          }
-          strobeLeds.show();
-        }
-        // Prioridade 3: Modo Failsafe -> Flashing Âmbar/Vermelho a 2 Hz (250ms
-        // ON, 250ms OFF)
-        else if (currentMotorStatus == MOTOR_FAILSAFE) {
-          uint32_t phase = now % 500;
-          bool isOn = (phase < 250);
-          if (isOn != wasStrobeOn) {
-            wasStrobeOn = isOn;
-            if (isOn != wasLit || lastRenderedMode != LED_MODE_OFF ||
-                ledForceRefresh) {
-              wasLit = isOn;
-              lastRenderedMode = LED_MODE_OFF;
-              ledForceRefresh = false;
-              uint32_t color = isOn ? strobeLeds.Color(255, 60, 0) : 0;
-              for (int i = 0; i < NUM_STROBE_LEDS; i++) {
-                for (uint16_t i = 0; i < nLeds; i++) {
-                  strobeLeds.setPixelColor(i, color);
-                }
-                strobeLeds.show();
-              }
-            }
-            // Estado Normal: LEDs apagados (standby silencioso)
-            else {
-              if (wasStrobeOn) {
-                wasStrobeOn = false;
-                if (wasLit || lastRenderedMode != LED_MODE_OFF ||
-                    ledForceRefresh) {
-                  wasLit = false;
-                  lastRenderedMode = LED_MODE_OFF;
-                  ledForceRefresh = false;
-                  strobeLeds.clear();
-                  strobeLeds.show();
-                }
-              }
+      }
+      strobeLeds.show();
+    }
+  } else if (ledTestMode == LED_MODE_BEACON) {
+    // Flash Âmbar / Laranja de aviso a 2 Hz
+    uint32_t phase = now % 500;
+    bool isOn = (phase < 250);
+    if (isOn != wasLit || lastRenderedMode != LED_MODE_BEACON ||
+        ledForceRefresh) {
+      wasLit = isOn;
+      lastRenderedMode = LED_MODE_BEACON;
+      ledForceRefresh = false;
+      uint32_t color = isOn ? strobeLeds.Color(255, 80, 0) : 0;
+      for (uint16_t i = 0; i < nLeds; i++) {
+        strobeLeds.setPixelColor(i, color);
+      }
+      strobeLeds.show();
+    }
+  } else if (ledTestMode == LED_MODE_POLICE) {
+    // Emergência Vermelho / Azul alternado
+    wasLit = true;
+    lastRenderedMode = LED_MODE_POLICE;
+    ledForceRefresh = false;
+    bool side = ((now / 120) % 2) == 0;
+    uint16_t half = nLeds / 2;
+    if (half == 0)
+      half = 1;
+    for (uint16_t i = 0; i < nLeds; i++) {
+      bool firstHalf = (i < half);
+      if (firstHalf == side) {
+        strobeLeds.setPixelColor(i, strobeLeds.Color(255, 0, 0));
+      } else {
+        strobeLeds.setPixelColor(i, strobeLeds.Color(0, 40, 255));
+      }
+    }
+    strobeLeds.show();
+  }
+  // Prioridade 3: Modo Failsafe -> Flashing Âmbar/Vermelho a 2 Hz (250ms ON,
+  // 250ms OFF)
+  else if (currentMotorStatus == MOTOR_FAILSAFE) {
+    uint32_t phase = now % 500;
+    bool isOn = (phase < 250);
+    if (isOn != wasLit || lastRenderedMode != LED_MODE_OFF || ledForceRefresh) {
+      wasLit = isOn;
+      lastRenderedMode = LED_MODE_OFF;
+      ledForceRefresh = false;
+      uint32_t color = isOn ? strobeLeds.Color(255, 60, 0) : 0;
+      for (uint16_t i = 0; i < nLeds; i++) {
+        strobeLeds.setPixelColor(i, color);
+      }
+      strobeLeds.show();
+    }
+  }
+  // Estado Normal: LEDs apagados (standby silencioso)
+  else {
+    if (wasLit || lastRenderedMode != LED_MODE_OFF || ledForceRefresh) {
+      wasLit = false;
+      lastRenderedMode = LED_MODE_OFF;
+      ledForceRefresh = false;
+      strobeLeds.clear();
+      strobeLeds.show();
+    }
+  }
 #endif
-            }
+}
 
             void sendLoRaTelemetry() {
               if (!loraReady)
@@ -849,9 +828,6 @@ void updateStrobeLeds(uint32_t now) {
               strobeLeds.setBrightness(map(ledStripBrightPct, 0, 100, 0, 255));
               strobeLeds.clear();
               strobeLeds.show();
-              Serial.printf("[STROBE] LEDs WS2812B Strobe iniciados no GPIO %d "
-                            "(%d LEDs)\n",
-                            PIN_STROBE_LEDS, NUM_STROBE_LEDS);
               Serial.printf("[STROBE] LEDs WS2812B Strobe iniciados no GPIO %d "
                             "(%u LEDs, Brilho=%u%%)\n",
                             PIN_STROBE_LEDS, ledStripCount, ledStripBrightPct);
