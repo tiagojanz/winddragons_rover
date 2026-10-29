@@ -850,6 +850,10 @@ input:focus, select:focus, textarea:focus {
 .fa-satellite-dish:before { content: '\\f7c0'; }
 .fa-terminal:before { content: '\\f120'; }
 .fa-arrows-down-to-line:before { content: '\\e4b8'; }
+.fa-lightbulb:before { content: '\\f0eb'; }
+.fa-palette:before { content: '\\f53f'; }
+.fa-power-off:before { content: '\\f011'; }
+.fa-wand-magic-sparkles:before { content: '\\e2ca'; }
 
 /* Toggle Switch Component */
 .switch {
@@ -1844,6 +1848,7 @@ function drawJoystickPad(thr, rud) {
   joyCtx.fill();
 }
 
+let _roverSliderTimer = null;
 function updateSliders() {
   const t = parseInt(document.getElementById('throttleSlider').value) || 0;
   const r = parseInt(document.getElementById('rudderSlider').value) || 0;
@@ -1851,6 +1856,8 @@ function updateSliders() {
   document.getElementById('rudVal').innerText = r + '%';
   drawJoystickPad(t, r);
   updateJoyBadge(t, r);
+  if (_roverSliderTimer) clearTimeout(_roverSliderTimer);
+  _roverSliderTimer = setTimeout(() => { sendActuators(); }, 120);
 }
 
 function updateJoyBadge(t, r) {
@@ -2236,6 +2243,63 @@ CONFIG_CONTENT = """
     </div>
   </div>
 
+  <div class="card" style="border:1px solid #a855f7;">
+    <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+      <span><i class="fa-solid fa-lightbulb" style="color:#c084fc;"></i> Teste e Configuração da Fita de LEDs WS2812B (GPIO 19 - Conector STRB)</span>
+      <span id="ledModeBadge" class="badge" style="background:#3b0764;color:#e9d5ff;border:1px solid #9333ea;font-size:0.82rem;">MODO: OFF</span>
+    </div>
+    <p style="color:var(--muted);font-size:0.875rem;margin-bottom:14px;">
+      Teste interativamente as cores, animações e estroboscópio da fita de LEDs endereçáveis WS2812B ligada ao pino <strong>GPIO 19 (STRB)</strong> do Coprocessador C6.
+    </p>
+
+    <div style="margin-bottom:14px;">
+      <div class="stat-label" style="margin-bottom:8px;"><i class="fa-solid fa-wand-magic-sparkles"></i> Modos de Animação e Sinalização Náutica:</div>
+      <div class="btn-group">
+        <button type="button" onclick="testLedMode('OFF')" class="btn btn-danger" style="background:#dc2626;"><i class="fa-solid fa-power-off"></i> Desligar (OFF)</button>
+        <button type="button" onclick="testLedMode('STROBE')" class="btn btn-secondary" style="background:#0284c7;color:#fff;"><i class="fa-solid fa-bolt"></i> Strobe Náutico (Duplo Flash)</button>
+        <button type="button" onclick="testLedMode('NAV')" class="btn btn-secondary" style="background:linear-gradient(90deg,#dc2626,#16a34a);color:#fff;">Bombordo / Estibordo (NAV)</button>
+        <button type="button" onclick="testLedMode('BEACON')" class="btn btn-secondary" style="background:#d97706;color:#fff;">Farol Âmbar (Beacon)</button>
+        <button type="button" onclick="testLedMode('RAINBOW')" class="btn btn-secondary" style="background:linear-gradient(90deg,#ef4444,#eab308,#22c55e,#3b82f6,#a855f7);color:#fff;">Arco-Íris (Rainbow)</button>
+        <button type="button" onclick="testLedMode('CHASE')" class="btn btn-secondary" style="background:#0891b2;color:#fff;">Scanner Pixel-a-Pixel (Chase)</button>
+        <button type="button" onclick="testLedMode('POLICE')" class="btn btn-secondary" style="background:linear-gradient(90deg,#dc2626,#2563eb);color:#fff;">Emergência (Vermelho/Azul)</button>
+      </div>
+    </div>
+
+    <div style="margin-bottom:14px;background:rgba(15,23,42,0.6);border:1px solid #334155;border-radius:8px;padding:12px;">
+      <div class="stat-label" style="margin-bottom:8px;"><i class="fa-solid fa-palette"></i> Teste de Cores Sólidas (Todos os LEDs):</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+        <button type="button" onclick="testLedColor(255,0,0,'VERMELHO')" class="btn" style="background:#ef4444;color:#fff;padding:8px 14px;">Vermelho</button>
+        <button type="button" onclick="testLedColor(0,255,0,'VERDE')" class="btn" style="background:#22c55e;color:#0f172a;padding:8px 14px;">Verde</button>
+        <button type="button" onclick="testLedColor(0,0,255,'AZUL')" class="btn" style="background:#3b82f6;color:#fff;padding:8px 14px;">Azul</button>
+        <button type="button" onclick="testLedColor(255,255,255,'BRANCO')" class="btn" style="background:#f8fafc;color:#0f172a;padding:8px 14px;">Branco Puro</button>
+        <button type="button" onclick="testLedColor(255,160,0,'ÂMBAR')" class="btn" style="background:#f59e0b;color:#0f172a;padding:8px 14px;">Âmbar</button>
+        <button type="button" onclick="testLedColor(0,255,255,'CIANO')" class="btn" style="background:#06b6d4;color:#0f172a;padding:8px 14px;">Ciano</button>
+        <button type="button" onclick="testLedColor(255,0,255,'MAGENTA')" class="btn" style="background:#d946ef;color:#fff;padding:8px 14px;">Magenta</button>
+        <div style="display:flex;align-items:center;gap:6px;margin-left:auto;">
+          <label style="font-size:0.8rem;color:var(--muted);">Cor Personalizada:</label>
+          <input type="color" id="ledCustomColor" value="#00e5ff" onchange="testLedHex(this.value)" style="width:46px;height:36px;padding:2px;margin:0;cursor:pointer;background:#0f172a;border:1px solid #475569;border-radius:6px;">
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;background:rgba(15,23,42,0.6);border:1px solid #334155;border-radius:8px;padding:12px;">
+      <div style="flex:1;min-width:220px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <span class="stat-label">Brilho da Fita de LEDs (5% - 100%):</span>
+          <span id="ledBrightVal" style="font-weight:700;color:#c084fc;font-size:1.05rem;">100%</span>
+        </div>
+        <input type="range" id="cfg_led_bright" min="5" max="100" step="1" value="100" class="slider" oninput="onLedBrightSlide(this.value)">
+      </div>
+      <div>
+        <label style="display:block;font-size:0.8rem;color:var(--muted);margin-bottom:4px;">Nº de LEDs na Fita (1 - 120):</label>
+        <input type="number" id="cfg_led_count" min="1" max="120" value="8" style="width:110px;margin:0;">
+      </div>
+      <button type="button" onclick="saveLedConfig()" class="btn btn-primary" style="background:#9333ea;color:#fff;">
+        <i class="fa-solid fa-floppy-disk"></i> Guardar Config LEDs
+      </button>
+    </div>
+  </div>
+
   <div class="card" style="border-color:var(--primary);">
     <div class="card-title">
       <span><i class="fa-solid fa-floppy-disk"></i> Gravar e Sincronizar Tudo</span>
@@ -2487,6 +2551,87 @@ function saveJoystickConfig(en) {
   .catch(() => {});
 }
 
+let ledBrightTimer = null;
+
+function updateLedBadge(txt, bg = '#3b0764', col = '#e9d5ff') {
+  const b = document.getElementById('ledModeBadge');
+  if (!b) return;
+  b.innerText = 'MODO: ' + txt;
+  b.style.background = bg;
+  b.style.color = col;
+}
+
+function testLedMode(mode) {
+  updateLedBadge(mode, mode === 'OFF' ? '#1e293b' : '#581c87', mode === 'OFF' ? 'var(--muted)' : '#f3e8ff');
+  fetch('/api/control/leds', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mode: mode })
+  })
+  .then(r => r.json())
+  .then(res => {
+    const msg = res.msg || ('Modo LED: ' + mode);
+    if (typeof showToast === 'function') showToast(msg);
+    showStatus(msg);
+  })
+  .catch(() => {});
+}
+
+function testLedColor(r, g, b, label) {
+  const lum = (r * 0.299 + g * 0.587 + b * 0.114);
+  updateLedBadge('COR: ' + (label || (r + ',' + g + ',' + b)), 'rgb(' + r + ',' + g + ',' + b + ')', lum > 150 ? '#0f172a' : '#fff');
+  fetch('/api/control/leds', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mode: 'SOLID', r: r, g: g, b: b })
+  })
+  .then(r => r.json())
+  .then(res => {
+    const msg = res.msg || 'Cor aplicada na fita de LEDs!';
+    if (typeof showToast === 'function') showToast(msg);
+    showStatus(msg);
+  })
+  .catch(() => {});
+}
+
+function testLedHex(hex) {
+  if (!hex || hex.length < 7) return;
+  const r = parseInt(hex.slice(1, 3), 16) || 0;
+  const g = parseInt(hex.slice(3, 5), 16) || 0;
+  const b = parseInt(hex.slice(5, 7), 16) || 0;
+  testLedColor(r, g, b, hex.toUpperCase());
+}
+
+function onLedBrightSlide(v) {
+  const el = document.getElementById('ledBrightVal');
+  if (el) el.innerText = v + '%';
+  if (ledBrightTimer) clearTimeout(ledBrightTimer);
+  ledBrightTimer = setTimeout(() => {
+    fetch('/api/control/leds', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ brightness: parseInt(v) || 100 })
+    }).catch(() => {});
+  }, 60);
+}
+
+function saveLedConfig() {
+  const cnt = Math.max(1, Math.min(120, parseInt(document.getElementById('cfg_led_count')?.value) || 8));
+  const brt = Math.max(5, Math.min(100, parseInt(document.getElementById('cfg_led_bright')?.value) || 100));
+  fetch('/api/control/leds', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ count: cnt, brightness: brt, save: true })
+  })
+  .then(r => r.json())
+  .then(res => {
+    const msg = res.msg || 'Configuração da fita de LEDs guardada!';
+    if (typeof showToast === 'function') showToast(msg);
+    showStatus(msg);
+  })
+  .catch(() => {});
+}
+
 function loadConfig() {
   fetch('/api/rover/config')
     .then(r => r.json())
@@ -2525,6 +2670,17 @@ function loadConfig() {
       if (data.anchor_pulses_per_rev !== undefined && document.getElementById('cfg_pulses_per_rev')) {
         document.getElementById('cfg_pulses_per_rev').value = data.anchor_pulses_per_rev;
       }
+      if (data.led_count !== undefined && document.getElementById('cfg_led_count')) {
+        document.getElementById('cfg_led_count').value = data.led_count;
+      }
+      if (data.led_brightness !== undefined && document.getElementById('cfg_led_bright')) {
+        document.getElementById('cfg_led_bright').value = data.led_brightness;
+        const lbv = document.getElementById('ledBrightVal');
+        if (lbv) lbv.innerText = data.led_brightness + '%';
+      }
+      if (data.led_mode) {
+        updateLedBadge(data.led_mode, data.led_mode === 'OFF' ? '#1e293b' : '#581c87', data.led_mode === 'OFF' ? 'var(--muted)' : '#f3e8ff');
+      }
       document.getElementById('summaryId').innerText = 'Rover-' + (data.rover_id || 1);
       document.getElementById('summarySsid').innerText = data.ap_ssid || 'WindDragon-AP';
       if (data.version_lafvin && document.getElementById('fwLafvinVer')) document.getElementById('fwLafvinVer').innerText = data.version_lafvin;
@@ -2545,6 +2701,8 @@ function saveAllConfig(e) {
   const rackInv = document.getElementById('cfg_rack_inverted')?.checked ?? true;
   const drumDiam = parseFloat(document.getElementById('cfg_drum_diam')?.value ?? 30.0);
   const pulsesRev = parseInt(document.getElementById('cfg_pulses_per_rev')?.value ?? 1);
+  const ledCnt = parseInt(document.getElementById('cfg_led_count')?.value ?? 8);
+  const ledBrt = parseInt(document.getElementById('cfg_led_bright')?.value ?? 100);
 
   fetch('/api/rover/config', {
     method: 'POST',
@@ -2559,7 +2717,9 @@ function saveAllConfig(e) {
       rack_angle_released: rackRel,
       rack_inverted: rackInv,
       anchor_drum_diam_mm: drumDiam,
-      anchor_pulses_per_rev: pulsesRev
+      anchor_pulses_per_rev: pulsesRev,
+      led_count: ledCnt,
+      led_brightness: ledBrt
     })
   })
   .then(r => r.json())
@@ -6254,11 +6414,14 @@ function changeRover(id) {
 }
 
 // --- COMANDOS & ATUADORES ---
+let _baseSliderTimer = null;
 function updateSliders() {
   const thr = document.getElementById('throttleSlider');
   const rud = document.getElementById('rudderSlider');
   if (thr) document.getElementById('thrVal').innerText = thr.value + '%';
   if (rud) document.getElementById('rudVal').innerText = rud.value + '%';
+  if (_baseSliderTimer) clearTimeout(_baseSliderTimer);
+  _baseSliderTimer = setTimeout(() => { sendActuators(); }, 120);
 }
 
 function setThrottle(v) {

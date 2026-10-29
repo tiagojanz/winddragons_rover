@@ -813,6 +813,10 @@ input:focus, select:focus, textarea:focus {
 .fa-satellite-dish:before { content: '\f7c0'; }
 .fa-terminal:before { content: '\f120'; }
 .fa-arrows-down-to-line:before { content: '\e4b8'; }
+.fa-lightbulb:before { content: '\f0eb'; }
+.fa-palette:before { content: '\f53f'; }
+.fa-power-off:before { content: '\f011'; }
+.fa-wand-magic-sparkles:before { content: '\e2ca'; }
 
 /* Toggle Switch Component */
 .switch {

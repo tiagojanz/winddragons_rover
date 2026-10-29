@@ -67,6 +67,16 @@
 #define PIN_I2C_SDA 0 // ESP32 GPIO 0 (SDA)
 #define PIN_I2C_SCL 1 // ESP32 GPIO 1 (SCL)
 
+// --- Ilha de Expansão J_EXP na PCB C6 (Bússola GY-BNO055 9-DOF) ---
+// J_EXP Pino 1 (IO1)  -> GPIO 1  (I2C SDA)
+// J_EXP Pino 2 (3V3)  -> +3.3V
+// J_EXP Pino 3 (IO11) -> GPIO 11 (I2C SCL)
+// J_EXP Pino 5/6 (GND)-> GND
+#define PIN_C6_EXP_SDA 1
+#define PIN_C6_EXP_SCL 11
+#define BNO055_I2C_ADDR_A 0x28
+#define BNO055_I2C_ADDR_B 0x29
+
 // ==========================================
 // INTER-ESP UART DEFINITIONS (Lafvin Master <-> ESP32-C6 Slave)
 // ==========================================

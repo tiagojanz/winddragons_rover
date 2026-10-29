@@ -24,8 +24,10 @@ struct RoverConfig {
       rackAngleEngaged; // Ângulo de encosto / travado da cremalheira (0-180°)
   uint8_t rackAngleReleased; // Ângulo livre / solto da cremalheira (0-180°)
   bool rackInverted;         // Inverter direção do servo da cremalheira
-  bool joystickEnabled; // Habilitar/desabilitar leitura do joystick analógico
-                        // físico (GPIO 3 / GPIO 0)
+  bool joystickEnabled;  // Habilitar/desabilitar leitura do joystick analógico
+                         // físico (GPIO 3 / GPIO 0)
+  uint8_t ledCount;      // Quantidade de LEDs WS2812B na fita (GPIO 19)
+  uint8_t ledBrightness; // Brilho da fita de LEDs WS2812B (5 - 100%)
 };
 
 /**
@@ -47,7 +49,9 @@ public:
     _config.rackAngleEngaged = RACK_POS_ENGAGED;
     _config.rackAngleReleased = RACK_POS_RELEASED;
     _config.rackInverted = RACK_SERVO_INVERTED_DEFAULT;
-    _config.joystickEnabled = true;
+    _config.joystickEnabled = false;
+    _config.ledCount = NUM_STROBE_LEDS;
+    _config.ledBrightness = 100;
   }
 
   void begin(SDCardManager *sd = nullptr) {
@@ -79,6 +83,8 @@ public:
   uint8_t getRackAngleReleased() const { return _config.rackAngleReleased; }
   bool isRackInverted() const { return _config.rackInverted; }
   bool isJoystickEnabled() const { return _config.joystickEnabled; }
+  uint8_t getLedCount() const { return _config.ledCount; }
+  uint8_t getLedBrightness() const { return _config.ledBrightness; }
 
   void setRoverId(uint8_t id) { _config.roverId = id; }
 
@@ -124,6 +130,14 @@ public:
 
   void setJoystickEnabled(bool enabled) {
     _config.joystickEnabled = enabled;
+    saveConfig();
+  }
+
+  void setLedConfig(uint8_t count, uint8_t brightness) {
+    if (count >= 1 && count <= 120)
+      _config.ledCount = count;
+    if (brightness >= 5 && brightness <= 100)
+      _config.ledBrightness = brightness;
     saveConfig();
   }
 
@@ -190,18 +204,26 @@ public:
         _config.rackAngleReleased = RACK_POS_RELEASED;
       _config.rackInverted =
           prefs.getBool("rck_inv", RACK_SERVO_INVERTED_DEFAULT);
-      _config.joystickEnabled = prefs.getBool("joy_en", true);
+      _config.joystickEnabled = prefs.getBool("joy_en", false);
+      _config.ledCount = prefs.getUChar("led_cnt", NUM_STROBE_LEDS);
+      if (_config.ledCount < 1 || _config.ledCount > 120)
+        _config.ledCount = NUM_STROBE_LEDS;
+      _config.ledBrightness = prefs.getUChar("led_brt", 100);
+      if (_config.ledBrightness < 5 || _config.ledBrightness > 100)
+        _config.ledBrightness = 100;
       prefs.end();
       Serial.printf(
           "[CONFIG] Carregado da memoria NVS -> ID: %u | SSID AP: %s | Brilho: "
           "%u%% | Bateria: %uS (%u mAh) | Âncora: Tambor=%.1fmm (%u p/rev) | "
-          "Cremalheira: Encosto=%u° Livre=%u° Inv=%d | Joystick=%s\n",
+          "Cremalheira: Encosto=%u° Livre=%u° Inv=%d | Joystick=%s | LEDs=%u "
+          "(%u%%)\n",
           _config.roverId, _config.apSsid.c_str(), _config.screenBrightness,
           _config.batteryCells, _config.batteryCapacityMah,
           _config.anchorDrumDiamMm, _config.anchorPulsesPerRev,
           _config.rackAngleEngaged, _config.rackAngleReleased,
           _config.rackInverted ? 1 : 0,
-          _config.joystickEnabled ? "ATIVO" : "DESATIVADO");
+          _config.joystickEnabled ? "ATIVO" : "DESATIVADO",
+          _config.ledCount, _config.ledBrightness);
     }
 
     // 3. Se o cartão SD estiver presente mas ainda não possuir o /config.json,
@@ -229,6 +251,8 @@ public:
     prefs.putUChar("rck_rel", _config.rackAngleReleased);
     prefs.putBool("rck_inv", _config.rackInverted);
     prefs.putBool("joy_en", _config.joystickEnabled);
+    prefs.putUChar("led_cnt", _config.ledCount);
+    prefs.putUChar("led_brt", _config.ledBrightness);
     prefs.end();
 
     // Guarda no Cartão MicroSD
@@ -318,21 +342,35 @@ public:
     if (doc["rack_inverted"].is<bool>()) {
       _config.rackInverted = doc["rack_inverted"].as<bool>();
     }
-    if (doc["joystick_enabled"].is<bool>()) {
+    if (doc["joystick_user_set"].is<bool>() &&
+        doc["joystick_user_set"].as<bool>() &&
+        doc["joystick_enabled"].is<bool>()) {
       _config.joystickEnabled = doc["joystick_enabled"].as<bool>();
+    }
+    if (doc["led_count"].is<int>()) {
+      int lc = doc["led_count"].as<int>();
+      if (lc >= 1 && lc <= 120)
+        _config.ledCount = (uint8_t)lc;
+    }
+    if (doc["led_brightness"].is<int>()) {
+      int lb = doc["led_brightness"].as<int>();
+      if (lb >= 5 && lb <= 100)
+        _config.ledBrightness = (uint8_t)lb;
     }
 
     Serial.printf(
         "[CONFIG] Carregado de /config.json (MicroSD) -> ID: %u | SSID AP: %s "
         "| Brilho: %u%% | Bateria: %uS (%u mAh) | Âncora: Tambor=%.1fmm (%u "
-        "p/rev) | Cremalheira: Encosto=%u° Livre=%u° Inv=%d | Joystick=%s\n",
+        "p/rev) | Cremalheira: Encosto=%u° Livre=%u° Inv=%d | Joystick=%s | "
+        "LEDs=%u (%u%%)\n",
         _config.roverId, _config.apSsid.c_str(), _config.screenBrightness,
         _config.batteryCells, _config.batteryCapacityMah,
         _config.anchorDrumDiamMm, _config.anchorPulsesPerRev,
         _config.rackAngleEngaged, _config.rackAngleReleased,
         _config.rackInverted ? 1 : 0,
-        _config.joystickEnabled ? "ATIVO" : "DESATIVADO");
-    return true;
+        _config.joystickEnabled ? "ATIVO" : "DESATIVADO",
+        _config.ledCount, _config.ledBrightness);
+        return true;
   }
 
   bool saveConfigToSD() {
@@ -352,6 +390,9 @@ public:
     doc["rack_angle_released"] = _config.rackAngleReleased;
     doc["rack_inverted"] = _config.rackInverted;
     doc["joystick_enabled"] = _config.joystickEnabled;
+    doc["joystick_user_set"] = true;
+    doc["led_count"] = _config.ledCount;
+    doc["led_brightness"] = _config.ledBrightness;
 
     String jsonStr;
     serializeJsonPretty(doc, jsonStr);

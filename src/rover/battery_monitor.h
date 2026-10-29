@@ -86,6 +86,7 @@ public:
     }
 
     void setValues(uint16_t vMv, float cAmps, uint8_t pct) {
+        useRemoteValues = true;
         voltageMv = vMv;
         currentAmps = cAmps;
         calculatePercentage();
@@ -105,6 +106,10 @@ public:
     }
 
     void update() {
+        if (useRemoteValues) {
+            return;
+        }
+
         uint32_t now = millis();
         if (lastUpdateMs == 0) lastUpdateMs = now;
         float dtHours = (now - lastUpdateMs) / 3600000.0f;
@@ -119,6 +124,8 @@ public:
             }
             float mvV = (float)sumV / 15.0f;
             float mvI = (float)sumI / 15.0f;
+            rawVoltAdcMv = mvV;
+            rawCurrAdcMv = mvI;
             float batteryV = (mvV * BATT_VOLT_DIVIDER) / 1000.0f;
             voltageMv = static_cast<uint16_t>(batteryV * 1000.0f);
 
@@ -172,8 +179,10 @@ public:
     uint8_t  getPercentage() const { return batteryPct; }
     float    getCurrentAmps() const { return currentAmps; }
     float    getConsumedMah() const { return consumedMah; }
+    float    getRawVoltAdcMv() const { return rawVoltAdcMv; }
+    float    getRawCurrAdcMv() const { return rawCurrAdcMv; }
     float    getCellAverageV() const { return (cellCount > 0) ? (voltageMv / 1000.0f) / (float)cellCount : 0.0f; }
-    bool     isSensorReady() const { return useDirectAdc || adsAvailable; }
+    bool     isSensorReady() const { return useDirectAdc || adsAvailable || useRemoteValues; }
 
 private:
     Adafruit_ADS1115 ads;
@@ -181,9 +190,12 @@ private:
     uint8_t  batteryPct;
     float    currentAmps;
     float    consumedMah;
+    float    rawVoltAdcMv = 0.0f;
+    float    rawCurrAdcMv = 0.0f;
     uint32_t lastUpdateMs;
     bool     adsAvailable;
     bool     useDirectAdc = false;
+    bool     useRemoteValues = false;
     uint8_t  cellCount = 4;
     uint16_t capacityMah = 2650;
 };

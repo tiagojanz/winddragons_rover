@@ -381,10 +381,37 @@ private:
     _server.on("/api/battery/reset", HTTP_POST,
                [this]() { handleApiBatteryReset(); });
 
-    // Configuração do GPS Quectel LC29H (Frequência Hz e Comandos NMEA/PAIR)
+    // Configuração do GPS Quectel LC29H (Frequência Hz e Comandos NMEA/PAIR) e
+    // Bússola BNO055
     _server.on("/api/gps/rate", HTTP_POST, [this]() { handleApiGpsRate(); });
     _server.on("/api/gps/command", HTTP_POST,
                [this]() { handleApiGpsCommand(); });
+    _server.on("/api/compass/calibrate", HTTP_POST, [this]() {
+      if (_server.hasArg("plain")) {
+        JsonDocument doc;
+        if (!deserializeJson(doc, _server.arg("plain"))) {
+          if (doc["zero"].as<bool>()) {
+            if (_commandQueueCb)
+              _commandQueueCb("CMD:COMPASS_ZERO");
+            _server.send(200, "application/json",
+                         "{\"status\":\"ok\",\"msg\":\"Proa atual definida "
+                         "como 0° (Norte)\"}");
+            return;
+          } else if (doc["offset"].is<float>() || doc["offset"].is<int>()) {
+            float off = doc["offset"].as<float>();
+            char cmd[48];
+            snprintf(cmd, sizeof(cmd), "CMD:COMPASS_OFFSET:%.1f", off);
+            if (_commandQueueCb)
+              _commandQueueCb(cmd);
+            _server.send(
+                200, "application/json",
+                "{\"status\":\"ok\",\"msg\":\"Offset da bussola atualizado\"}");
+            return;
+          }
+        }
+      }
+      _server.send(400, "application/json", "{\"status\":\"error\"}");
+    });
 
     // Controle de atuadores
     _server.on("/api/control/actuator", [this]() { handleApiActuator(); });
@@ -395,6 +422,7 @@ private:
     _server.on("/api/control/rack/config", [this]() { handleApiRackConfig(); });
     _server.on("/api/control/joystick/config", HTTP_POST,
                [this]() { handleApiJoystickConfig(); });
+    _server.on("/api/control/leds", [this]() { handleApiLedControl(); });
 
     // Gestão do Cartão SD
     _server.on("/api/sd/list", [this]() { handleApiSdList(); });
@@ -697,6 +725,10 @@ private:
     html += ".fa-filter:before{content:'\\f0b0';}";
     html += ".fa-qrcode:before{content:'\\f029';}";
     html += ".fa-camera:before{content:'\\f030';}";
+    html += ".fa-lightbulb:before{content:'\\f0eb';}";
+    html += ".fa-palette:before{content:'\\f53f';}";
+    html += ".fa-power-off:before{content:'\\f011';}";
+    html += ".fa-wand-magic-sparkles:before{content:'\\e2ca';}";
     html += "</style></head><body>";
 
     // Navbar
@@ -1361,6 +1393,135 @@ private:
             "Calibração do Tambor</button>";
     html += "</div></div>";
 
+    // Card 4.3: Teste e Configuração da Fita de LEDs WS2812B (GPIO 19 - STRB)
+    html += "<div class='card' style='border:1px solid #a855f7;'>";
+    html += "<div class='card-title' "
+            "style='display:flex;justify-content:space-between;align-items:"
+            "center;flex-wrap:wrap;gap:8px;'>";
+    html += "<span><i class='fa-solid fa-lightbulb' "
+            "style='color:#c084fc;'></i> Teste e Configuração da Fita de LEDs "
+            "WS2812B (GPIO 19 - Conector STRB)</span>";
+    html +=
+        "<span id='ledModeBadge' class='badge' "
+        "style='background:#3b0764;color:#e9d5ff;border:1px solid #9333ea;'>"
+        "MODO: " +
+        String(_actuators.getLedMode()) + "</span>";
+    html += "</div>";
+    html += "<p "
+            "style='color:var(--muted);font-size:0.85rem;margin-bottom:14px;'>"
+            "Teste interativamente as cores, animações e estroboscópio da fita "
+            "de LEDs endereçáveis WS2812B ligada ao pino <b>GPIO 19 (STRB)</b> "
+            "do Coprocessador C6.</p>";
+
+    // Linha 1: Modos e Animações de Teste
+    html += "<div style='margin-bottom:14px;'>";
+    html += "<div class='stat-label' style='margin-bottom:8px;'><i "
+            "class='fa-solid fa-wand-magic-sparkles'></i> Modos de Animação e "
+            "Sinalização Náutica:</div>";
+    html += "<div class='btn-group'>";
+    html += "<button type='button' onclick='testLedMode(\"OFF\")' class='btn "
+            "btn-danger' style='background:#dc2626;'><i class='fa-solid "
+            "fa-power-off'></i> Desligar (OFF)</button>";
+    html += "<button type='button' onclick='testLedMode(\"STROBE\")' "
+            "class='btn btn-secondary' "
+            "style='background:#0284c7;color:#fff;'><i class='fa-solid "
+            "fa-bolt'></i> Strobe Náutico (Duplo Flash)</button>";
+    html += "<button type='button' onclick='testLedMode(\"NAV\")' class='btn "
+            "btn-secondary' "
+            "style='background:linear-gradient(90deg,#dc2626,#16a34a);color:#"
+            "fff;'>Bombordo / Estibordo (NAV)</button>";
+    html += "<button type='button' onclick='testLedMode(\"BEACON\")' "
+            "class='btn btn-secondary' "
+            "style='background:#d97706;color:#fff;'>Farol Âmbar "
+            "(Beacon)</button>";
+    html += "<button type='button' onclick='testLedMode(\"RAINBOW\")' "
+            "class='btn btn-secondary' "
+            "style='background:linear-gradient(90deg,#ef4444,#eab308,#22c55e,#"
+            "3b82f6,#a855f7);color:#fff;'>Arco-Íris (Rainbow)</button>";
+    html += "<button type='button' onclick='testLedMode(\"CHASE\")' class='btn "
+            "btn-secondary' "
+            "style='background:#0891b2;color:#fff;'>Scanner Pixel-a-Pixel "
+            "(Chase)</button>";
+    html += "<button type='button' onclick='testLedMode(\"POLICE\")' "
+            "class='btn btn-secondary' "
+            "style='background:linear-gradient(90deg,#dc2626,#2563eb);color:#"
+            "fff;'>Emergência (Vermelho/Azul)</button>";
+    html += "</div></div>";
+
+    // Linha 2: Cores Sólidas Rápidas + Seletor RGB
+    html += "<div "
+            "style='margin-bottom:14px;background:rgba(15,23,42,0.6);border:"
+            "1px solid #334155;border-radius:8px;padding:12px;'>";
+    html += "<div class='stat-label' style='margin-bottom:8px;'><i "
+            "class='fa-solid fa-palette'></i> Teste de Cores Sólidas (Todos os "
+            "LEDs):</div>";
+    html += "<div "
+            "style='display:flex;flex-wrap:wrap;gap:8px;align-items:center;'>";
+    html += "<button type='button' onclick='testLedColor(255,0,0,\"VERMELHO\")'"
+            " class='btn' style='background:#ef4444;color:#fff;padding:8px "
+            "14px;'>Vermelho</button>";
+    html += "<button type='button' onclick='testLedColor(0,255,0,\"VERDE\")' "
+            "class='btn' style='background:#22c55e;color:#0f172a;padding:8px "
+            "14px;'>Verde</button>";
+    html += "<button type='button' onclick='testLedColor(0,0,255,\"AZUL\")' "
+            "class='btn' style='background:#3b82f6;color:#fff;padding:8px "
+            "14px;'>Azul</button>";
+    html += "<button type='button' "
+            "onclick='testLedColor(255,255,255,\"BRANCO\")' class='btn' "
+            "style='background:#f8fafc;color:#0f172a;padding:8px 14px;'>Branco "
+            "Puro</button>";
+    html += "<button type='button' "
+            "onclick='testLedColor(255,160,0,\"ÂMBAR\")' class='btn' "
+            "style='background:#f59e0b;color:#0f172a;padding:8px "
+            "14px;'>Âmbar</button>";
+    html += "<button type='button' onclick='testLedColor(0,255,255,\"CIANO\")' "
+            "class='btn' style='background:#06b6d4;color:#0f172a;padding:8px "
+            "14px;'>Ciano</button>";
+    html += "<button type='button' "
+            "onclick='testLedColor(255,0,255,\"MAGENTA\")' class='btn' "
+            "style='background:#d946ef;color:#fff;padding:8px "
+            "14px;'>Magenta</button>";
+    html += "<div "
+            "style='display:flex;align-items:center;gap:6px;margin-left:auto;'>"
+            "<label style='font-size:0.8rem;color:var(--muted);'>Cor "
+            "Personalizada:</label>";
+    html += "<input type='color' id='ledCustomColor' value='#00e5ff' "
+            "onchange='testLedHex(this.value)' "
+            "style='width:46px;height:36px;padding:2px;margin:0;cursor:pointer;"
+            "background:#0f172a;border:1px solid #475569;border-radius:6px;'>";
+    html += "</div></div></div>";
+
+    // Linha 3: Brilho e Número de LEDs da Fita
+    html += "<div "
+            "style='display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;"
+            "background:rgba(15,23,42,0.6);border:1px solid "
+            "#334155;border-radius:8px;padding:12px;'>";
+    html += "<div style='flex:1;min-width:220px;'>";
+    html += "<div "
+            "style='display:flex;justify-content:space-between;align-items:"
+            "center;margin-bottom:6px;'>";
+    html += "<span class='stat-label'>Brilho da Fita de LEDs (5% - "
+            "100%):</span>";
+    html += "<span id='ledBrightVal' "
+            "style='font-weight:700;color:#c084fc;font-size:1.05rem;'>" +
+            String(_config.getLedBrightness()) + "%</span></div>";
+    html += "<input type='range' id='cfg_led_bright' min='5' max='100' "
+            "step='1' value='" +
+            String(_config.getLedBrightness()) +
+            "' class='slider' oninput='onLedBrightSlide(this.value)'>";
+    html += "</div>";
+    html += "<div><label "
+            "style='display:block;font-size:0.8rem;color:var(--muted);margin-"
+            "bottom:4px;'>Nº de LEDs na Fita (1 - 120):</label>";
+    html +=
+        "<input type='number' id='cfg_led_count' min='1' max='120' value='" +
+        String(_config.getLedCount()) +
+        "' style='width:110px;margin:0;'></div>";
+    html += "<button type='button' onclick='saveLedConfig()' class='btn "
+            "btn-primary' style='background:#9333ea;color:#fff;'><i "
+            "class='fa-solid fa-floppy-disk'></i> Guardar Config LEDs</button>";
+    html += "</div></div>";
+
     // Card 5: Ações de Gravação & Gestão
     html += "<div class='card' style='border-color:var(--primary);'>";
     html += "<div class='card-title'><span><i class='fa-solid "
@@ -1492,6 +1653,41 @@ private:
         "json'},body:JSON.stringify({joystick_enabled:en})}).then(r=>r.json())."
         "then(res=>showStatus(res.msg||(en?'Joystick físico "
         "ativado!':'Joystick físico desativado!'))).catch(()=>{});}";
+    html += "let ledBrightTimer=null;";
+    html += "function updateLedBadge(txt,bg='#3b0764',col='#e9d5ff'){const "
+            "b=document.getElementById('ledModeBadge');if(b){b.innerText='MODO:"
+            " '+txt;b.style.background=bg;b.style.color=col;}}";
+    html += "function testLedMode(m){updateLedBadge(m,m==='OFF'?'#1e293b':'#"
+            "581c87',m==='OFF'?'var(--muted)':'#f3e8ff');fetch('/api/control/"
+            "leds',{method:'POST',headers:{'Content-Type':'application/"
+            "json'},body:JSON.stringify({mode:m})}).then(r=>r.json()).then(res="
+            ">showStatus(res.msg||('Modo LED: '+m))).catch(()=>{});}";
+    html += "function testLedColor(r,g,b,label){updateLedBadge('COR: '+(label||"
+            "(r+','+g+','+b)),'rgb('+r+','+g+','+b+')',(r*0.299+g*0.587+b*0."
+            "114)>150?'#0f172a':'#fff');fetch('/api/control/leds',{method:'"
+            "POST',headers:{'Content-Type':'application/json'},body:JSON."
+            "stringify({mode:'SOLID',r:r,g:g,b:b})}).then(r=>r.json()).then("
+            "res=>showStatus(res.msg||'Cor aplicada na fita de LEDs!')).catch("
+            "()=>{});}";
+    html += "function testLedHex(hex){if(!hex||hex.length<7)return;const "
+            "r=parseInt(hex.slice(1,3),16)||0,g=parseInt(hex.slice(3,5),16)||0,"
+            "b=parseInt(hex.slice(5,7),16)||0;testLedColor(r,g,b,hex."
+            "toUpperCase());}";
+    html += "function onLedBrightSlide(v){const "
+            "el=document.getElementById('ledBrightVal');if(el)el.innerText=v+'%"
+            "';if(ledBrightTimer)clearTimeout(ledBrightTimer);ledBrightTimer="
+            "setTimeout(()=>{fetch('/api/control/leds',{method:'POST',headers:{"
+            "'Content-Type':'application/json'},body:JSON.stringify({"
+            "brightness:parseInt(v)})}).catch(()=>{});},60);}";
+    html += "function saveLedConfig(){const "
+            "cnt=parseInt(document.getElementById('cfg_led_count')?.value)||8;"
+            "const "
+            "brt=parseInt(document.getElementById('cfg_led_bright')?.value)||"
+            "100;fetch('/api/control/leds',{method:'POST',headers:{'Content-"
+            "Type':'application/json'},body:JSON.stringify({count:cnt,"
+            "brightness:brt,save:true})}).then(r=>r.json()).then(res=>"
+            "showStatus(res.msg||'Configuração dos LEDs guardada!')).catch(()=>"
+            "{});}";
     html += "function saveAllConfig(e){";
     html += "  e.preventDefault();";
     html += "  const id=parseInt(document.getElementById('cfg_id').value);";
@@ -1516,6 +1712,12 @@ private:
     html +=
         "  const "
         "joyEn=document.getElementById('cfg_joystick_enabled')?.checked??true;";
+    html += "  const "
+            "ledCnt=parseInt(document.getElementById('cfg_led_count')?.value??"
+            "8);";
+    html += "  const "
+            "ledBrt=parseInt(document.getElementById('cfg_led_bright')?.value??"
+            "100);";
     html += "  fetch('/api/rover/config',{";
     html += "    method:'POST',";
     html += "    headers:{'Content-Type':'application/json'},";
@@ -1523,7 +1725,8 @@ private:
             "body:JSON.stringify({rover_id:id,ap_ssid:ssid,ap_password:pass,"
             "screen_brightness:bright,rack_angle_engaged:rEng,rack_angle_"
             "released:rRel,rack_inverted:rInv,anchor_drum_diam_mm:dDiam,anchor_"
-            "pulses_per_rev:pRev,joystick_enabled:joyEn})";
+    "pulses_per_rev:pRev,joystick_enabled:joyEn,led_count:ledCnt,led_"
+    "brightness:ledBrt})";
     html += "  }).then(r=>r.json()).then(res=>{";
     html += "    if(res.success){";
     html += "      showStatus(res.msg||'Configurações guardadas com sucesso no "
@@ -1710,7 +1913,74 @@ private:
     html += "</div>";
     html += "</div>";
 
+    // Card 3: Bússola 9-DOF GY-BNO055 (Ilha J_EXP: IO1=SDA, IO11=SCL)
+    html += "<div class='card' style='margin-top:20px;'>";
+    html += "<div class='card-title' "
+            "style='display:flex;justify-content:space-between;align-items:"
+            "center;flex-wrap:wrap;gap:10px;'>";
+    html += "  <span><i class='fa-solid fa-compass'></i> Bússola Magnética "
+            "9-DOF GY-BNO055 (J_EXP: IO1/IO11)</span>";
+    html +=
+        "  <span id='cmpBadge' class='badge' style='background:" +
+        String(_gps.hasCompass() ? "rgba(16,185,129,0.2);color:var(--green);"
+                                   "border:1px solid var(--green);"
+                                 : "rgba(245,158,11,0.15);color:var(--yellow);"
+                                   "border:1px solid var(--yellow);") +
+        "'>" +
+        String(_gps.hasCompass() ? "BNO055 ONLINE (NDOF)"
+                                 : "AGUARDAR SENSOR (GPS COG)") +
+        "</span>";
+    html += "</div>";
+    html += "<div class='grid-4' style='margin-top:10px;'>";
+    html += "  <div class='stat-box'><div class='stat-label'>Fonte de "
+            "Rumo</div><div class='stat-value' id='cmpSrc' "
+            "style='font-size:1.1rem;color:var(--primary);'>" +
+            String(_gps.hasCompass() ? "GY-BNO055" : "GPS COG") +
+            "</div></div>";
+    html += "  <div class='stat-box'><div class='stat-label'>Inclinação (Roll "
+            "/ Pitch)</div><div class='stat-value' id='cmpTilt' "
+            "style='font-size:1.1rem;'>" +
+            String(_gps.getRoll(), 1) + "° / " + String(_gps.getPitch(), 1) +
+            "°</div></div>";
+    html += "  <div class='stat-box'><div class='stat-label'>Calibração (Sys / "
+            "Mag)</div><div class='stat-value' id='cmpCal' "
+            "style='font-size:1.1rem;color:var(--green);'>" +
+            String(_gps.getCompassCalSys()) + "/3 &bull; " +
+            String(_gps.getCompassCalMag()) + "/3</div></div>";
+    html +=
+        "  <div class='stat-box'><div class='stat-label'>Offset Proa</div><div "
+        "class='stat-value' id='cmpOff' style='font-size:1.1rem;'>" +
+        String(_gps.getCompassOffset(), 1) + "°</div></div>";
+    html += "</div>";
+    html += "<div "
+            "style='margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-"
+            "items:center;'>";
+    html +=
+        "  <button type='button' class='btn btn-primary' "
+        "onclick='zeroCompass()'><i class='fa-solid fa-compass-drafting'></i> "
+        "Alinhar Proa Atual = 0° (Norte)</button>";
+    html += "  <button type='button' class='btn btn-secondary' "
+            "onclick='resetCompassOffset()'><i class='fa-solid "
+            "fa-rotate-left'></i> Repor Offset (0.0°)</button>";
+    html += "  <span id='cmpFeedback' "
+            "style='font-size:0.8rem;color:var(--green);'></span>";
+    html += "</div></div>";
+
     html += "<script>";
+    html += "function "
+            "zeroCompass(){fetch('/api/compass/"
+            "calibrate',{method:'POST',headers:{'Content-Type':'application/"
+            "json'},body:JSON.stringify({zero:true})}).then(r=>r.json()).then("
+            "res=>{const "
+            "el=document.getElementById('cmpFeedback');if(el){el.innerText=res."
+            "msg||'OK';setTimeout(()=>el.innerText='',4000);}});}";
+    html += "function "
+            "resetCompassOffset(){fetch('/api/compass/"
+            "calibrate',{method:'POST',headers:{'Content-Type':'application/"
+            "json'},body:JSON.stringify({offset:0})}).then(r=>r.json()).then("
+            "res=>{const "
+            "el=document.getElementById('cmpFeedback');if(el){el.innerText=res."
+            "msg||'OK';setTimeout(()=>el.innerText='',4000);}});}";
     html += "let selectedRate=1,rateInitialized=false;";
     html += "function selectRate(hz){";
     html += "  selectedRate=hz;";
@@ -1781,6 +2051,25 @@ private:
             "maps.google.com/?q='+g.lat+','+g.lng;";
     html += "if(g.rate_hz&&!rateInitialized){selectRate(g.rate_hz);"
             "rateInitialized=true;}";
+    html += "const cb=document.getElementById('cmpBadge');";
+    html += "if(cb){cb.innerText=g.compass_active?'BNO055 ONLINE "
+            "(NDOF)':'AGUARDAR SENSOR (GPS COG)';";
+    html += "cb.style.color=g.compass_active?'var(--green)':'var(--yellow)';";
+    html += "cb.style.borderColor=g.compass_active?'var(--green)':'var(--"
+            "yellow)';}";
+    html += "const "
+            "cs=document.getElementById('cmpSrc');if(cs)cs.innerText=g.compass_"
+            "active?'GY-BNO055':'GPS COG';";
+    html += "const "
+            "ct=document.getElementById('cmpTilt');if(ct&&g.roll!==undefined)"
+            "ct.innerText=g.roll.toFixed(1)+'° / '+g.pitch.toFixed(1)+'°';";
+    html += "const "
+            "cc=document.getElementById('cmpCal');if(cc&&g.compass_cal_sys!=="
+            "undefined)cc.innerText=g.compass_cal_sys+'/3 • "
+            "'+g.compass_cal_mag+'/3';";
+    html += "const "
+            "co=document.getElementById('cmpOff');if(co&&g.compass_offset!=="
+            "undefined)co.innerText=g.compass_offset.toFixed(1)+'°';";
     html += "});},1000);";
     html += "</script>";
 
@@ -3028,6 +3317,14 @@ private:
     g["lng"] = _gps.getLongitude();
     g["speed_kn"] = _gps.getSpeedKnots();
     g["heading"] = _gps.getHeading();
+    g["gps_cog"] = _gps.getGpsCourse();
+    g["compass_active"] = _gps.hasCompass();
+    g["heading_source"] = _gps.hasCompass() ? "BNO055" : "GPS_COG";
+    g["roll"] = _gps.getRoll();
+    g["pitch"] = _gps.getPitch();
+    g["compass_cal_sys"] = _gps.getCompassCalSys();
+    g["compass_cal_mag"] = _gps.getCompassCalMag();
+    g["compass_offset"] = _gps.getCompassOffset();
     g["satellites"] = _gps.getSatellites();
     g["fix"] = _gps.hasFix();
     g["chars_processed"] = _gps.getCharsProcessed();
@@ -3075,6 +3372,12 @@ private:
     a["winch_pulse_us"] = _actuators.getWinchPulseUs();
     a["winch_neutral_us"] = _actuators.getWinchNeutral();
     a["joystick_enabled"] = _config.isJoystickEnabled();
+    a["led_mode"] = _actuators.getLedMode();
+    a["led_r"] = _actuators.getLedR();
+    a["led_g"] = _actuators.getLedG();
+    a["led_b"] = _actuators.getLedB();
+    a["led_brightness"] = _config.getLedBrightness();
+    a["led_count"] = _config.getLedCount();
 
     JsonObject w = doc["wifi"].to<JsonObject>();
     w["is_ap"] = _wifi.isAPMode();
@@ -3218,6 +3521,12 @@ private:
     doc["anchor_drum_diam_mm"] = _config.getAnchorDrumDiamMm();
     doc["anchor_pulses_per_rev"] = _config.getAnchorPulsesPerRev();
     doc["joystick_enabled"] = _config.isJoystickEnabled();
+    doc["led_count"] = _config.getLedCount();
+    doc["led_brightness"] = _config.getLedBrightness();
+    doc["led_mode"] = _actuators.getLedMode();
+    doc["led_r"] = _actuators.getLedR();
+    doc["led_g"] = _actuators.getLedG();
+    doc["led_b"] = _actuators.getLedB();
     doc["sd_ready"] = _sd.isReady();
     doc["has_config_file"] = (_sd.isReady() && _sd.fileExists("/config.json"));
     doc["version_lafvin"] = ROVER_LAFVIN_VERSION;
@@ -3304,6 +3613,19 @@ private:
         _commandQueueCb(jCmd);
       }
     }
+    if (doc["led_count"].is<int>() || doc["led_brightness"].is<int>()) {
+      uint8_t lCnt = doc["led_count"] | _config.getLedCount();
+      uint8_t lBrt = doc["led_brightness"] | _config.getLedBrightness();
+      _config.setLedConfig(lCnt, lBrt);
+      _actuators.setLedConfigState(_config.getLedCount(),
+                                   _config.getLedBrightness());
+      if (_commandQueueCb) {
+        char lCmd[36];
+        snprintf(lCmd, sizeof(lCmd), "CMD:LED:CFG:%u:%u", _config.getLedCount(),
+                 _config.getLedBrightness());
+        _commandQueueCb(lCmd);
+      }
+    }
     _roverId = _config.getRoverId();
     _battery.setCellCount(cells);
     if (cap >= 500 && cap <= 50000) {
@@ -3329,6 +3651,8 @@ private:
     res["battery_cells"] = _config.getBatteryCells();
     res["battery_capacity_mah"] = _config.getBatteryCapacityMah();
     res["joystick_enabled"] = _config.isJoystickEnabled();
+    res["led_count"] = _config.getLedCount();
+    res["led_brightness"] = _config.getLedBrightness();
 
     String out;
     serializeJson(res, out);
@@ -3439,6 +3763,8 @@ private:
     _actuators.setRackConfig(_config.getRackAngleEngaged(),
                              _config.getRackAngleReleased(),
                              _config.isRackInverted(), true);
+    _actuators.setLedConfigState(_config.getLedCount(),
+                                 _config.getLedBrightness());
     if (_commandQueueCb) {
       String cmd = "CMD:BATT:" + String(_config.getBatteryCells());
       _commandQueueCb(cmd.c_str());
@@ -3451,6 +3777,10 @@ private:
       snprintf(jCmd, sizeof(jCmd), "CMD:JOY_EN:%d",
                _config.isJoystickEnabled() ? 1 : 0);
       _commandQueueCb(jCmd);
+      char lCmd[36];
+      snprintf(lCmd, sizeof(lCmd), "CMD:LED:CFG:%u:%u", _config.getLedCount(),
+               _config.getLedBrightness());
+      _commandQueueCb(lCmd);
     }
 
     JsonDocument res;
@@ -3462,6 +3792,8 @@ private:
     res["screen_brightness"] = _config.getScreenBrightness();
     res["battery_cells"] = _config.getBatteryCells();
     res["joystick_enabled"] = _config.isJoystickEnabled();
+    res["led_count"] = _config.getLedCount();
+    res["led_brightness"] = _config.getLedBrightness();
 
     String out;
     serializeJson(res, out);
@@ -3990,6 +4322,141 @@ private:
                          "guardado (/config.json + NVS)!"
                        : "Joystick analógico físico do Rover DESATIVADO (modo "
                          "não montado) e guardado!";
+    String out;
+    serializeJson(res, out);
+    _server.send(200, "application/json", out);
+  }
+
+  void handleApiLedControl() {
+    if (_server.method() == HTTP_GET && !_server.hasArg("mode") &&
+        !_server.hasArg("brightness") && !_server.hasArg("count")) {
+      JsonDocument res;
+      res["success"] = true;
+      res["led_mode"] = _actuators.getLedMode();
+      res["led_r"] = _actuators.getLedR();
+      res["led_g"] = _actuators.getLedG();
+      res["led_b"] = _actuators.getLedB();
+      res["led_brightness"] = _config.getLedBrightness();
+      res["led_count"] = _config.getLedCount();
+      String out;
+      serializeJson(res, out);
+      _server.send(200, "application/json", out);
+      return;
+    }
+
+    JsonDocument doc;
+    if (_server.hasArg("plain")) {
+      deserializeJson(doc, _server.arg("plain"));
+    }
+
+    String msg = "Comando de LEDs enviado com sucesso!";
+
+    // 1. Configuração de número de LEDs e/ou brilho
+    bool hasCount = doc["count"].is<int>() || doc["led_count"].is<int>() ||
+                    _server.hasArg("count");
+    bool hasBright = doc["brightness"].is<int>() ||
+                     doc["led_brightness"].is<int>() ||
+                     _server.hasArg("brightness");
+    bool shouldSave = doc["save"].as<bool>() || hasCount;
+
+    if (hasCount || hasBright) {
+      uint8_t cnt = _config.getLedCount();
+      uint8_t brt = _config.getLedBrightness();
+      if (doc["count"].is<int>())
+        cnt = (uint8_t)constrain(doc["count"].as<int>(), 1, 120);
+      else if (doc["led_count"].is<int>())
+        cnt = (uint8_t)constrain(doc["led_count"].as<int>(), 1, 120);
+      else if (_server.hasArg("count"))
+        cnt = (uint8_t)constrain(_server.arg("count").toInt(), 1, 120);
+
+      if (doc["brightness"].is<int>())
+        brt = (uint8_t)constrain(doc["brightness"].as<int>(), 5, 100);
+      else if (doc["led_brightness"].is<int>())
+        brt = (uint8_t)constrain(doc["led_brightness"].as<int>(), 5, 100);
+      else if (_server.hasArg("brightness"))
+        brt = (uint8_t)constrain(_server.arg("brightness").toInt(), 5, 100);
+
+      _actuators.setLedConfigState(cnt, brt);
+      if (shouldSave) {
+        _config.setLedConfig(cnt, brt);
+        if (_commandQueueCb) {
+          char lCmd[36];
+          snprintf(lCmd, sizeof(lCmd), "CMD:LED:CFG:%u:%u", cnt, brt);
+          _commandQueueCb(lCmd);
+        }
+        msg = String("Configuração da fita de LEDs guardada (") + cnt +
+              " LEDs, Brilho " + brt + "%)!";
+      } else {
+        if (_commandQueueCb) {
+          char bCmd[32];
+          snprintf(bCmd, sizeof(bCmd), "CMD:LED:BRIGHT:%u", brt);
+          _commandQueueCb(bCmd);
+        }
+        msg = String("Brilho da fita de LEDs ajustado para ") + brt + "%";
+      }
+    }
+
+    // 2. Modo de animação ou cor sólida RGB
+    String mode =
+        doc["mode"] | (_server.hasArg("mode") ? _server.arg("mode") : "");
+    mode.trim();
+    mode.toUpperCase();
+
+    if (doc["hex"].is<const char *>()) {
+      String hex = doc["hex"].as<String>();
+      hex.trim();
+      if (hex.startsWith("#"))
+        hex = hex.substring(1);
+      if (hex.length() == 6) {
+        long val = strtol(hex.c_str(), nullptr, 16);
+        doc["r"] = (int)((val >> 16) & 0xFF);
+        doc["g"] = (int)((val >> 8) & 0xFF);
+        doc["b"] = (int)(val & 0xFF);
+        if (mode.isEmpty())
+          mode = "SOLID";
+      }
+    }
+
+    if (mode == "SOLID" ||
+        (doc["r"].is<int>() && doc["g"].is<int>() && doc["b"].is<int>())) {
+      uint8_t r = (uint8_t)constrain(doc["r"] | 0, 0, 255);
+      uint8_t g = (uint8_t)constrain(doc["g"] | 0, 0, 255);
+      uint8_t b = (uint8_t)constrain(doc["b"] | 0, 0, 255);
+      _actuators.setLedState("SOLID", r, g, b);
+      if (_commandQueueCb) {
+        char cCmd[40];
+        snprintf(cCmd, sizeof(cCmd), "CMD:LED:SOLID:%u:%u:%u", r, g, b);
+        _commandQueueCb(cCmd);
+      }
+      msg = String("Fita de LEDs definida para Cor Sólida RGB(") + r + ", " +
+            g + ", " + b + ")!";
+    } else if (!mode.isEmpty()) {
+      if (mode == "OFF" || mode == "0") {
+        _actuators.setLedState("OFF", 0, 0, 0);
+        if (_commandQueueCb)
+          _commandQueueCb("CMD:LED:OFF");
+        msg = "Teste da fita de LEDs DESLIGADO (modo automático normal)";
+      } else {
+        _actuators.setLedState(mode.c_str(), _actuators.getLedR(),
+                               _actuators.getLedG(), _actuators.getLedB());
+        if (_commandQueueCb) {
+          char mCmd[40];
+          snprintf(mCmd, sizeof(mCmd), "CMD:LED:MODE:%s", mode.c_str());
+          _commandQueueCb(mCmd);
+        }
+        msg = String("Fita de LEDs em modo de teste: ") + mode;
+      }
+    }
+
+    JsonDocument res;
+    res["success"] = true;
+    res["msg"] = msg;
+    res["led_mode"] = _actuators.getLedMode();
+    res["led_r"] = _actuators.getLedR();
+    res["led_g"] = _actuators.getLedG();
+    res["led_b"] = _actuators.getLedB();
+    res["led_brightness"] = _actuators.getLedBrightness();
+    res["led_count"] = _actuators.getLedCount();
     String out;
     serializeJson(res, out);
     _server.send(200, "application/json", out);

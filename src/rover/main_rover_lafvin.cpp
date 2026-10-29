@@ -70,6 +70,40 @@ volatile uint32_t lastBtnPressTime = 0;
 // Calibração do Joystick Analógico
 int joyCenterX = 2048;
 int joyCenterY = 2048;
+bool joyHwConnected = false;
+
+static bool calibrateLocalJoystick(int samples, int delayMs) {
+  long sumX = 0, sumY = 0;
+  int minX = 4095, maxX = 0;
+  int minY = 4095, maxY = 0;
+  for (int i = 0; i < samples; i++) {
+    int rx = analogRead(PIN_JOYSTICK_X);
+    int ry = analogRead(PIN_JOYSTICK_Y);
+    sumX += rx;
+    sumY += ry;
+    if (rx < minX)
+      minX = rx;
+    if (rx > maxX)
+      maxX = rx;
+    if (ry < minY)
+      minY = ry;
+    if (ry > maxY)
+      maxY = ry;
+    if (delayMs > 0)
+      delay(delayMs);
+  }
+  joyCenterX = (int)(sumX / samples);
+  joyCenterY = (int)(sumY / samples);
+  int spreadX = maxX - minX;
+  int spreadY = maxY - minY;
+  // Um potenciómetro real em repouso fica centrado (~1200..2800) com baixa
+  // oscilação (<120 counts). Pinos CMOS flutuantes (sem joystick soldado na
+  // boia) apresentam deriva ou ruído elevado de acoplamento UART.
+  bool xValid = (joyCenterX >= 1200 && joyCenterX <= 2800) && (spreadX <= 120);
+  bool yValid = (joyCenterY >= 1200 && joyCenterY <= 2800) && (spreadY <= 120);
+  joyHwConnected = (xValid && yValid);
+  return joyHwConnected;
+}
 
 void IRAM_ATTR isrBootButton() {
   uint32_t now = millis();
@@ -139,6 +173,8 @@ void setup() {
   actuators.setRackConfig(roverConfig.getRackAngleEngaged(),
                           roverConfig.getRackAngleReleased(),
                           roverConfig.isRackInverted(), false);
+  actuators.setLedConfigState(roverConfig.getLedCount(),
+                              roverConfig.getLedBrightness());
   webServer.setCommandQueueCallback([](const char *cmd) {
     if (cmd && strlen(cmd) > 0) {
       if (strncmp(cmd, "CMD:OTA:", 8) == 0) {
@@ -234,20 +270,15 @@ void setup() {
   pinMode(PIN_JOYSTICK_Y, INPUT);
 
   if (roverConfig.isJoystickEnabled()) {
-    // Auto-calibração do Ponto Neutro / Centro com o joystick em repouso
-    long sumX = 0, sumY = 0;
-    for (int i = 0; i < 30; i++) {
-      sumX += analogRead(PIN_JOYSTICK_X);
-      sumY += analogRead(PIN_JOYSTICK_Y);
-      delay(5);
-    }
-    joyCenterX = (int)(sumX / 30);
-    joyCenterY = (int)(sumY / 30);
-    printLog("[JOYSTICK] Auto-calibracao de centro concluida: X0=%d, Y0=%d (X_ok=%d, Y_ok=%d)\n",
+    // Auto-calibração do Ponto Neutro / Centro com verificação de presença
+    // física do hardware
+    calibrateLocalJoystick(30, 5);
+    printLog("[JOYSTICK] Auto-calibracao de centro concluida: X0=%d, Y0=%d "
+             "(HW_detetado=%s)\n",
              joyCenterX, joyCenterY,
-             (joyCenterX >= 1100 && joyCenterX <= 2900) ? 1 : 0,
-             (joyCenterY >= 1100 && joyCenterY <= 2900) ? 1 : 0);
+             joyHwConnected ? "SIM" : "NAO - pinos flutuantes ignorados");
   } else {
+    joyHwConnected = false;
     printLog("[JOYSTICK] Desativado nas configuracoes (modo sem joystick "
              "fisico montado)\n");
   }
@@ -303,22 +334,18 @@ void loop() {
       }
       printLog("[JOYSTICK] Leitura do joystick fisico DESATIVADA\n");
     } else {
-      long sumX = 0, sumY = 0;
-      for (int i = 0; i < 20; i++) {
-        sumX += analogRead(PIN_JOYSTICK_X);
-        sumY += analogRead(PIN_JOYSTICK_Y);
-        delay(2);
-      }
-      joyCenterX = (int)(sumX / 20);
-      joyCenterY = (int)(sumY / 20);
+      calibrateLocalJoystick(20, 2);
       filtInit = false;
-      printLog("[JOYSTICK] Leitura do joystick fisico ATIVADA (X0=%d, Y0=%d)\n",
-               joyCenterX, joyCenterY);
+      printLog("[JOYSTICK] Leitura do joystick fisico ATIVADA (X0=%d, Y0=%d, "
+               "HW=%s)\n",
+               joyCenterX, joyCenterY, joyHwConnected ? "OK" : "FLUTUANTE");
     }
     wasJoyEnabled = joyEn;
   }
 
-  if (joyEn && (now - lastJoyReadTime >= 50)) {
+  // Apenas lê o joystick local se estiver ativado E o hardware físico tiver
+  // sido detetado nos pinos ADC
+  if (joyEn && joyHwConnected && (now - lastJoyReadTime >= 50)) {
     lastJoyReadTime = now;
     int rawX = analogRead(PIN_JOYSTICK_X);
     int rawY = analogRead(PIN_JOYSTICK_Y);
@@ -332,8 +359,10 @@ void loop() {
     filtY = 0.75f * filtY + 0.25f * (float)rawY;
 
     int deadband = 500; // Zona morta com filtro anti-ruído ADC
-    bool axisXValid = (joyCenterX >= 1100 && joyCenterX <= 2900) && (rawX >= 50 && rawX <= 4045);
-    bool axisYValid = (joyCenterY >= 1100 && joyCenterY <= 2900) && (rawY >= 50 && rawY <= 4045);
+    bool axisXValid = (joyCenterX >= 1100 && joyCenterX <= 2900) &&
+                      (rawX >= 50 && rawX <= 4045);
+    bool axisYValid = (joyCenterY >= 1100 && joyCenterY <= 2900) &&
+                      (rawY >= 50 && rawY <= 4045);
     int diffX = axisXValid ? ((int)filtX - joyCenterX) : 0;
     int diffY = axisYValid ? ((int)filtY - joyCenterY) : 0;
 
@@ -427,7 +456,7 @@ void loop() {
     snprintf(pingMsg, sizeof(pingMsg),
              "PING:%u:%u:NONE:%ld:%ld:%.1f:%.1f:%u:%u\n", uartSeq,
              roverConfig.getRoverId(), (long)gps.getLatDeg7(),
-             (long)gps.getLngDeg7(), gps.getSpeedKnots(), gps.getHeading(),
+             (long)gps.getLngDeg7(), gps.getSpeedKnots(), gps.getGpsCourse(),
              gps.getSatellites(), gps.hasFix() ? 1 : 0);
     interSerial.print(pingMsg);
   }
@@ -459,6 +488,9 @@ void loop() {
                              roverConfig.isRackInverted() ? 1 : 0);
           interSerial.printf("CMD:JOY_EN:%d\n",
                              roverConfig.isJoystickEnabled() ? 1 : 0);
+          interSerial.printf("CMD:LED:CFG:%u:%u\n",
+                             roverConfig.getLedCount(),
+                             roverConfig.getLedBrightness());
           interSerial.flush();
         } else if (strncmp(rxBuf, "PONG:", 5) == 0) {
           lastUartRxTime = now;
@@ -469,12 +501,12 @@ void loop() {
           int rud = 0, thr = 0, winch = 0, rack = 0;
           char rfSt[32] = "OK";
 
-          int parsed = sscanf(
-              rxBuf + 5,
-              "%u:%u:%f:%u:%ld:%ld:%f:%f:%u:%u:%u:%d:%d:%d:%d:%u:%31[^:]:%f:%f:%u",
-              &seq, &batMv, &batA, &batPct, &lat7, &lng7, &spd, &head, &sats,
-              &fix, &motSt, &rud, &thr, &winch, &rack, &depth, rfSt, &rssi,
-              &snr, &ancSt);
+          int parsed = sscanf(rxBuf + 5,
+                              "%u:%u:%f:%u:%ld:%ld:%f:%f:%u:%u:%u:%d:%d:%d:%d:%"
+                              "u:%31[^:]:%f:%f:%u",
+                              &seq, &batMv, &batA, &batPct, &lat7, &lng7, &spd,
+                              &head, &sats, &fix, &motSt, &rud, &thr, &winch,
+                              &rack, &depth, rfSt, &rssi, &snr, &ancSt);
           if (parsed >= 10) {
             battery.setValues(batMv, batA, (uint8_t)batPct);
             if (!gps.isHardwareLocked() && !gps.hasFix()) {
@@ -483,7 +515,8 @@ void loop() {
                             fix > 0);
             }
             if (parsed < 20) {
-              ancSt = (motSt == MOTOR_ANCHORED) ? ANCHOR_DEPLOYED : ANCHOR_RETRACTED;
+              ancSt = (motSt == MOTOR_ANCHORED) ? ANCHOR_DEPLOYED
+                                                : ANCHOR_RETRACTED;
             }
             actuators.setValues((int8_t)thr, (int8_t)rud, winch, rack > 0,
                                 (uint8_t)ancSt, (uint16_t)depth);
@@ -491,9 +524,9 @@ void loop() {
             currentLoraRssi = (int16_t)rssi;
             currentLoraSnr = snr;
             strncpy(loraStatusStr, rfSt, sizeof(loraStatusStr) - 1);
-            printLog("[LAFVIN ROVER] <<< PONG #%u: Bat=%.2fV (%u%%) | LoRa=%s "
-                     "(RSSI=%.1f) | Fix=%u Sats=%u\n",
-                     seq, batMv / 1000.0f, batPct, rfSt, rssi, fix, sats);
+            printLog("[LAFVIN ROVER] <<< PONG #%u: Bat=%.2fV / %.2fA (%u%%) | "
+                     "LoRa=%s (RSSI=%.1f) | Fix=%u Sats=%u\n",
+                     seq, batMv / 1000.0f, batA, batPct, rfSt, rssi, fix, sats);
           }
         } else if (strncmp(rxBuf, "LORA_STAT:", 10) == 0) {
           lastUartRxTime = now;
@@ -510,6 +543,16 @@ void loop() {
             roverLoraDiag.rssi = rssi;
             roverLoraDiag.snr = snr;
             roverLoraDiag.hasContact = (contact != 0);
+          }
+        } else if (strncmp(rxBuf, "COMPASS_STAT:", 13) == 0) {
+          lastUartRxTime = now;
+          int cmpReady = 0;
+          float cmpHead = 0.0f, cmpRoll = 0.0f, cmpPitch = 0.0f, cmpOff = 0.0f;
+          uint32_t calSys = 0, calMag = 0;
+          if (sscanf(rxBuf + 13, "%d:%f:%f:%f:%u:%u:%f", &cmpReady, &cmpHead,
+                     &cmpRoll, &cmpPitch, &calSys, &calMag, &cmpOff) >= 6) {
+            gps.setCompassData(cmpReady != 0, cmpHead, cmpRoll, cmpPitch,
+                               (uint8_t)calSys, (uint8_t)calMag, cmpOff);
           }
         } else {
           lastUartRxTime = now;
