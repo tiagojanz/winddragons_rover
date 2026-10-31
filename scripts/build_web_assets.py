@@ -562,6 +562,12 @@ input:focus, select:focus, textarea:focus {
   background: var(--bg-subtle);
   border-radius: 5px;
   outline: none;
+  accent-color: var(--primary);
+}
+
+.slider:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 4px;
 }
 
 .slider::-webkit-slider-thumb {
@@ -1337,7 +1343,61 @@ GPS_CONTENT = """
   </div>
 </div>
 
+<!-- Painel Bússola 9-DOF GY-BNO055 -->
+<div class="card" style="margin-top:20px;">
+  <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+    <span><i class="fa-solid fa-compass"></i> Telemetria IMU 9-DOF GY-BNO055 (J_EXP: IO1/IO11)</span>
+    <span id="cmpBadge" class="badge" style="background:rgba(245,158,11,0.15);color:var(--yellow);border:1px solid var(--yellow);">
+      AGUARDAR SENSOR (GPS COG)
+    </span>
+  </div>
+  <div class="grid-4" style="margin-top:10px;">
+    <div class="stat-box">
+      <div class="stat-label">Fonte de Rumo</div>
+      <div class="stat-value" id="cmpSrc" style="font-size:1.1rem;color:var(--primary);">GPS COG</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Inclinação (Roll / Pitch)</div>
+      <div class="stat-value" id="cmpTilt" style="font-size:1.1rem;">0.0° / 0.0°</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Calibração (Sys / Mag)</div>
+      <div class="stat-value" id="cmpCal" style="font-size:1.1rem;color:var(--green);">0/3 &bull; 0/3</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Offset Proa</div>
+      <div class="stat-value" id="cmpOff" style="font-size:1.1rem;">0.0°</div>
+    </div>
+  </div>
+  <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+    <button type="button" class="btn btn-primary" onclick="zeroCompass()"><i class="fa-solid fa-compass-drafting"></i> Alinhar Proa Atual = 0° (Norte)</button>
+    <button type="button" class="btn btn-secondary" onclick="resetCompassOffset()"><i class="fa-solid fa-rotate-left"></i> Repor Offset (0.0°)</button>
+    <a href="/config#compassCard" class="btn btn-secondary"><i class="fa-solid fa-Sliders"></i> Depurar / Calibrar BNO055</a>
+    <span id="cmpFeedback" style="font-size:0.8rem;color:var(--green);"></span>
+  </div>
+</div>
+
 <script>
+function zeroCompass() {
+  fetch('/api/compass/calibrate', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({zero: true})
+  }).then(r => r.json()).then(res => {
+    const el = document.getElementById('cmpFeedback');
+    if (el) { el.innerText = res.msg || 'OK'; setTimeout(() => el.innerText = '', 4000); }
+  });
+}
+function resetCompassOffset() {
+  fetch('/api/compass/calibrate', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({offset: 0})
+  }).then(r => r.json()).then(res => {
+    const el = document.getElementById('cmpFeedback');
+    if (el) { el.innerText = res.msg || 'OK'; setTimeout(() => el.innerText = '', 4000); }
+  });
+}
 let selectedRate = 1, rateInitialized = false;
 function selectRate(hz) {
   selectedRate = hz;
@@ -1400,6 +1460,21 @@ setInterval(() => {
         selectRate(g.rate_hz);
         rateInitialized = true;
       }
+      const cb = document.getElementById('cmpBadge');
+      if (cb) {
+        cb.innerText = g.compass_active ? 'BNO055 ONLINE (NDOF)' : 'AGUARDAR SENSOR (GPS COG)';
+        cb.style.color = g.compass_active ? 'var(--green)' : 'var(--yellow)';
+        cb.style.borderColor = g.compass_active ? 'var(--green)' : 'var(--yellow)';
+        cb.style.background = g.compass_active ? 'rgba(16,185,129,0.2)' : 'rgba(245,158,11,0.15)';
+      }
+      const cs = document.getElementById('cmpSrc');
+      if (cs) cs.innerText = g.compass_active ? 'GY-BNO055' : 'GPS COG';
+      const ct = document.getElementById('cmpTilt');
+      if (ct && g.roll !== undefined) ct.innerText = (g.roll || 0).toFixed(1) + '° / ' + (g.pitch || 0).toFixed(1) + '°';
+      const cc = document.getElementById('cmpCal');
+      if (cc && g.compass_cal_sys !== undefined) cc.innerText = (g.compass_cal_sys || 0) + '/3 • ' + (g.compass_cal_mag || 0) + '/3';
+      const co = document.getElementById('cmpOff');
+      if (co && g.compass_offset !== undefined) co.innerText = (g.compass_offset || 0).toFixed(1) + '°';
     }).catch(() => {});
 }, 1000);
 </script>
@@ -2300,6 +2375,314 @@ CONFIG_CONTENT = """
     </div>
   </div>
 
+  <!-- Card: Controlo da Cor por Modo e Intensidade do LED RGB da C6 (GPIO 8) -->
+  <div class="card" style="border:1px solid #10b981;" id="c6LedCard">
+    <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+      <span><i class="fa-solid fa-palette" style="color:#10b981;"></i> LED RGB do Coprocessador C6 — Cor por Modo &amp; Intensidade (GPIO 8)</span>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span id="c6LedActiveBadge" class="badge" style="background:rgba(16,185,129,0.18);color:#a7f3d0;border:1px solid #10b981;display:inline-flex;align-items:center;gap:6px;">
+          <span id="c6LedActiveDot" style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#06B6D4;box-shadow:0 0 8px #06B6D4;"></span>
+          MODO ATUAL: <strong id="c6LedActiveModeTxt">IDLE</strong>
+        </span>
+        <span id="c6LedBrtBadge" class="badge" style="background:#064e3b;color:#6ee7b7;border:1px solid #059669;">INTENSIDADE: 80%</span>
+      </div>
+    </div>
+    <p style="color:var(--muted);font-size:0.875rem;margin-bottom:14px;">
+      Configure a <strong>intensidade de brilho (0% a 100%)</strong> e a <strong>cor RGB associada a cada modo de operação</strong> no LED RGB endereçável onboard do Coprocessador ESP32-C6 (<strong>GPIO 8</strong>). Pode pré-visualizar qualquer cor em tempo real na placa C6 antes de guardar.
+    </p>
+
+    <!-- Controlo de Intensidade do LED da C6 -->
+    <div style="margin-bottom:14px;background:rgba(15,23,42,0.6);border:1px solid #334155;border-radius:10px;padding:14px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
+        <label for="cfg_c6_led_bright" class="stat-label" style="font-size:0.82rem;color:var(--text);">
+          <i class="fa-solid fa-sun" style="color:#fbbf24;"></i> Intensidade do LED da C6 (0% Desligado — 100% Máximo):
+        </label>
+        <span id="c6LedBrightVal" style="font-size:1.25rem;font-weight:800;color:#10b981;">80%</span>
+      </div>
+      <input type="range" id="cfg_c6_led_bright" min="0" max="100" step="1" value="80" class="slider" oninput="onC6LedBrightSlide(this.value)">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+        <button type="button" class="btn btn-secondary" style="padding:6px 12px;font-size:0.78rem;" onclick="setC6LedBrightPreset(0)"><i class="fa-solid fa-power-off"></i> 0% (Off)</button>
+        <button type="button" class="btn btn-secondary" style="padding:6px 12px;font-size:0.78rem;" onclick="setC6LedBrightPreset(25)">25% (Noturno)</button>
+        <button type="button" class="btn btn-secondary" style="padding:6px 12px;font-size:0.78rem;" onclick="setC6LedBrightPreset(50)">50% (Médio)</button>
+        <button type="button" class="btn btn-secondary" style="padding:6px 12px;font-size:0.78rem;" onclick="setC6LedBrightPreset(80)">80% (Padrão)</button>
+        <button type="button" class="btn btn-secondary" style="padding:6px 12px;font-size:0.78rem;" onclick="setC6LedBrightPreset(100)"><i class="fa-solid fa-bolt"></i> 100% (Sol)</button>
+      </div>
+    </div>
+
+    <!-- Grelha de Cores por Modo (0..6) -->
+    <div style="margin-bottom:14px;">
+      <div class="stat-label" style="margin-bottom:8px;"><i class="fa-solid fa-sliders"></i> Cor do LED da C6 para cada Modo de Operação:</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;">
+        <!-- 0: IDLE -->
+        <div id="c6ModeCard_0" style="background:rgba(15,23,42,0.65);border:1px solid #10b981;border-radius:10px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
+          <div style="min-width:0;flex:1;">
+            <div style="font-weight:700;font-size:0.84rem;color:var(--text);display:flex;align-items:center;gap:6px;">
+              <span id="c6ModeDot_0" style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#06B6D4;box-shadow:0 0 6px #06B6D4;flex-shrink:0;"></span>
+              <span>0 &bull; IDLE (Standby)</span>
+            </div>
+            <div style="font-size:0.72rem;color:var(--muted);margin-top:2px;">Aguardando missão / motores parados</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+            <input type="color" id="cfg_c6_mode_color_0" value="#06B6D4" onchange="onC6ModeColorPick(0, this.value)" style="width:40px;height:34px;padding:2px;margin:0;cursor:pointer;background:#0f172a;border:1px solid #475569;border-radius:6px;">
+            <span id="c6ModeHexLbl_0" style="font-family:monospace;font-size:0.76rem;color:var(--muted);min-width:58px;">#06B6D4</span>
+            <button type="button" class="btn btn-secondary" style="padding:6px 10px;font-size:0.75rem;" onclick="testC6ModeColor(0)" title="Pré-visualizar esta cor por 3s no LED da C6"><i class="fa-solid fa-eye"></i></button>
+          </div>
+        </div>
+        <!-- 1: MANUAL -->
+        <div id="c6ModeCard_1" style="background:rgba(15,23,42,0.65);border:1px solid #334155;border-radius:10px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
+          <div style="min-width:0;flex:1;">
+            <div style="font-weight:700;font-size:0.84rem;color:var(--text);display:flex;align-items:center;gap:6px;">
+              <span id="c6ModeDot_1" style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#10B981;box-shadow:0 0 6px #10B981;flex-shrink:0;"></span>
+              <span>1 &bull; MANUAL (Comando)</span>
+            </div>
+            <div style="font-size:0.72rem;color:var(--muted);margin-top:2px;">Controlo manual ativo (Web / LoRa / Joystick)</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+            <input type="color" id="cfg_c6_mode_color_1" value="#10B981" onchange="onC6ModeColorPick(1, this.value)" style="width:40px;height:34px;padding:2px;margin:0;cursor:pointer;background:#0f172a;border:1px solid #475569;border-radius:6px;">
+            <span id="c6ModeHexLbl_1" style="font-family:monospace;font-size:0.76rem;color:var(--muted);min-width:58px;">#10B981</span>
+            <button type="button" class="btn btn-secondary" style="padding:6px 10px;font-size:0.75rem;" onclick="testC6ModeColor(1)" title="Pré-visualizar esta cor por 3s no LED da C6"><i class="fa-solid fa-eye"></i></button>
+          </div>
+        </div>
+        <!-- 2: HOLD STATION -->
+        <div id="c6ModeCard_2" style="background:rgba(15,23,42,0.65);border:1px solid #334155;border-radius:10px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
+          <div style="min-width:0;flex:1;">
+            <div style="font-weight:700;font-size:0.84rem;color:var(--text);display:flex;align-items:center;gap:6px;">
+              <span id="c6ModeDot_2" style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#A855F7;box-shadow:0 0 6px #A855F7;flex-shrink:0;"></span>
+              <span>2 &bull; HOLD STATION (Manter)</span>
+            </div>
+            <div style="font-size:0.72rem;color:var(--muted);margin-top:2px;">Manutenção autónoma de posição GPS</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+            <input type="color" id="cfg_c6_mode_color_2" value="#A855F7" onchange="onC6ModeColorPick(2, this.value)" style="width:40px;height:34px;padding:2px;margin:0;cursor:pointer;background:#0f172a;border:1px solid #475569;border-radius:6px;">
+            <span id="c6ModeHexLbl_2" style="font-family:monospace;font-size:0.76rem;color:var(--muted);min-width:58px;">#A855F7</span>
+            <button type="button" class="btn btn-secondary" style="padding:6px 10px;font-size:0.75rem;" onclick="testC6ModeColor(2)" title="Pré-visualizar esta cor por 3s no LED da C6"><i class="fa-solid fa-eye"></i></button>
+          </div>
+        </div>
+        <!-- 3: ANCHORED -->
+        <div id="c6ModeCard_3" style="background:rgba(15,23,42,0.65);border:1px solid #334155;border-radius:10px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
+          <div style="min-width:0;flex:1;">
+            <div style="font-weight:700;font-size:0.84rem;color:var(--text);display:flex;align-items:center;gap:6px;">
+              <span id="c6ModeDot_3" style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#F59E0B;box-shadow:0 0 6px #F59E0B;flex-shrink:0;"></span>
+              <span>3 &bull; ANCHORED (Ancorado)</span>
+            </div>
+            <div style="font-size:0.72rem;color:var(--muted);margin-top:2px;">Âncora lançada no fundo</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+            <input type="color" id="cfg_c6_mode_color_3" value="#F59E0B" onchange="onC6ModeColorPick(3, this.value)" style="width:40px;height:34px;padding:2px;margin:0;cursor:pointer;background:#0f172a;border:1px solid #475569;border-radius:6px;">
+            <span id="c6ModeHexLbl_3" style="font-family:monospace;font-size:0.76rem;color:var(--muted);min-width:58px;">#F59E0B</span>
+            <button type="button" class="btn btn-secondary" style="padding:6px 10px;font-size:0.75rem;" onclick="testC6ModeColor(3)" title="Pré-visualizar esta cor por 3s no LED da C6"><i class="fa-solid fa-eye"></i></button>
+          </div>
+        </div>
+        <!-- 4: GOTO TARGET -->
+        <div id="c6ModeCard_4" style="background:rgba(15,23,42,0.65);border:1px solid #334155;border-radius:10px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
+          <div style="min-width:0;flex:1;">
+            <div style="font-weight:700;font-size:0.84rem;color:var(--text);display:flex;align-items:center;gap:6px;">
+              <span id="c6ModeDot_4" style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#3B82F6;box-shadow:0 0 6px #3B82F6;flex-shrink:0;"></span>
+              <span>4 &bull; GOTO TARGET (Navegar)</span>
+            </div>
+            <div style="font-size:0.72rem;color:var(--muted);margin-top:2px;">Navegação autónoma para Waypoint</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+            <input type="color" id="cfg_c6_mode_color_4" value="#3B82F6" onchange="onC6ModeColorPick(4, this.value)" style="width:40px;height:34px;padding:2px;margin:0;cursor:pointer;background:#0f172a;border:1px solid #475569;border-radius:6px;">
+            <span id="c6ModeHexLbl_4" style="font-family:monospace;font-size:0.76rem;color:var(--muted);min-width:58px;">#3B82F6</span>
+            <button type="button" class="btn btn-secondary" style="padding:6px 10px;font-size:0.75rem;" onclick="testC6ModeColor(4)" title="Pré-visualizar esta cor por 3s no LED da C6"><i class="fa-solid fa-eye"></i></button>
+          </div>
+        </div>
+        <!-- 5: RTL -->
+        <div id="c6ModeCard_5" style="background:rgba(15,23,42,0.65);border:1px solid #334155;border-radius:10px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
+          <div style="min-width:0;flex:1;">
+            <div style="font-weight:700;font-size:0.84rem;color:var(--text);display:flex;align-items:center;gap:6px;">
+              <span id="c6ModeDot_5" style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#EC4899;box-shadow:0 0 6px #EC4899;flex-shrink:0;"></span>
+              <span>5 &bull; RTL (Regresso Home)</span>
+            </div>
+            <div style="font-size:0.72rem;color:var(--muted);margin-top:2px;">Retorno automático ao ponto de partida</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+            <input type="color" id="cfg_c6_mode_color_5" value="#EC4899" onchange="onC6ModeColorPick(5, this.value)" style="width:40px;height:34px;padding:2px;margin:0;cursor:pointer;background:#0f172a;border:1px solid #475569;border-radius:6px;">
+            <span id="c6ModeHexLbl_5" style="font-family:monospace;font-size:0.76rem;color:var(--muted);min-width:58px;">#EC4899</span>
+            <button type="button" class="btn btn-secondary" style="padding:6px 10px;font-size:0.75rem;" onclick="testC6ModeColor(5)" title="Pré-visualizar esta cor por 3s no LED da C6"><i class="fa-solid fa-eye"></i></button>
+          </div>
+        </div>
+        <!-- 6: FAILSAFE -->
+        <div id="c6ModeCard_6" style="background:rgba(15,23,42,0.65);border:1px solid #334155;border-radius:10px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
+          <div style="min-width:0;flex:1;">
+            <div style="font-weight:700;font-size:0.84rem;color:var(--text);display:flex;align-items:center;gap:6px;">
+              <span id="c6ModeDot_6" style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#EF4444;box-shadow:0 0 6px #EF4444;flex-shrink:0;"></span>
+              <span>6 &bull; FAILSAFE (Emergência 2Hz)</span>
+            </div>
+            <div style="font-size:0.72rem;color:var(--muted);margin-top:2px;">Perda de sinal / paragem de segurança (pisca a 2 Hz)</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+            <input type="color" id="cfg_c6_mode_color_6" value="#EF4444" onchange="onC6ModeColorPick(6, this.value)" style="width:40px;height:34px;padding:2px;margin:0;cursor:pointer;background:#0f172a;border:1px solid #475569;border-radius:6px;">
+            <span id="c6ModeHexLbl_6" style="font-family:monospace;font-size:0.76rem;color:var(--muted);min-width:58px;">#EF4444</span>
+            <button type="button" class="btn btn-secondary" style="padding:6px 10px;font-size:0.75rem;" onclick="testC6ModeColor(6)" title="Pré-visualizar esta cor por 3s no LED da C6"><i class="fa-solid fa-eye"></i></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Botões de Ação do Card C6 LED -->
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;background:rgba(15,23,42,0.6);border:1px solid #334155;border-radius:10px;padding:12px;">
+      <div class="btn-group">
+        <button type="button" onclick="saveC6LedConfig()" class="btn btn-primary" style="background:#10b981;color:#0f172a;">
+          <i class="fa-solid fa-floppy-disk"></i> Guardar Config LED da C6
+        </button>
+        <button type="button" onclick="resetC6LedDefaults()" class="btn btn-secondary">
+          <i class="fa-solid fa-rotate"></i> Repor Cores Padrão
+        </button>
+      </div>
+      <span style="font-size:0.78rem;color:var(--muted);">
+        <i class="fa-solid fa-microchip"></i> Sincronizado em tempo real via UART com o ESP32-C6 (GPIO 8)
+      </span>
+    </div>
+  </div>
+
+  <div class="card" style="border:1px solid #06b6d4;" id="compassDebugCard">
+    <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+      <span><i class="fa-solid fa-compass" style="color:var(--primary);"></i> Bússola Magnética &amp; IMU 9-DOF GY-BNO055 (J_EXP: IO1=SDA, IO11=SCL)</span>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <span id="cfgCmpI2cBadge" class="badge" style="background:#1e293b;color:#38bdf8;border:1px solid #0284c7;font-family:monospace;">I2C: 0x28</span>
+        <span id="cfgCmpStatusBadge" class="badge" style="background:#78350f;color:#fde68a;border:1px solid #b45309;">A DETETAR BNO055...</span>
+      </div>
+    </div>
+    <p style="color:var(--muted);font-size:0.875rem;margin-bottom:14px;">
+      Depuração em tempo real, estado de calibração dos 4 subsistemas internos Bosch (Sistema, Giroscópio, Acelerómetro e Magnetómetro) e alinhamento de proa da bússola ligada em <strong>J_EXP (3V3, GND, SCL=IO11, SDA=IO1)</strong>.
+    </p>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-bottom:14px;">
+      <!-- Rosa dos Ventos Visual + Rumo Ao Vivo -->
+      <div style="background:rgba(15,23,42,0.6);border:1px solid #334155;border-radius:10px;padding:14px;display:flex;align-items:center;justify-content:space-around;gap:14px;">
+        <div style="position:relative;width:110px;height:110px;border-radius:50%;border:2px solid #0284c7;background:#090d16;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 15px rgba(6,182,212,0.2);flex-shrink:0;">
+          <span style="position:absolute;top:4px;font-size:0.7rem;font-weight:800;color:#ef4444;">N</span>
+          <span style="position:absolute;bottom:4px;font-size:0.65rem;font-weight:700;color:#64748b;">S</span>
+          <span style="position:absolute;right:6px;font-size:0.65rem;font-weight:700;color:#64748b;">E</span>
+          <span style="position:absolute;left:6px;font-size:0.65rem;font-weight:700;color:#64748b;">O</span>
+          <div id="cfgCmpNeedle" style="width:100%;height:100%;position:absolute;top:0;left:0;transition:transform 0.25s ease-out;transform:rotate(0deg);">
+            <div style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:36px solid #ef4444;margin:16px auto 0;"></div>
+            <div style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:36px solid #38bdf8;margin:0 auto;"></div>
+          </div>
+          <div style="width:10px;height:10px;border-radius:50%;background:#f8fafc;z-index:2;border:2px solid #090d16;"></div>
+        </div>
+        <div style="flex:1;">
+          <div class="stat-label">Rumo Proa (Calibrado)</div>
+          <div style="display:flex;align-items:baseline;gap:8px;">
+            <span id="cfgCmpHeading" style="font-size:1.85rem;font-weight:800;color:var(--primary);">0.0°</span>
+            <span id="cfgCmpCardDir" style="font-size:0.95rem;font-weight:700;color:var(--yellow);">N</span>
+          </div>
+          <div style="font-size:0.78rem;color:var(--muted);margin-top:4px;">
+            Bruto Sensor: <strong id="cfgCmpRaw" style="color:var(--text);">0.0°</strong> &bull; Offset: <strong id="cfgCmpOffVal" style="color:var(--green);">0.0°</strong>
+          </div>
+          <div style="font-size:0.78rem;color:var(--muted);margin-top:2px;">
+            Fonte Ativa: <strong id="cfgCmpSource" style="color:#38bdf8;">--</strong>
+          </div>
+        </div>
+      </div>
+
+      <!-- Inclinómetro Todo-Terreno 3D (Esferas Roll & Pitch) + Níveis de Calibração NDOF -->
+      <div style="background:rgba(15,23,42,0.6);border:1px solid #334155;border-radius:10px;padding:14px;display:flex;flex-direction:column;justify-content:space-between;gap:12px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <!-- Esfera Roll (Adornamento Lateral) -->
+          <div style="background:#090d16;border:1px solid #1e293b;border-radius:10px;padding:10px;display:flex;flex-direction:column;align-items:center;gap:6px;">
+            <div class="stat-label" style="font-size:0.7rem;letter-spacing:0.04em;">ROLL (LATERAL)</div>
+            <div style="position:relative;width:92px;height:92px;border-radius:50%;border:2px solid #0284c7;background:#090d16;overflow:hidden;box-shadow:inset 0 0 14px rgba(0,0,0,0.9),0 0 10px rgba(56,189,248,0.15);display:flex;align-items:center;justify-content:center;">
+              <div id="cfgRollSphere" style="position:absolute;width:130%;height:130%;transition:transform 0.25s ease-out;transform:rotate(0deg);display:flex;align-items:center;justify-content:center;">
+                <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(2,132,199,0.35) 0%,rgba(56,189,248,0.15) 50%,rgba(180,83,9,0.35) 50%,rgba(120,53,15,0.55) 100%);"></div>
+                <div style="position:absolute;left:0;right:0;top:50%;height:2px;background:#38bdf8;box-shadow:0 0 6px #38bdf8;"></div>
+                <svg viewBox="0 0 64 64" style="width:54px;height:54px;position:relative;z-index:2;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.8));">
+                  <path d="M14 36 L50 36 L44 44 L20 44 Z" fill="#38bdf8" stroke="#f8fafc" stroke-width="1.5"/>
+                  <rect x="24" y="26" width="16" height="10" rx="2" fill="#0284c7" stroke="#f8fafc" stroke-width="1.2"/>
+                  <line x1="32" y1="16" x2="32" y2="26" stroke="#facc15" stroke-width="2" stroke-linecap="round"/>
+                  <circle cx="32" cy="15" r="2.5" fill="#ef4444"/>
+                </svg>
+              </div>
+              <div style="position:absolute;inset:4px;border-radius:50%;border:1px dashed rgba(148,163,184,0.3);pointer-events:none;z-index:3;"></div>
+              <div style="position:absolute;left:6px;right:6px;top:50%;border-top:1px dotted rgba(248,250,252,0.35);pointer-events:none;z-index:3;"></div>
+              <span style="position:absolute;top:3px;font-size:0.55rem;font-weight:700;color:#94a3b8;z-index:3;">0°</span>
+              <span style="position:absolute;left:4px;top:22px;font-size:0.5rem;color:#64748b;z-index:3;">-30°</span>
+              <span style="position:absolute;right:4px;top:22px;font-size:0.5rem;color:#64748b;z-index:3;">+30°</span>
+              <div style="position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle at 30% 25%,rgba(255,255,255,0.16) 0%,rgba(255,255,255,0) 55%);pointer-events:none;z-index:4;"></div>
+            </div>
+            <div class="stat-value" id="cfgCmpRoll" style="font-size:1.15rem;color:#38bdf8;font-weight:800;">0.0°</div>
+          </div>
+
+          <!-- Esfera Pitch (Arfagem Longitudinal) -->
+          <div style="background:#090d16;border:1px solid #1e293b;border-radius:10px;padding:10px;display:flex;flex-direction:column;align-items:center;gap:6px;">
+            <div class="stat-label" style="font-size:0.7rem;letter-spacing:0.04em;">PITCH (LONGIT.)</div>
+            <div style="position:relative;width:92px;height:92px;border-radius:50%;border:2px solid #8b5cf6;background:#090d16;overflow:hidden;box-shadow:inset 0 0 14px rgba(0,0,0,0.9),0 0 10px rgba(167,139,250,0.15);display:flex;align-items:center;justify-content:center;">
+              <div id="cfgPitchSphere" style="position:absolute;width:130%;height:130%;transition:transform 0.25s ease-out;transform:rotate(0deg);display:flex;align-items:center;justify-content:center;">
+                <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(109,40,217,0.32) 0%,rgba(167,139,250,0.14) 50%,rgba(180,83,9,0.35) 50%,rgba(120,53,15,0.55) 100%);"></div>
+                <div style="position:absolute;left:0;right:0;top:50%;height:2px;background:#a78bfa;box-shadow:0 0 6px #a78bfa;"></div>
+                <svg viewBox="0 0 64 64" style="width:54px;height:54px;position:relative;z-index:2;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.8));">
+                  <path d="M10 35 L54 33 L46 43 L14 43 Z" fill="#a78bfa" stroke="#f8fafc" stroke-width="1.5"/>
+                  <polygon points="24,34 38,34 35,25 26,25" fill="#7c3aed" stroke="#f8fafc" stroke-width="1.2"/>
+                  <line x1="33" y1="17" x2="33" y2="25" stroke="#facc15" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+              </div>
+              <div style="position:absolute;inset:4px;border-radius:50%;border:1px dashed rgba(148,163,184,0.3);pointer-events:none;z-index:3;"></div>
+              <div style="position:absolute;left:6px;right:6px;top:50%;border-top:1px dotted rgba(248,250,252,0.35);pointer-events:none;z-index:3;"></div>
+              <span style="position:absolute;top:3px;font-size:0.55rem;font-weight:700;color:#94a3b8;z-index:3;">0°</span>
+              <span style="position:absolute;left:4px;top:22px;font-size:0.5rem;color:#64748b;z-index:3;">-30°</span>
+              <span style="position:absolute;right:4px;top:22px;font-size:0.5rem;color:#64748b;z-index:3;">+30°</span>
+              <div style="position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle at 30% 25%,rgba(255,255,255,0.16) 0%,rgba(255,255,255,0) 55%);pointer-events:none;z-index:4;"></div>
+            </div>
+            <div class="stat-value" id="cfgCmpPitch" style="font-size:1.15rem;color:#a78bfa;font-weight:800;">0.0°</div>
+          </div>
+        </div>
+        <div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+            <span class="stat-label">Estado de Calibração NDOF (0 a 3):</span>
+            <span id="cfgCmpCalHint" style="font-size:0.72rem;color:var(--yellow);">Mova em "8" para calibrar Mag</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center;">
+            <div style="background:#090d16;padding:6px 4px;border-radius:6px;border:1px solid #1e293b;">
+              <div style="font-size:0.68rem;color:var(--muted);">SYS</div>
+              <div id="cfgCalSys" style="font-weight:700;font-size:0.95rem;">0/3</div>
+            </div>
+            <div style="background:#090d16;padding:6px 4px;border-radius:6px;border:1px solid #1e293b;">
+              <div style="font-size:0.68rem;color:var(--muted);">GYRO</div>
+              <div id="cfgCalGyro" style="font-weight:700;font-size:0.95rem;">0/3</div>
+            </div>
+            <div style="background:#090d16;padding:6px 4px;border-radius:6px;border:1px solid #1e293b;">
+              <div style="font-size:0.68rem;color:var(--muted);">ACCEL</div>
+              <div id="cfgCalAccel" style="font-weight:700;font-size:0.95rem;">0/3</div>
+            </div>
+            <div style="background:#090d16;padding:6px 4px;border-radius:6px;border:1px solid #1e293b;">
+              <div style="font-size:0.68rem;color:var(--muted);">MAG</div>
+              <div id="cfgCalMag" style="font-weight:700;font-size:0.95rem;">0/3</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ações de Calibração de Proa, Offset e Diagnóstico -->
+    <div style="background:rgba(15,23,42,0.6);border:1px solid #334155;border-radius:10px;padding:12px;display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;justify-content:space-between;">
+      <div class="btn-group">
+        <button type="button" onclick="cfgZeroCompass()" class="btn btn-primary">
+          <i class="fa-solid fa-compass-drafting"></i> Alinhar Proa Atual = 0.0° (Norte)
+        </button>
+        <button type="button" onclick="cfgResetCompassOffset()" class="btn btn-secondary">
+          <i class="fa-solid fa-rotate-left"></i> Repor Offset (0.0°)
+        </button>
+        <button type="button" onclick="cfgReinitCompass()" class="btn btn-secondary" style="background:#0284c7;color:#fff;">
+          <i class="fa-solid fa-rotate"></i> Re-Scan I2C / Reiniciar BNO055
+        </button>
+        <button type="button" onclick="cfgDiagCompass()" class="btn btn-secondary">
+          <i class="fa-solid fa-terminal"></i> Dump na Consola
+        </button>
+      </div>
+      <div style="display:flex;align-items:flex-end;gap:8px;">
+        <div>
+          <label style="display:block;font-size:0.75rem;color:var(--muted);margin-bottom:4px;">Offset Manual (-180° a +180°):</label>
+          <input type="number" id="cfg_cmp_offset" step="0.5" min="-180" max="180" value="0.0" style="width:110px;margin:0;">
+        </div>
+        <button type="button" onclick="cfgSaveCompassOffset()" class="btn btn-secondary" style="background:#065f46;color:#fff;">
+          <i class="fa-solid fa-check"></i> Aplicar Offset
+        </button>
+      </div>
+    </div>
+  </div>
+
   <div class="card" style="border-color:var(--primary);">
     <div class="card-title">
       <span><i class="fa-solid fa-floppy-disk"></i> Gravar e Sincronizar Tudo</span>
@@ -2632,6 +3015,318 @@ function saveLedConfig() {
   .catch(() => {});
 }
 
+// ----------------- Controlo do LED RGB da C6 (GPIO 8) -----------------
+let c6LedBrightTimer = null;
+
+function onC6LedBrightSlide(v) {
+  const pct = Math.max(0, Math.min(100, parseInt(v) || 0));
+  const el = document.getElementById('c6LedBrightVal');
+  if (el) el.innerText = pct + '%';
+  const b = document.getElementById('c6LedBrtBadge');
+  if (b) b.innerText = 'INTENSIDADE: ' + pct + '%';
+  if (c6LedBrightTimer) clearTimeout(c6LedBrightTimer);
+  c6LedBrightTimer = setTimeout(() => {
+    fetch('/api/control/c6_led', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ brightness: pct })
+    }).catch(() => {});
+  }, 60);
+}
+
+function setC6LedBrightPreset(v) {
+  const s = document.getElementById('cfg_c6_led_bright');
+  if (s) s.value = v;
+  onC6LedBrightSlide(v);
+}
+
+function updateC6ModeRowUI(m, hex) {
+  if (!hex) return;
+  const up = hex.toUpperCase();
+  const inp = document.getElementById('cfg_c6_mode_color_' + m);
+  if (inp) inp.value = up;
+  const lbl = document.getElementById('c6ModeHexLbl_' + m);
+  if (lbl) lbl.innerText = up;
+  const dot = document.getElementById('c6ModeDot_' + m);
+  if (dot) {
+    dot.style.background = up;
+    dot.style.boxShadow = '0 0 6px ' + up;
+  }
+}
+
+function updateC6ActiveModeUI(modeIdx, modeStr) {
+  const idx = (modeIdx >= 0 && modeIdx < 7) ? modeIdx : 0;
+  const txtEl = document.getElementById('c6LedActiveModeTxt');
+  if (txtEl && modeStr) txtEl.innerText = modeStr;
+  const col = (document.getElementById('cfg_c6_mode_color_' + idx)?.value || '#06B6D4').toUpperCase();
+  const actDot = document.getElementById('c6LedActiveDot');
+  if (actDot) {
+    actDot.style.background = col;
+    actDot.style.boxShadow = '0 0 8px ' + col;
+  }
+  for (let i = 0; i < 7; i++) {
+    const card = document.getElementById('c6ModeCard_' + i);
+    if (card) {
+      card.style.borderColor = (i === idx) ? '#10b981' : '#334155';
+    }
+  }
+}
+
+function onC6ModeColorPick(m, hex) {
+  updateC6ModeRowUI(m, hex);
+  fetch('/api/control/c6_led', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mode_index: m, hex: hex })
+  })
+  .then(r => r.json())
+  .then(res => {
+    const msg = res.msg || ('Cor do modo ' + m + ' aplicada no LED da C6!');
+    if (typeof showToast === 'function') showToast(msg);
+    showStatus(msg);
+  })
+  .catch(() => {});
+}
+
+function testC6ModeColor(m) {
+  const hex = document.getElementById('cfg_c6_mode_color_' + m)?.value || '#06B6D4';
+  fetch('/api/control/c6_led', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ test_hex: hex })
+  })
+  .then(r => r.json())
+  .then(res => {
+    const msg = res.msg || ('A pré-visualizar a cor ' + hex + ' no LED da C6 (3s)!');
+    if (typeof showToast === 'function') showToast(msg);
+    showStatus(msg);
+  })
+  .catch(() => {});
+}
+
+function getC6ModeColorsFromUI() {
+  const arr = [];
+  for (let i = 0; i < 7; i++) {
+    arr.push((document.getElementById('cfg_c6_mode_color_' + i)?.value || '#06B6D4').toUpperCase());
+  }
+  return arr;
+}
+
+function saveC6LedConfig() {
+  const brt = Math.max(0, Math.min(100, parseInt(document.getElementById('cfg_c6_led_bright')?.value ?? 80)));
+  const colors = getC6ModeColorsFromUI();
+  fetch('/api/control/c6_led', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ brightness: brt, mode_colors: colors, save: true })
+  })
+  .then(r => r.json())
+  .then(res => {
+    const msg = res.msg || 'Configuração do LED RGB da C6 guardada!';
+    if (typeof showToast === 'function') showToast(msg);
+    showStatus(msg);
+  })
+  .catch(() => {});
+}
+
+function resetC6LedDefaults() {
+  fetch('/api/control/c6_led', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reset_defaults: true })
+  })
+  .then(r => r.json())
+  .then(res => {
+    if (Array.isArray(res.c6_mode_colors)) {
+      res.c6_mode_colors.forEach((c, i) => updateC6ModeRowUI(i, c));
+    }
+    const msg = res.msg || 'Cores padrão por modo do LED da C6 repostas!';
+    if (typeof showToast === 'function') showToast(msg);
+    showStatus(msg);
+  })
+  .catch(() => {});
+}
+
+// ----------------- Depuração e Calibração Bússola GY-BNO055 -----------------
+function degToCardinal(d) {
+  const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
+  return dirs[Math.round(((d % 360) + 360) % 360 / 45) % 8];
+}
+
+function calColor(v) {
+  return v >= 3 ? 'var(--green)' : (v >= 1 ? 'var(--yellow)' : 'var(--red)');
+}
+
+function pollCompassDebug() {
+  if (window.otaInProgress) return;
+  fetch('/api/status')
+    .then(r => r.json())
+    .then(d => {
+      if (!d || !d.gps) return;
+      if (d.actuators && d.actuators.motor_status !== undefined) {
+        updateC6ActiveModeUI(d.actuators.motor_status, d.actuators.motor_status_str || 'IDLE');
+      }
+      const g = d.gps;
+      const st = document.getElementById('cfgCmpStatusBadge');
+      if (st) {
+        st.innerText = g.compass_active ? 'ONLINE (MODO NDOF 9-EIXOS)' : 'OFFLINE (FALLBACK GPS COG)';
+        st.style.background = g.compass_active ? '#064e3b' : '#78350f';
+        st.style.color = g.compass_active ? '#a7f3d0' : '#fde68a';
+        st.style.borderColor = g.compass_active ? '#059669' : '#b45309';
+      }
+      const i2c = document.getElementById('cfgCmpI2cBadge');
+      if (i2c && g.compass_i2c_addr) {
+        i2c.innerText = 'I2C: 0x' + g.compass_i2c_addr.toString(16).toUpperCase();
+      }
+      const h = (g.compass_heading !== undefined) ? g.compass_heading : (g.heading || 0);
+      const elH = document.getElementById('cfgCmpHeading');
+      if (elH) elH.innerText = h.toFixed(1) + '°';
+      const elC = document.getElementById('cfgCmpCardDir');
+      if (elC) elC.innerText = degToCardinal(h);
+      const ndl = document.getElementById('cfgCmpNeedle');
+      if (ndl) ndl.style.transform = 'rotate(' + h.toFixed(1) + 'deg)';
+      const elRaw = document.getElementById('cfgCmpRaw');
+      if (elRaw && g.compass_raw_heading !== undefined) elRaw.innerText = g.compass_raw_heading.toFixed(1) + '°';
+      const elOff = document.getElementById('cfgCmpOffVal');
+      if (elOff && g.compass_offset !== undefined) {
+        elOff.innerText = g.compass_offset.toFixed(1) + '°';
+        const inpOff = document.getElementById('cfg_cmp_offset');
+        if (inpOff && document.activeElement !== inpOff) {
+          inpOff.value = g.compass_offset.toFixed(1);
+        }
+      }
+      const elSrc = document.getElementById('cfgCmpSource');
+      if (elSrc) elSrc.innerText = g.compass_active ? 'GY-BNO055 (NDOF)' : 'GPS COG';
+      const elR = document.getElementById('cfgCmpRoll');
+      if (elR && g.roll !== undefined) elR.innerText = g.roll.toFixed(1) + '°';
+      const elRS = document.getElementById('cfgRollSphere');
+      if (elRS && g.roll !== undefined) {
+        const rClamped = Math.max(-65, Math.min(65, g.roll || 0));
+        elRS.style.transform = 'rotate(' + rClamped.toFixed(1) + 'deg)';
+      }
+      const elP = document.getElementById('cfgCmpPitch');
+      if (elP && g.pitch !== undefined) elP.innerText = g.pitch.toFixed(1) + '°';
+      const elPS = document.getElementById('cfgPitchSphere');
+      if (elPS && g.pitch !== undefined) {
+        const pClamped = Math.max(-65, Math.min(65, g.pitch || 0));
+        elPS.style.transform = 'rotate(' + (-pClamped).toFixed(1) + 'deg)';
+      }
+
+      const cs = g.compass_cal_sys || 0;
+      const cg = g.compass_cal_gyro || 0;
+      const ca = g.compass_cal_accel || 0;
+      const cm = g.compass_cal_mag || 0;
+      const eS = document.getElementById('cfgCalSys');
+      if (eS) { eS.innerText = cs + '/3'; eS.style.color = calColor(cs); }
+      const eG = document.getElementById('cfgCalGyro');
+      if (eG) { eG.innerText = cg + '/3'; eG.style.color = calColor(cg); }
+      const eA = document.getElementById('cfgCalAccel');
+      if (eA) { eA.innerText = ca + '/3'; eA.style.color = calColor(ca); }
+      const eM = document.getElementById('cfgCalMag');
+      if (eM) { eM.innerText = cm + '/3'; eM.style.color = calColor(cm); }
+
+      const hint = document.getElementById('cfgCmpCalHint');
+      if (hint) {
+        if (!g.compass_active) {
+          hint.innerText = 'Sensor não detetado em J_EXP';
+          hint.style.color = 'var(--red)';
+        } else if (cm >= 3 && cs >= 2) {
+          hint.innerText = '✔ Calibração NDOF Ótima (3/3)';
+          hint.style.color = 'var(--green)';
+        } else {
+          hint.innerText = 'Mova a boia em "8" para Mag 3/3';
+          hint.style.color = 'var(--yellow)';
+        }
+      }
+    })
+    .catch(() => {});
+}
+
+setInterval(pollCompassDebug, 800);
+setTimeout(pollCompassDebug, 250);
+
+function cfgZeroCompass() {
+  fetch('/api/compass/calibrate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ zero: true })
+  })
+  .then(r => r.json())
+  .then(res => {
+    const msg = res.msg || 'Proa atual definida como 0.0° (Norte)!';
+    if (typeof showToast === 'function') showToast(msg);
+    showStatus(msg);
+    setTimeout(pollCompassDebug, 250);
+  })
+  .catch(() => {});
+}
+
+function cfgResetCompassOffset() {
+  const inp = document.getElementById('cfg_cmp_offset');
+  if (inp) inp.value = '0.0';
+  fetch('/api/compass/calibrate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ offset: 0.0 })
+  })
+  .then(r => r.json())
+  .then(res => {
+    const msg = res.msg || 'Offset da bússola reposto a 0.0°!';
+    if (typeof showToast === 'function') showToast(msg);
+    showStatus(msg);
+    setTimeout(pollCompassDebug, 250);
+  })
+  .catch(() => {});
+}
+
+function cfgSaveCompassOffset() {
+  const v = parseFloat(document.getElementById('cfg_cmp_offset')?.value) || 0.0;
+  fetch('/api/compass/calibrate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ offset: v })
+  })
+  .then(r => r.json())
+  .then(res => {
+    const msg = res.msg || ('Offset manual de ' + v.toFixed(1) + '° aplicado e guardado em NVS!');
+    if (typeof showToast === 'function') showToast(msg);
+    showStatus(msg);
+    setTimeout(pollCompassDebug, 250);
+  })
+  .catch(() => {});
+}
+
+function cfgReinitCompass() {
+  fetch('/api/compass/calibrate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reinit: true })
+  })
+  .then(r => r.json())
+  .then(res => {
+    const msg = res.msg || 'Re-scan I2C BNO055 solicitado ao Coprocessador C6!';
+    if (typeof showToast === 'function') showToast(msg);
+    showStatus(msg);
+    setTimeout(pollCompassDebug, 450);
+  })
+  .catch(() => {});
+}
+
+function cfgDiagCompass() {
+  fetch('/api/compass/calibrate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ diag: true })
+  })
+  .then(r => r.json())
+  .then(res => {
+    const msg = res.msg || 'Diagnóstico BNO055 enviado para a Consola de Sistema!';
+    if (typeof showToast === 'function') showToast(msg);
+    showStatus(msg);
+  })
+  .catch(() => {});
+}
+
 function loadConfig() {
   fetch('/api/rover/config')
     .then(r => r.json())
@@ -2681,6 +3376,19 @@ function loadConfig() {
       if (data.led_mode) {
         updateLedBadge(data.led_mode, data.led_mode === 'OFF' ? '#1e293b' : '#581c87', data.led_mode === 'OFF' ? 'var(--muted)' : '#f3e8ff');
       }
+      if (data.c6_led_brightness !== undefined && document.getElementById('cfg_c6_led_bright')) {
+        document.getElementById('cfg_c6_led_bright').value = data.c6_led_brightness;
+        const c6bv = document.getElementById('c6LedBrightVal');
+        if (c6bv) c6bv.innerText = data.c6_led_brightness + '%';
+        const c6bb = document.getElementById('c6LedBrtBadge');
+        if (c6bb) c6bb.innerText = 'INTENSIDADE: ' + data.c6_led_brightness + '%';
+      }
+      if (Array.isArray(data.c6_mode_colors)) {
+        data.c6_mode_colors.forEach((c, idx) => updateC6ModeRowUI(idx, c));
+      }
+      if (data.motor_status !== undefined) {
+        updateC6ActiveModeUI(data.motor_status, data.motor_status_str || 'IDLE');
+      }
       document.getElementById('summaryId').innerText = 'Rover-' + (data.rover_id || 1);
       document.getElementById('summarySsid').innerText = data.ap_ssid || 'WindDragon-AP';
       if (data.version_lafvin && document.getElementById('fwLafvinVer')) document.getElementById('fwLafvinVer').innerText = data.version_lafvin;
@@ -2703,6 +3411,8 @@ function saveAllConfig(e) {
   const pulsesRev = parseInt(document.getElementById('cfg_pulses_per_rev')?.value ?? 1);
   const ledCnt = parseInt(document.getElementById('cfg_led_count')?.value ?? 8);
   const ledBrt = parseInt(document.getElementById('cfg_led_bright')?.value ?? 100);
+  const c6LedBrt = parseInt(document.getElementById('cfg_c6_led_bright')?.value ?? 80);
+  const c6Colors = getC6ModeColorsFromUI();
 
   fetch('/api/rover/config', {
     method: 'POST',
@@ -2719,7 +3429,9 @@ function saveAllConfig(e) {
       anchor_drum_diam_mm: drumDiam,
       anchor_pulses_per_rev: pulsesRev,
       led_count: ledCnt,
-      led_brightness: ledBrt
+      led_brightness: ledBrt,
+      c6_led_brightness: c6LedBrt,
+      c6_mode_colors: c6Colors
     })
   })
   .then(r => r.json())
@@ -4886,8 +5598,126 @@ BASE_LCD_CARD = """
     </label>
   </div>
 </div>
+
+<div class="card" id="baseC6LedConfigCard">
+  <div class="card-title">
+    <span><i class="fa-solid fa-lightbulb" style="color:#38bdf8;"></i> LED RGB do Coprocessador C6 — Cor por Modo &amp; Intensidade</span>
+    <span id="c6LedBrightBadge" class="badge" style="background:#1e293b;color:#38bdf8;font-size:0.9rem;font-weight:700;">80%</span>
+  </div>
+  <p style="color:var(--muted);font-size:0.875rem;margin-bottom:16px;">
+    Personalize a intensidade global (0% a 100%) e a cor do LED RGB endereçável do Coprocessador ESP32-C6 (GPIO 8) e do Master para cada estado operacional da Estação Base.
+  </p>
+
+  <!-- Slider de Intensidade Global do LED da C6 -->
+  <div style="background:rgba(0,0,0,0.25);padding:18px;border-radius:12px;border:1px solid var(--card-border);margin-bottom:16px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <span style="font-size:0.85rem;color:var(--muted);"><i class="fa-solid fa-power-off"></i> 0% Desligado</span>
+      <span id="c6LedBrightDisplayVal" style="font-size:1.75rem;font-weight:700;color:#38bdf8;">80%</span>
+      <span style="font-size:0.85rem;color:var(--muted);"><i class="fa-solid fa-sun"></i> 100% Máximo</span>
+    </div>
+    <input type="range" id="cfg_c6_led_bright" min="0" max="100" step="1" value="80" class="slider" style="accent-color:#38bdf8;" oninput="onC6LedBrightSlide(this.value)" onchange="onC6LedBrightChange(this.value)">
+    <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
+      <button type="button" onclick="setC6LedBrightPreset(0)" class="btn btn-secondary" style="padding:6px 12px;font-size:0.8rem;">0% (Off)</button>
+      <button type="button" onclick="setC6LedBrightPreset(25)" class="btn btn-secondary" style="padding:6px 12px;font-size:0.8rem;">25% (Noturno)</button>
+      <button type="button" onclick="setC6LedBrightPreset(50)" class="btn btn-secondary" style="padding:6px 12px;font-size:0.8rem;">50% (Médio)</button>
+      <button type="button" onclick="setC6LedBrightPreset(80)" class="btn btn-secondary" style="padding:6px 12px;font-size:0.8rem;">80% (Padrão)</button>
+      <button type="button" onclick="setC6LedBrightPreset(100)" class="btn btn-secondary" style="padding:6px 12px;font-size:0.8rem;">100% (Sol Máximo)</button>
+    </div>
+  </div>
+
+  <!-- Grelha de Cores por Estado Operacional (5 Modos da Estação Base) -->
+  <div class="grid-2" style="margin-bottom:16px;">
+    <div style="background:rgba(15,23,42,0.65);padding:12px 14px;border-radius:10px;border:1px solid var(--card-border);display:flex;align-items:center;justify-content:space-between;gap:10px;">
+      <div style="min-width:0;flex:1;">
+        <div style="font-weight:700;font-size:0.9rem;color:var(--text);display:flex;align-items:center;gap:6px;">
+          <span id="c6ModeDot_0" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#A855F7;box-shadow:0 0 8px #A855F7;"></span>
+          <i class="fa-solid fa-box-archive" style="color:var(--muted);font-size:0.8rem;"></i> Storage (Standby)
+        </div>
+        <div style="font-size:0.75rem;color:var(--muted);margin-top:2px;">Estação em repouso / fora de prova</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <input type="color" id="c6ModeColor_0" value="#A855F7" onchange="onC6ModeColorPick(0, this.value)" style="width:42px;height:36px;padding:2px;border-radius:8px;border:1px solid var(--card-border);background:#0f172a;cursor:pointer;margin:0;">
+        <span id="c6ModeHex_0" style="font-family:monospace;font-size:0.78rem;color:var(--muted);width:62px;">#A855F7</span>
+        <button type="button" onclick="testC6ModeColor(0)" class="btn btn-secondary" style="padding:6px 10px;font-size:0.75rem;" title="Testar cor durante 3s no LED físico"><i class="fa-solid fa-eye"></i></button>
+      </div>
+    </div>
+
+    <div style="background:rgba(15,23,42,0.65);padding:12px 14px;border-radius:10px;border:1px solid var(--card-border);display:flex;align-items:center;justify-content:space-between;gap:10px;">
+      <div style="min-width:0;flex:1;">
+        <div style="font-weight:700;font-size:0.9rem;color:var(--text);display:flex;align-items:center;gap:6px;">
+          <span id="c6ModeDot_1" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#F59E0B;box-shadow:0 0 8px #F59E0B;"></span>
+          <i class="fa-solid fa-hourglass-half" style="color:var(--muted);font-size:0.8rem;"></i> Waiting Rover List
+        </div>
+        <div style="font-size:0.75rem;color:var(--muted);margin-top:2px;">Conectada ao Portal à espera de lista</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <input type="color" id="c6ModeColor_1" value="#F59E0B" onchange="onC6ModeColorPick(1, this.value)" style="width:42px;height:36px;padding:2px;border-radius:8px;border:1px solid var(--card-border);background:#0f172a;cursor:pointer;margin:0;">
+        <span id="c6ModeHex_1" style="font-family:monospace;font-size:0.78rem;color:var(--muted);width:62px;">#F59E0B</span>
+        <button type="button" onclick="testC6ModeColor(1)" class="btn btn-secondary" style="padding:6px 10px;font-size:0.75rem;" title="Testar cor durante 3s no LED físico"><i class="fa-solid fa-eye"></i></button>
+      </div>
+    </div>
+
+    <div style="background:rgba(15,23,42,0.65);padding:12px 14px;border-radius:10px;border:1px solid var(--card-border);display:flex;align-items:center;justify-content:space-between;gap:10px;">
+      <div style="min-width:0;flex:1;">
+        <div style="font-weight:700;font-size:0.9rem;color:var(--text);display:flex;align-items:center;gap:6px;">
+          <span id="c6ModeDot_2" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#06B6D4;box-shadow:0 0 8px #06B6D4;"></span>
+          <i class="fa-solid fa-anchor" style="color:var(--muted);font-size:0.8rem;"></i> Idle (Lista Pronta)
+        </div>
+        <div style="font-size:0.75rem;color:var(--muted);margin-top:2px;">Frota carregada e pronta para largada</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <input type="color" id="c6ModeColor_2" value="#06B6D4" onchange="onC6ModeColorPick(2, this.value)" style="width:42px;height:36px;padding:2px;border-radius:8px;border:1px solid var(--card-border);background:#0f172a;cursor:pointer;margin:0;">
+        <span id="c6ModeHex_2" style="font-family:monospace;font-size:0.78rem;color:var(--muted);width:62px;">#06B6D4</span>
+        <button type="button" onclick="testC6ModeColor(2)" class="btn btn-secondary" style="padding:6px 10px;font-size:0.75rem;" title="Testar cor durante 3s no LED físico"><i class="fa-solid fa-eye"></i></button>
+      </div>
+    </div>
+
+    <div style="background:rgba(15,23,42,0.65);padding:12px 14px;border-radius:10px;border:1px solid var(--card-border);display:flex;align-items:center;justify-content:space-between;gap:10px;">
+      <div style="min-width:0;flex:1;">
+        <div style="font-weight:700;font-size:0.9rem;color:var(--text);display:flex;align-items:center;gap:6px;">
+          <span id="c6ModeDot_3" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#10B981;box-shadow:0 0 8px #10B981;"></span>
+          <i class="fa-solid fa-rocket" style="color:var(--muted);font-size:0.8rem;"></i> Go (Em Missão)
+        </div>
+        <div style="font-size:0.75rem;color:var(--muted);margin-top:2px;">Regata ativa com polling LoRa em tempo real</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <input type="color" id="c6ModeColor_3" value="#10B981" onchange="onC6ModeColorPick(3, this.value)" style="width:42px;height:36px;padding:2px;border-radius:8px;border:1px solid var(--card-border);background:#0f172a;cursor:pointer;margin:0;">
+        <span id="c6ModeHex_3" style="font-family:monospace;font-size:0.78rem;color:var(--muted);width:62px;">#10B981</span>
+        <button type="button" onclick="testC6ModeColor(3)" class="btn btn-secondary" style="padding:6px 10px;font-size:0.75rem;" title="Testar cor durante 3s no LED físico"><i class="fa-solid fa-eye"></i></button>
+      </div>
+    </div>
+
+    <div style="background:rgba(15,23,42,0.65);padding:12px 14px;border-radius:10px;border:1px solid var(--card-border);display:flex;align-items:center;justify-content:space-between;gap:10px;">
+      <div style="min-width:0;flex:1;">
+        <div style="font-weight:700;font-size:0.9rem;color:var(--text);display:flex;align-items:center;gap:6px;">
+          <span id="c6ModeDot_4" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#EF4444;box-shadow:0 0 8px #EF4444;"></span>
+          <i class="fa-solid fa-triangle-exclamation" style="color:var(--muted);font-size:0.8rem;"></i> Erro LoRa / Alerta RF
+        </div>
+        <div style="font-size:0.75rem;color:var(--muted);margin-top:2px;">Pisca a 2 Hz se o rádio SX1278 falhar</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <input type="color" id="c6ModeColor_4" value="#EF4444" onchange="onC6ModeColorPick(4, this.value)" style="width:42px;height:36px;padding:2px;border-radius:8px;border:1px solid var(--card-border);background:#0f172a;cursor:pointer;margin:0;">
+        <span id="c6ModeHex_4" style="font-family:monospace;font-size:0.78rem;color:var(--muted);width:62px;">#EF4444</span>
+        <button type="button" onclick="testC6ModeColor(4)" class="btn btn-secondary" style="padding:6px 10px;font-size:0.75rem;" title="Testar cor durante 3s no LED físico"><i class="fa-solid fa-eye"></i></button>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button type="button" onclick="saveAllC6LedConfig()" class="btn btn-primary">
+        <i class="fa-solid fa-floppy-disk"></i> Guardar Cores &amp; Intensidade
+      </button>
+      <button type="button" onclick="resetC6LedDefaults()" class="btn btn-secondary">
+        <i class="fa-solid fa-rotate-left"></i> Repor Cores Padrão
+      </button>
+    </div>
+    <span id="c6LedFeedback" style="font-size:0.82rem;color:var(--green);font-weight:600;"></span>
+  </div>
+</div>
 <script>
 let slideTimer = null;
+let c6LedSlideTimer = null;
 function onBrightSlide(v) {
   const elVal = document.getElementById('brightDisplayVal');
   if (elVal) elVal.innerText = v + '%';
@@ -4907,6 +5737,127 @@ function setPreset(v) {
   onBrightSlide(v);
   onBrightChange(v);
 }
+function showC6LedFeedback(msg, isErr = false) {
+  const fb = document.getElementById('c6LedFeedback');
+  if (!fb) return;
+  fb.style.color = isErr ? 'var(--red)' : 'var(--green)';
+  fb.innerText = msg;
+  setTimeout(() => { if (fb.innerText === msg) fb.innerText = ''; }, 3000);
+}
+function onC6LedBrightSlide(v) {
+  const d = document.getElementById('c6LedBrightDisplayVal');
+  if (d) d.innerText = v + '%';
+  const b = document.getElementById('c6LedBrightBadge');
+  if (b) b.innerText = v + '%';
+  if (c6LedSlideTimer) clearTimeout(c6LedSlideTimer);
+  c6LedSlideTimer = setTimeout(() => {
+    fetch('/api/control/c6_led', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ brightness: parseInt(v) })
+    }).catch(() => {});
+  }, 80);
+}
+function onC6LedBrightChange(v) {
+  fetch('/api/control/c6_led', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ brightness: parseInt(v) })
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.success) showC6LedFeedback('Intensidade LED C6: ' + d.c6_led_brightness + '%');
+  })
+  .catch(() => {});
+}
+function setC6LedBrightPreset(v) {
+  const el = document.getElementById('cfg_c6_led_bright');
+  if (el) el.value = v;
+  onC6LedBrightSlide(v);
+  onC6LedBrightChange(v);
+}
+function applyC6ModeUiColor(idx, hex) {
+  if (!hex) return;
+  const h = hex.toUpperCase();
+  const inp = document.getElementById('c6ModeColor_' + idx);
+  if (inp) inp.value = h;
+  const txt = document.getElementById('c6ModeHex_' + idx);
+  if (txt) txt.innerText = h;
+  const dot = document.getElementById('c6ModeDot_' + idx);
+  if (dot) {
+    dot.style.background = h;
+    dot.style.boxShadow = '0 0 8px ' + h;
+  }
+}
+function onC6ModeColorPick(idx, hex) {
+  applyC6ModeUiColor(idx, hex);
+  fetch('/api/control/c6_led', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mode_idx: idx, color: hex })
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.success) showC6LedFeedback(d.msg || 'Cor atualizada!');
+  })
+  .catch(() => {});
+}
+function testC6ModeColor(idx) {
+  const inp = document.getElementById('c6ModeColor_' + idx);
+  const hex = inp ? inp.value : '#38BDF8';
+  fetch('/api/control/c6_led', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ test_color: hex })
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.success) showC6LedFeedback('A testar ' + hex.toUpperCase() + ' no LED C6 (3s)...');
+  })
+  .catch(() => {});
+}
+function saveAllC6LedConfig() {
+  const brt = parseInt(document.getElementById('cfg_c6_led_bright')?.value || 80);
+  const colors = [];
+  for (let i = 0; i < 5; i++) {
+    colors.push(document.getElementById('c6ModeColor_' + i)?.value || '#A855F7');
+  }
+  fetch('/api/control/c6_led', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ brightness: brt, colors: colors })
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.success) showC6LedFeedback('Configuração do LED C6 guardada!');
+  })
+  .catch(() => showC6LedFeedback('Erro ao guardar', true));
+}
+function resetC6LedDefaults() {
+  if (!confirm('Repor as cores padrão e intensidade (80%) do LED do Coprocessador C6?')) return;
+  fetch('/api/control/c6_led', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reset_defaults: true })
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.success) {
+      const brt = d.c6_led_brightness ?? 80;
+      const el = document.getElementById('cfg_c6_led_bright');
+      if (el) el.value = brt;
+      const dv = document.getElementById('c6LedBrightDisplayVal');
+      if (dv) dv.innerText = brt + '%';
+      const bg = document.getElementById('c6LedBrightBadge');
+      if (bg) bg.innerText = brt + '%';
+      if (Array.isArray(d.c6_mode_colors)) {
+        d.c6_mode_colors.forEach((c, idx) => applyC6ModeUiColor(idx, c));
+      }
+      showC6LedFeedback('Cores padrão repostas!');
+    }
+  })
+  .catch(() => {});
+}
 fetch('/api/display').then(r=>r.json()).then(d=>{
   const c = document.getElementById('joyScreenCheck');
   if (c) c.checked = !!d.joy_screen;
@@ -4917,6 +5868,18 @@ fetch('/api/display').then(r=>r.json()).then(d=>{
   if (elVal) elVal.innerText = b + '%';
   const elBadge = document.getElementById('brightValBadge');
   if (elBadge) elBadge.innerText = b + '%';
+  if (d.c6_led_brightness !== undefined) {
+    const cb = d.c6_led_brightness;
+    const cel = document.getElementById('cfg_c6_led_bright');
+    if (cel) cel.value = cb;
+    const cval = document.getElementById('c6LedBrightDisplayVal');
+    if (cval) cval.innerText = cb + '%';
+    const cbg = document.getElementById('c6LedBrightBadge');
+    if (cbg) cbg.innerText = cb + '%';
+  }
+  if (Array.isArray(d.c6_mode_colors)) {
+    d.c6_mode_colors.forEach((col, idx) => applyC6ModeUiColor(idx, col));
+  }
 }).catch(()=>{});
 function toggleJoyScreen(enabled){
   fetch('/api/display',{
@@ -5926,9 +6889,13 @@ BASE_MISSION_CONTENT = """
         <i class="fa-solid fa-gauge-high"></i>
         <span id="speedVal">0.0 kn</span>
       </span>
-      <span class="hud-pill" title="Rumo Proa">
-        <i class="fa-solid fa-compass"></i>
+      <span class="hud-pill" title="Rumo Proa & Fonte (BNO055 / GPS)">
+        <i class="fa-solid fa-compass" id="headingIcon"></i>
         <span id="headingVal">0°</span>
+      </span>
+      <span class="hud-pill" id="tiltPill" title="Inclinação BNO055 (Roll / Pitch)" style="display:none;">
+        <i class="fa-solid fa-water" style="color:var(--primary);"></i>
+        <span id="tiltVal">0°/0°</span>
       </span>
       <span class="hud-pill" title="Sinal LoRa">
         <i class="fa-solid fa-signal"></i>
@@ -6010,6 +6977,87 @@ BASE_MISSION_CONTENT = """
       <div class="stat-box">
         <div class="stat-label">Sinal LoRa</div>
         <div class="stat-value" id="curRssi" style="color:var(--green);">0 dBm</div>
+      </div>
+    </div>
+
+    <!-- Bússola Visual (Rosa dos Ventos) + Esferas Inclinómetro Todo-Terreno (Roll & Pitch) -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-top:14px;">
+      <!-- Card Rosa dos Ventos (Igual à Configuração do Rover) -->
+      <div style="background:rgba(15,23,42,0.65);border:1px solid #334155;border-radius:10px;padding:14px;display:flex;align-items:center;justify-content:space-around;gap:14px;">
+        <div style="position:relative;width:110px;height:110px;border-radius:50%;border:2px solid #0284c7;background:#090d16;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 15px rgba(6,182,212,0.2);flex-shrink:0;">
+          <span style="position:absolute;top:4px;font-size:0.7rem;font-weight:800;color:#ef4444;">N</span>
+          <span style="position:absolute;bottom:4px;font-size:0.65rem;font-weight:700;color:#64748b;">S</span>
+          <span style="position:absolute;right:6px;font-size:0.65rem;font-weight:700;color:#64748b;">E</span>
+          <span style="position:absolute;left:6px;font-size:0.65rem;font-weight:700;color:#64748b;">O</span>
+          <div id="baseCmpNeedle" style="width:100%;height:100%;position:absolute;top:0;left:0;transition:transform 0.25s ease-out;transform:rotate(0deg);">
+            <div style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:36px solid #ef4444;margin:16px auto 0;"></div>
+            <div style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:36px solid #38bdf8;margin:0 auto;"></div>
+          </div>
+          <div style="width:10px;height:10px;border-radius:50%;background:#f8fafc;z-index:2;border:2px solid #090d16;"></div>
+        </div>
+        <div style="flex:1;">
+          <div class="stat-label">Rumo Proa (Calibrado)</div>
+          <div style="display:flex;align-items:baseline;gap:8px;">
+            <span id="curCompass" style="font-size:1.85rem;font-weight:800;color:var(--primary);">0.0°</span>
+            <span id="baseCmpCardDir" style="font-size:0.95rem;font-weight:700;color:var(--yellow);">N</span>
+          </div>
+          <div style="font-size:0.78rem;color:var(--muted);margin-top:4px;">
+            Fonte Ativa: <strong id="baseCmpSource" style="color:#38bdf8;">GPS COG</strong>
+          </div>
+          <div style="font-size:0.78rem;color:var(--muted);margin-top:2px;">
+            Calibração NDOF: <strong id="curCompassCal" style="color:var(--green);">OFFLINE</strong>
+          </div>
+        </div>
+      </div>
+
+      <!-- Esferas Inclinómetro Todo-Terreno (Roll & Pitch) -->
+      <div style="background:rgba(15,23,42,0.65);border:1px solid #334155;border-radius:10px;padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:center;">
+        <!-- Esfera Roll (Adornamento Lateral) -->
+        <div style="background:#090d16;border:1px solid #1e293b;border-radius:10px;padding:10px 8px;display:flex;flex-direction:column;align-items:center;gap:6px;">
+          <div class="stat-label" style="font-size:0.68rem;letter-spacing:0.04em;">ROLL (LATERAL)</div>
+          <div style="position:relative;width:94px;height:94px;border-radius:50%;border:2px solid #0284c7;background:#090d16;overflow:hidden;box-shadow:inset 0 0 14px rgba(0,0,0,0.9),0 0 10px rgba(56,189,248,0.15);display:flex;align-items:center;justify-content:center;">
+            <div id="baseRollSphere" style="position:absolute;width:130%;height:130%;transition:transform 0.25s ease-out;transform:rotate(0deg);display:flex;align-items:center;justify-content:center;">
+              <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(2,132,199,0.35) 0%,rgba(56,189,248,0.15) 50%,rgba(180,83,9,0.35) 50%,rgba(120,53,15,0.55) 100%);"></div>
+              <div style="position:absolute;left:0;right:0;top:50%;height:2px;background:#38bdf8;box-shadow:0 0 6px #38bdf8;"></div>
+              <svg viewBox="0 0 64 64" style="width:54px;height:54px;position:relative;z-index:2;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.8));">
+                <path d="M14 36 L50 36 L44 44 L20 44 Z" fill="#38bdf8" stroke="#f8fafc" stroke-width="1.5"/>
+                <rect x="24" y="26" width="16" height="10" rx="2" fill="#0284c7" stroke="#f8fafc" stroke-width="1.2"/>
+                <line x1="32" y1="16" x2="32" y2="26" stroke="#facc15" stroke-width="2" stroke-linecap="round"/>
+                <circle cx="32" cy="15" r="2.5" fill="#ef4444"/>
+              </svg>
+            </div>
+            <div style="position:absolute;inset:4px;border-radius:50%;border:1px dashed rgba(148,163,184,0.3);pointer-events:none;z-index:3;"></div>
+            <div style="position:absolute;left:6px;right:6px;top:50%;border-top:1px dotted rgba(248,250,252,0.35);pointer-events:none;z-index:3;"></div>
+            <span style="position:absolute;top:3px;font-size:0.55rem;font-weight:700;color:#94a3b8;z-index:3;">0°</span>
+            <span style="position:absolute;left:4px;top:22px;font-size:0.5rem;color:#64748b;z-index:3;">-30°</span>
+            <span style="position:absolute;right:4px;top:22px;font-size:0.5rem;color:#64748b;z-index:3;">+30°</span>
+            <div style="position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle at 30% 25%,rgba(255,255,255,0.16) 0%,rgba(255,255,255,0) 55%);pointer-events:none;z-index:4;"></div>
+          </div>
+          <div class="stat-value" id="baseRollVal" style="font-size:1.15rem;color:#38bdf8;font-weight:800;">0.0°</div>
+        </div>
+
+        <!-- Esfera Pitch (Arfagem Longitudinal) -->
+        <div style="background:#090d16;border:1px solid #1e293b;border-radius:10px;padding:10px 8px;display:flex;flex-direction:column;align-items:center;gap:6px;">
+          <div class="stat-label" style="font-size:0.68rem;letter-spacing:0.04em;">PITCH (LONGIT.)</div>
+          <div style="position:relative;width:94px;height:94px;border-radius:50%;border:2px solid #8b5cf6;background:#090d16;overflow:hidden;box-shadow:inset 0 0 14px rgba(0,0,0,0.9),0 0 10px rgba(167,139,250,0.15);display:flex;align-items:center;justify-content:center;">
+            <div id="basePitchSphere" style="position:absolute;width:130%;height:130%;transition:transform 0.25s ease-out;transform:rotate(0deg);display:flex;align-items:center;justify-content:center;">
+              <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(109,40,217,0.32) 0%,rgba(167,139,250,0.14) 50%,rgba(180,83,9,0.35) 50%,rgba(120,53,15,0.55) 100%);"></div>
+              <div style="position:absolute;left:0;right:0;top:50%;height:2px;background:#a78bfa;box-shadow:0 0 6px #a78bfa;"></div>
+              <svg viewBox="0 0 64 64" style="width:54px;height:54px;position:relative;z-index:2;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.8));">
+                <path d="M10 35 L54 33 L46 43 L14 43 Z" fill="#a78bfa" stroke="#f8fafc" stroke-width="1.5"/>
+                <polygon points="24,34 38,34 35,25 26,25" fill="#7c3aed" stroke="#f8fafc" stroke-width="1.2"/>
+                <line x1="33" y1="17" x2="33" y2="25" stroke="#facc15" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <div style="position:absolute;inset:4px;border-radius:50%;border:1px dashed rgba(148,163,184,0.3);pointer-events:none;z-index:3;"></div>
+            <div style="position:absolute;left:6px;right:6px;top:50%;border-top:1px dotted rgba(248,250,252,0.35);pointer-events:none;z-index:3;"></div>
+            <span style="position:absolute;top:3px;font-size:0.55rem;font-weight:700;color:#94a3b8;z-index:3;">0°</span>
+            <span style="position:absolute;left:4px;top:22px;font-size:0.5rem;color:#64748b;z-index:3;">-30°</span>
+            <span style="position:absolute;right:4px;top:22px;font-size:0.5rem;color:#64748b;z-index:3;">+30°</span>
+            <div style="position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle at 30% 25%,rgba(255,255,255,0.16) 0%,rgba(255,255,255,0) 55%);pointer-events:none;z-index:4;"></div>
+          </div>
+          <div class="stat-value" id="basePitchVal" style="font-size:1.15rem;color:#a78bfa;font-weight:800;">0.0°</div>
+        </div>
       </div>
     </div>
   </div>
@@ -6848,7 +7896,16 @@ function loadAllData(forceMapCenter = false) {
         const batCol = p < 25 ? 'var(--red)' : (p < 50 ? 'var(--yellow)' : 'var(--green)');
         document.getElementById('batVal').innerText = p + '%';
         document.getElementById('speedVal').innerText = (sel.speed_knots || 0).toFixed(1) + ' kn';
-        document.getElementById('headingVal').innerText = (sel.heading_deg || 0).toFixed(0) + '°';
+        const cmpAct = !!sel.compass_active;
+        document.getElementById('headingVal').innerText = (sel.heading_deg || 0).toFixed(0) + '°' + (cmpAct ? ' BNO' : '');
+        const hIcon = document.getElementById('headingIcon');
+        if (hIcon) hIcon.style.color = cmpAct ? 'var(--green)' : 'var(--muted)';
+        const tPill = document.getElementById('tiltPill');
+        const tVal = document.getElementById('tiltVal');
+        if (tPill && tVal) {
+          tPill.style.display = cmpAct ? 'inline-flex' : 'none';
+          tVal.innerText = `R:${(sel.roll_deg || 0).toFixed(1)}° P:${(sel.pitch_deg || 0).toFixed(1)}°`;
+        }
         document.getElementById('rssiVal').innerText = (sel.rssi || 0) + ' dBm';
 
         // Coordenadas na barra inferior
@@ -6860,11 +7917,49 @@ function loadAllData(forceMapCenter = false) {
           document.getElementById('tgtCoordTxt').innerText = 'Nenhum alvo definido';
         }
 
-        // Atualiza Comandos
+        // Atualiza Comandos + Bússola Visual + Esferas Inclinómetro Todo-Terreno
         document.getElementById('curMotor').innerText = sel.motor_status !== undefined ? sel.motor_status : 'idle';
         document.getElementById('curAnchor').innerText = sel.anchor_status !== undefined ? sel.anchor_status : 'retracted';
         document.getElementById('curDepth').innerText = (sel.anchor_depth_m || 0).toFixed(1) + ' m';
         document.getElementById('curRssi').innerText = (sel.rssi || 0) + ' dBm';
+        const hdg = sel.heading_deg || 0;
+        const dirs = ['N','NE','E','SE','S','SO','O','NO'];
+        const cardDir = dirs[Math.round(((hdg % 360) + 360) % 360 / 45) % 8];
+        const elCmp = document.getElementById('curCompass');
+        if (elCmp) {
+          elCmp.innerText = `${hdg.toFixed(1)}°`;
+          elCmp.style.color = cmpAct ? 'var(--primary)' : 'var(--yellow)';
+        }
+        const elCardDir = document.getElementById('baseCmpCardDir');
+        if (elCardDir) elCardDir.innerText = cardDir;
+        const elNeedle = document.getElementById('baseCmpNeedle');
+        if (elNeedle) elNeedle.style.transform = `rotate(${hdg.toFixed(1)}deg)`;
+        const elSrc = document.getElementById('baseCmpSource');
+        if (elSrc) {
+          elSrc.innerText = cmpAct ? 'GY-BNO055 (NDOF)' : 'GPS COG';
+          elSrc.style.color = cmpAct ? '#38bdf8' : 'var(--yellow)';
+        }
+        const rDeg = sel.roll_deg || 0;
+        const pDeg = sel.pitch_deg || 0;
+        const elRollVal = document.getElementById('baseRollVal');
+        if (elRollVal) elRollVal.innerText = `${rDeg.toFixed(1)}°`;
+        const elPitchVal = document.getElementById('basePitchVal');
+        if (elPitchVal) elPitchVal.innerText = `${pDeg.toFixed(1)}°`;
+        const elRollSph = document.getElementById('baseRollSphere');
+        if (elRollSph) {
+          const rClamp = Math.max(-65, Math.min(65, rDeg));
+          elRollSph.style.transform = `rotate(${rClamp.toFixed(1)}deg)`;
+        }
+        const elPitchSph = document.getElementById('basePitchSphere');
+        if (elPitchSph) {
+          const pClamp = Math.max(-65, Math.min(65, pDeg));
+          elPitchSph.style.transform = `rotate(${(-pClamp).toFixed(1)}deg)`;
+        }
+        const elCal = document.getElementById('curCompassCal');
+        if (elCal) {
+          elCal.innerText = cmpAct ? `Sys ${sel.compass_cal_sys || 0}/3 • Mag ${sel.compass_cal_mag || 0}/3` : 'OFFLINE (GPS)';
+          elCal.style.color = cmpAct ? ((sel.compass_cal_mag >= 2) ? 'var(--green)' : 'var(--yellow)') : 'var(--muted)';
+        }
 
         // Atualiza Bateria
         const v = sel.battery_voltage || 0;

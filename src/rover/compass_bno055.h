@@ -125,6 +125,16 @@ public:
         return _headingOffsetDeg;
     }
 
+    // Força reinicialização / re-scan I2C e reset de hardware do sensor BNO055
+    bool reinit() {
+        _ready = false;
+        _failCount = 0;
+        if (!_busInitialized) {
+            return begin(_sdaPin, _sclPin);
+        }
+        return tryInitializeSensor(true);
+    }
+
 private:
     int _sdaPin = PIN_C6_EXP_SDA;
     int _sclPin = PIN_C6_EXP_SCL;

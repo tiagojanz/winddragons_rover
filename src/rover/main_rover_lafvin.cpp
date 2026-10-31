@@ -491,6 +491,7 @@ void loop() {
           interSerial.printf("CMD:LED:CFG:%u:%u\n",
                              roverConfig.getLedCount(),
                              roverConfig.getLedBrightness());
+          interSerial.println(roverConfig.buildC6LedCfgCommand());
           interSerial.flush();
         } else if (strncmp(rxBuf, "PONG:", 5) == 0) {
           lastUartRxTime = now;
@@ -547,12 +548,19 @@ void loop() {
         } else if (strncmp(rxBuf, "COMPASS_STAT:", 13) == 0) {
           lastUartRxTime = now;
           int cmpReady = 0;
-          float cmpHead = 0.0f, cmpRoll = 0.0f, cmpPitch = 0.0f, cmpOff = 0.0f;
-          uint32_t calSys = 0, calMag = 0;
-          if (sscanf(rxBuf + 13, "%d:%f:%f:%f:%u:%u:%f", &cmpReady, &cmpHead,
-                     &cmpRoll, &cmpPitch, &calSys, &calMag, &cmpOff) >= 6) {
+          float cmpHead = 0.0f, cmpRoll = 0.0f, cmpPitch = 0.0f, cmpOff = 0.0f,
+                cmpRawHead = 0.0f;
+          uint32_t calSys = 0, calMag = 0, calGyro = 0, calAccel = 0,
+                   i2cAddr = 0x28;
+          int n = sscanf(rxBuf + 13, "%d:%f:%f:%f:%u:%u:%f:%u:%u:%f:%u",
+                         &cmpReady, &cmpHead, &cmpRoll, &cmpPitch, &calSys,
+                         &calMag, &cmpOff, &calGyro, &calAccel, &cmpRawHead,
+                         &i2cAddr);
+          if (n >= 6) {
             gps.setCompassData(cmpReady != 0, cmpHead, cmpRoll, cmpPitch,
-                               (uint8_t)calSys, (uint8_t)calMag, cmpOff);
+                               (uint8_t)calSys, (uint8_t)calMag, cmpOff,
+                               (uint8_t)calGyro, (uint8_t)calAccel, cmpRawHead,
+                               (uint8_t)i2cAddr);
           }
         } else {
           lastUartRxTime = now;
@@ -587,13 +595,15 @@ void loop() {
   if (sdCard.isReady() && !webServer.isBusy() &&
       (now - lastSdLogTime >= 5000)) {
     lastSdLogTime = now;
-    char logBuf[160];
+    char logBuf[220];
     snprintf(logBuf, sizeof(logBuf),
-             "%lu,%.6f,%.6f,%.1f,%.1f,%u,%.2fV,%.2fA,%u,%s,%d\n", now,
-             gps.getLatitude(), gps.getLongitude(), gps.getSpeedKnots(),
+             "%lu,%.6f,%.6f,%.1f,%.1f,%u,%.2fV,%.2fA,%u,%s,%d,%s,%.1f,%.1f,%u,%u\n",
+             now, gps.getLatitude(), gps.getLongitude(), gps.getSpeedKnots(),
              gps.getHeading(), battery.getPercentage(),
              battery.getVoltageMv() / 1000.0f, battery.getCurrentAmps(),
-             currentMotorStatus, loraStatusStr, currentLoraRssi);
+             currentMotorStatus, loraStatusStr, currentLoraRssi,
+             gps.hasCompass() ? "BNO055" : "GPS_COG", gps.getRoll(),
+             gps.getPitch(), gps.getCompassCalSys(), gps.getCompassCalMag());
     sdCard.appendFile("/telemetry.csv", logBuf);
   }
 

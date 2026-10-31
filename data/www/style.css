@@ -525,6 +525,12 @@ input:focus, select:focus, textarea:focus {
   background: var(--bg-subtle);
   border-radius: 5px;
   outline: none;
+  accent-color: var(--primary);
+}
+
+.slider:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 4px;
 }
 
 .slider::-webkit-slider-thumb {

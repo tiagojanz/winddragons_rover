@@ -525,11 +525,12 @@ private:
     _server.on("/api/mission/clear", HTTP_POST,
                [this]() { handleApiMissionClear(); });
 
-    // Configuração do Ecrã LCD da Base
+    // Configuração do Ecrã LCD da Base e LED RGB do Coprocessador C6
     _server.on("/api/display", HTTP_GET, [this]() { handleApiDisplayGet(); });
     _server.on("/api/display", HTTP_POST, [this]() { handleApiDisplayPost(); });
     _server.on("/api/display/brightness",
                [this]() { handleApiDisplayBrightness(); });
+    _server.on("/api/control/c6_led", [this]() { handleApiC6LedControl(); });
 
     // Controle de atuadores e comandos
     _server.on("/api/control/actuator", [this]() { handleApiActuator(); });
@@ -1125,6 +1126,141 @@ private:
             "eixos ADC ao carrossel de navegação do ecrã físico.</div>";
     html += "</label></div></div>";
 
+    // Card 3B: Controlo de Cor por Modo e Intensidade do LED RGB do
+    // Coprocessador C6
+    uint8_t curC6LedBright = _fleet.getC6LedBrightness();
+    html += "<div class='card' id='baseC6LedConfigCard'>";
+    html += "<div class='card-title'><span><i class='fa-solid fa-lightbulb' "
+            "style='color:#38bdf8;'></i> LED RGB do Coprocessador C6 — Cor por "
+            "Modo &amp; Intensidade</span>";
+    html += "<span id='c6LedBrightBadge' class='badge' "
+            "style='background:#1e293b;color:#38bdf8;font-size:0.9rem;font-"
+            "weight:700;'>" +
+            String(curC6LedBright) + "%</span></div>";
+    html += "<p "
+            "style='color:var(--muted);font-size:0.875rem;margin-bottom:16px;'>"
+            "Personalize a intensidade global (0% a 100%) e a cor do LED RGB "
+            "endereçável do Coprocessador ESP32-C6 (GPIO 8) e do Master para "
+            "cada estado operacional da Estação Base.</p>";
+
+    html += "<div "
+            "style='background:rgba(0,0,0,0.25);padding:18px;border-radius:"
+            "12px;border:1px solid var(--card-border);margin-bottom:16px;'>";
+    html += "<div "
+            "style='display:flex;align-items:center;justify-content:space-"
+            "between;margin-bottom:10px;'>";
+    html += "<span style='font-size:0.85rem;color:var(--muted);'><i "
+            "class='fa-solid fa-power-off'></i> 0% Desligado</span>";
+    html += "<span id='c6LedBrightDisplayVal' "
+            "style='font-size:1.75rem;font-weight:700;color:#38bdf8;'>" +
+            String(curC6LedBright) + "%</span>";
+    html += "<span style='font-size:0.85rem;color:var(--muted);'><i "
+            "class='fa-solid fa-sun'></i> 100% Máximo</span>";
+    html += "</div>";
+    html += "<input type='range' id='cfg_c6_led_bright' min='0' max='100' "
+            "step='1' value='" +
+            String(curC6LedBright) +
+            "' class='slider' style='accent-color:#38bdf8;' "
+            "oninput='onC6LedBrightSlide(this.value)' "
+            "onchange='onC6LedBrightChange(this.value)'>";
+    html +=
+        "<div style='display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;'>";
+    html += "<button type='button' onclick='setC6LedBrightPreset(0)' "
+            "class='btn btn-secondary' style='padding:6px "
+            "12px;font-size:0.8rem;'>0% (Off)</button>";
+    html += "<button type='button' onclick='setC6LedBrightPreset(25)' "
+            "class='btn btn-secondary' style='padding:6px "
+            "12px;font-size:0.8rem;'>25% (Noturno)</button>";
+    html += "<button type='button' onclick='setC6LedBrightPreset(50)' "
+            "class='btn btn-secondary' style='padding:6px "
+            "12px;font-size:0.8rem;'>50% (Médio)</button>";
+    html += "<button type='button' onclick='setC6LedBrightPreset(80)' "
+            "class='btn btn-secondary' style='padding:6px "
+            "12px;font-size:0.8rem;'>80% (Padrão)</button>";
+    html += "<button type='button' onclick='setC6LedBrightPreset(100)' "
+            "class='btn btn-secondary' style='padding:6px "
+            "12px;font-size:0.8rem;'>100% (Sol Máximo)</button>";
+    html += "</div></div>";
+
+    struct BaseC6ModeUiItem {
+      uint8_t idx;
+      const char *title;
+      const char *desc;
+      const char *icon;
+    };
+    const BaseC6ModeUiItem modeItems[5] = {
+        {0, "Storage (Standby)", "Estação em repouso / fora de prova",
+         "fa-box-archive"},
+        {1, "Waiting Rover List", "Conectada ao Portal à espera de lista",
+         "fa-hourglass-half"},
+        {2, "Idle (Lista Pronta)", "Frota carregada e pronta para largada",
+         "fa-anchor"},
+        {3, "Go (Em Missão)", "Regata ativa com polling LoRa em tempo real",
+         "fa-rocket"},
+        {4, "Erro LoRa / Alerta RF", "Pisca a 2 Hz se o rádio SX1278 falhar",
+         "fa-triangle-exclamation"}};
+
+    html += "<div class='grid-2' style='margin-bottom:16px;'>";
+    for (int i = 0; i < 5; i++) {
+      String hexCol = _fleet.getC6ModeColor(i);
+      html += "<div style='background:rgba(15,23,42,0.65);padding:12px "
+              "14px;border-radius:10px;border:1px solid "
+              "var(--card-border);display:flex;align-items:center;justify-"
+              "content:space-between;gap:10px;'>";
+      html += "<div style='min-width:0;flex:1;'>";
+      html += "<div "
+              "style='font-weight:700;font-size:0.9rem;color:var(--text);"
+              "display:flex;align-items:center;gap:6px;'>";
+      html += "<span id='c6ModeDot_" + String(i) +
+              "' "
+              "style='display:inline-block;width:10px;height:10px;border-"
+              "radius:50%;background:" +
+              hexCol + ";box-shadow:0 0 8px " + hexCol + ";'></span>";
+      html += "<i class='fa-solid " + String(modeItems[i].icon) +
+              "' style='color:var(--muted);font-size:0.8rem;'></i> " +
+              String(modeItems[i].title);
+      html += "</div>";
+      html +=
+          "<div style='font-size:0.75rem;color:var(--muted);margin-top:2px;'>" +
+          String(modeItems[i].desc) + "</div>";
+      html += "</div>";
+      html += "<div style='display:flex;align-items:center;gap:6px;'>";
+      html +=
+          "<input type='color' id='c6ModeColor_" + String(i) + "' value='" +
+          hexCol + "' onchange='onC6ModeColorPick(" + String(i) +
+          ", this.value)' "
+          "style='width:42px;height:36px;padding:2px;border-radius:8px;border:"
+          "1px solid "
+          "var(--card-border);background:#0f172a;cursor:pointer;margin:0;'>";
+      html += "<span id='c6ModeHex_" + String(i) +
+              "' "
+              "style='font-family:monospace;font-size:0.78rem;color:var(--"
+              "muted);width:62px;'>" +
+              hexCol + "</span>";
+      html += "<button type='button' onclick='testC6ModeColor(" + String(i) +
+              ")' class='btn btn-secondary' style='padding:6px "
+              "10px;font-size:0.75rem;' title='Testar cor durante 3s no LED "
+              "físico'><i class='fa-solid fa-eye'></i></button>";
+      html += "</div></div>";
+    }
+    html += "</div>";
+
+    html += "<div "
+            "style='display:flex;align-items:center;justify-content:space-"
+            "between;flex-wrap:wrap;gap:10px;'>";
+    html += "<div style='display:flex;gap:8px;flex-wrap:wrap;'>";
+    html += "<button type='button' onclick='saveAllC6LedConfig()' class='btn "
+            "btn-primary'><i class='fa-solid fa-floppy-disk'></i> Guardar "
+            "Cores &amp; Intensidade</button>";
+    html += "<button type='button' onclick='resetC6LedDefaults()' class='btn "
+            "btn-secondary'><i class='fa-solid fa-rotate-left'></i> Repor "
+            "Cores Padrão</button>";
+    html += "</div>";
+    html +=
+        "<span id='c6LedFeedback' "
+        "style='font-size:0.82rem;color:var(--green);font-weight:600;'></span>";
+    html += "</div></div>";
+
     // Card 4: Versão das Placas & Atualização de Firmware Over-The-Air (OTA)
     html += "<div class='card' style='border-color:var(--primary);'>";
     html += "<div class='card-title'><span><i class='fa-solid "
@@ -1219,6 +1355,77 @@ private:
             "ativado no LCD!':'4º Ecrã desativado. LCD em modo simplificado de "
             "3 ecrãs.');}).catch(e=>{alert('Erro ao guardar configuração do "
             "ecrã');});}";
+    html += "let c6LedSlideTimer=null;";
+    html += "function showC6LedFeedback(msg,isErr){const "
+            "fb=document.getElementById('c6LedFeedback');if(!fb)return;fb."
+            "style.color=isErr?'var(--red)':'var(--green)';fb.innerText=msg;"
+            "setTimeout(()=>{if(fb.innerText===msg)fb.innerText='';},3000);}";
+    html += "function onC6LedBrightSlide(v){const "
+            "d=document.getElementById('c6LedBrightDisplayVal');if(d)d."
+            "innerText=v+'%';const "
+            "b=document.getElementById('c6LedBrightBadge');if(b)b.innerText=v+'"
+            "%';if(c6LedSlideTimer)clearTimeout(c6LedSlideTimer);"
+            "c6LedSlideTimer=setTimeout(()=>{fetch('/api/control/"
+            "c6_led',{method:'POST',headers:{'Content-Type':'application/"
+            "json'},body:JSON.stringify({brightness:parseInt(v)})}).catch(()=>{"
+            "});},80);}";
+    html += "function "
+            "onC6LedBrightChange(v){fetch('/api/control/"
+            "c6_led',{method:'POST',headers:{'Content-Type':'application/"
+            "json'},body:JSON.stringify({brightness:parseInt(v)})}).then(r=>r."
+            "json()).then(d=>{if(d.success)showC6LedFeedback('Intensidade LED "
+            "C6: '+d.c6_led_brightness+'%');}).catch(()=>{});}";
+    html += "function setC6LedBrightPreset(v){const "
+            "el=document.getElementById('cfg_c6_led_bright');if(el)el.value=v;"
+            "onC6LedBrightSlide(v);onC6LedBrightChange(v);}";
+    html +=
+        "function applyC6ModeUiColor(idx,hex){const h=hex.toUpperCase();const "
+        "inp=document.getElementById('c6ModeColor_'+idx);if(inp)inp.value=h;"
+        "const "
+        "txt=document.getElementById('c6ModeHex_'+idx);if(txt)txt.innerText=h;"
+        "const "
+        "dot=document.getElementById('c6ModeDot_'+idx);if(dot){dot.style."
+        "background=h;dot.style.boxShadow='0 0 8px '+h;}}";
+    html +=
+        "function "
+        "onC6ModeColorPick(idx,hex){applyC6ModeUiColor(idx,hex);fetch('/api/"
+        "control/c6_led',{method:'POST',headers:{'Content-Type':'application/"
+        "json'},body:JSON.stringify({mode_idx:idx,color:hex})}).then(r=>r.json("
+        ")).then(d=>{if(d.success)showC6LedFeedback(d.msg||'Cor "
+        "atualizada!');}).catch(()=>{});}";
+    html += "function testC6ModeColor(idx){const "
+            "inp=document.getElementById('c6ModeColor_'+idx);const "
+            "hex=inp?inp.value:'#38BDF8';fetch('/api/control/"
+            "c6_led',{method:'POST',headers:{'Content-Type':'application/"
+            "json'},body:JSON.stringify({test_color:hex})}).then(r=>r.json())."
+            "then(d=>{if(d.success)showC6LedFeedback('A testar "
+            "'+hex.toUpperCase()+' no LED C6 (3s)...');}).catch(()=>{});}";
+    html +=
+        "function saveAllC6LedConfig(){const "
+        "brt=parseInt(document.getElementById('cfg_c6_led_bright')?.value||80);"
+        "const colors=[];for(let "
+        "i=0;i<5;i++){colors.push(document.getElementById('c6ModeColor_'+i)?."
+        "value||'#A855F7');}fetch('/api/control/"
+        "c6_led',{method:'POST',headers:{'Content-Type':'application/"
+        "json'},body:JSON.stringify({brightness:brt,colors:colors})}).then(r=>"
+        "r.json()).then(d=>{if(d.success)showC6LedFeedback('Configuração do "
+        "LED C6 guardada!');}).catch(()=>showC6LedFeedback('Erro ao "
+        "guardar',true));}";
+    html +=
+        "function resetC6LedDefaults(){if(!confirm('Repor as cores padrão e "
+        "intensidade (80%) do LED do Coprocessador "
+        "C6?'))return;fetch('/api/control/"
+        "c6_led',{method:'POST',headers:{'Content-Type':'application/"
+        "json'},body:JSON.stringify({reset_defaults:true})}).then(r=>r.json())."
+        "then(d=>{if(d.success){const brt=d.c6_led_brightness??80;const "
+        "el=document.getElementById('cfg_c6_led_bright');if(el)el.value=brt;"
+        "const "
+        "dv=document.getElementById('c6LedBrightDisplayVal');if(dv)dv."
+        "innerText=brt+'%';const "
+        "bg=document.getElementById('c6LedBrightBadge');if(bg)bg.innerText=brt+"
+        "'%';if(Array.isArray(d.c6_mode_colors)){d.c6_mode_colors.forEach((c,"
+        "idx)=>applyC6ModeUiColor(idx,c));}showC6LedFeedback('Cores padrão "
+        "repostas!');}}).catch(()=>{});}";
     html += "</script>";
 
     html += getHtmlFooter();
@@ -1686,6 +1893,11 @@ private:
         _display ? _display->getBrightness() : 85;
     doc["display"]["joy_screen"] =
         _display ? _display->isJoystickScreenEnabled() : false;
+    doc["c6_led_brightness"] = _fleet.getC6LedBrightness();
+    JsonArray c6Cols = doc["c6_mode_colors"].to<JsonArray>();
+    for (uint8_t i = 0; i < FleetManager::C6_LED_MODE_COUNT; i++) {
+      c6Cols.add(_fleet.getC6ModeColor(i));
+    }
     doc["lora_ready"] = _loraReady ? *_loraReady : false;
     doc["lora_enabled"] = (bool)ENABLE_LORA;
 
@@ -1737,6 +1949,13 @@ private:
       sObj["lng"] = sel->lng;
       sObj["speed_knots"] = sel->speed_knots;
       sObj["heading_deg"] = sel->heading_deg;
+      sObj["compass_active"] = sel->compass_active;
+      sObj["heading_source"] = sel->compass_active ? "BNO055" : "GPS_COG";
+      sObj["roll_deg"] = sel->roll_deg;
+      sObj["pitch_deg"] = sel->pitch_deg;
+      sObj["compass_cal_sys"] = sel->compass_cal_sys;
+      sObj["compass_cal_mag"] = sel->compass_cal_mag;
+      sObj["compass_cal_imu"] = sel->compass_cal_imu;
       sObj["battery_pct"] = sel->battery_pct;
       sObj["battery_voltage"] = sel->battery_voltage;
       sObj["motor_status"] = get_motor_status_str(sel->motor_status);
@@ -1762,6 +1981,13 @@ private:
       rObj["lng"] = r.lng;
       rObj["speed_knots"] = r.speed_knots;
       rObj["heading_deg"] = r.heading_deg;
+      rObj["compass_active"] = r.compass_active;
+      rObj["heading_source"] = r.compass_active ? "BNO055" : "GPS_COG";
+      rObj["roll_deg"] = r.roll_deg;
+      rObj["pitch_deg"] = r.pitch_deg;
+      rObj["compass_cal_sys"] = r.compass_cal_sys;
+      rObj["compass_cal_mag"] = r.compass_cal_mag;
+      rObj["compass_cal_imu"] = r.compass_cal_imu;
       rObj["battery_pct"] = r.battery_pct;
       rObj["battery_voltage"] = r.battery_voltage;
       rObj["motor_status"] = get_motor_status_str(r.motor_status);
@@ -1805,6 +2031,13 @@ private:
       rObj["lng"] = r.lng;
       rObj["speed_knots"] = r.speed_knots;
       rObj["heading_deg"] = r.heading_deg;
+      rObj["compass_active"] = r.compass_active;
+      rObj["heading_source"] = r.compass_active ? "BNO055" : "GPS_COG";
+      rObj["roll_deg"] = r.roll_deg;
+      rObj["pitch_deg"] = r.pitch_deg;
+      rObj["compass_cal_sys"] = r.compass_cal_sys;
+      rObj["compass_cal_mag"] = r.compass_cal_mag;
+      rObj["compass_cal_imu"] = r.compass_cal_imu;
       rObj["battery_pct"] = r.battery_pct;
       rObj["battery_voltage"] = r.battery_voltage;
       rObj["motor_status"] = get_motor_status_str(r.motor_status);
@@ -1888,6 +2121,12 @@ private:
           r.lng = prev->lng;
           r.speed_knots = prev->speed_knots;
           r.heading_deg = prev->heading_deg;
+          r.compass_active = prev->compass_active;
+          r.roll_deg = prev->roll_deg;
+          r.pitch_deg = prev->pitch_deg;
+          r.compass_cal_sys = prev->compass_cal_sys;
+          r.compass_cal_mag = prev->compass_cal_mag;
+          r.compass_cal_imu = prev->compass_cal_imu;
           r.battery_pct = prev->battery_pct;
           r.battery_voltage = prev->battery_voltage;
           r.motor_status = prev->motor_status;
@@ -1946,8 +2185,139 @@ private:
     doc["page_count"] = joyScr ? 4 : 3;
     doc["screen_brightness"] = bright;
     doc["brightness"] = bright;
+    doc["c6_led_brightness"] = _fleet.getC6LedBrightness();
+    JsonArray c6Cols = doc["c6_mode_colors"].to<JsonArray>();
+    for (uint8_t i = 0; i < FleetManager::C6_LED_MODE_COUNT; i++) {
+      c6Cols.add(_fleet.getC6ModeColor(i));
+    }
     String out;
     serializeJson(doc, out);
+    _server.send(200, "application/json", out);
+  }
+
+  void handleApiC6LedControl() {
+    bool changed = false;
+    String msg = "Configuração do LED do Coprocessador C6 atualizada";
+
+    if (_server.hasArg("val")) {
+      int v = _server.arg("val").toInt();
+      if (v < 0)
+        v = 0;
+      if (v > 100)
+        v = 100;
+      _fleet.setC6LedBrightness((uint8_t)v);
+      changed = true;
+      if (_commandQueueCb) {
+        String cmd = "CMD:C6LED:BRIGHT:" + String(v);
+        _commandQueueCb(cmd.c_str());
+      }
+      msg = "Intensidade do LED C6 ajustada para " + String(v) + "%";
+    } else if (_server.hasArg("plain")) {
+      JsonDocument doc;
+      DeserializationError err = deserializeJson(doc, _server.arg("plain"));
+      if (err) {
+        _server.send(400, "application/json",
+                     "{\"success\":false,\"msg\":\"JSON inválido\"}");
+        return;
+      }
+
+      if (doc["reset_defaults"] | false) {
+        _fleet.resetC6ModeColorsDefault();
+        _fleet.setC6LedBrightness(80);
+        changed = true;
+        if (_commandQueueCb) {
+          String cmd = _fleet.buildC6LedCfgCommand();
+          _commandQueueCb(cmd.c_str());
+        }
+        msg = "Cores e intensidade padrão do LED C6 repostas!";
+      } else {
+        bool sendFullCfg = false;
+        if (!doc["brightness"].isNull() || !doc["c6_led_brightness"].isNull()) {
+          int v = doc["brightness"] | doc["c6_led_brightness"] |
+                  (int)_fleet.getC6LedBrightness();
+          if (v < 0)
+            v = 0;
+          if (v > 100)
+            v = 100;
+          _fleet.setC6LedBrightness((uint8_t)v);
+          changed = true;
+          if (doc["colors"].isNull() && doc["mode_idx"].isNull()) {
+            if (_commandQueueCb) {
+              String cmd = "CMD:C6LED:BRIGHT:" + String(v);
+              _commandQueueCb(cmd.c_str());
+            }
+          } else {
+            sendFullCfg = true;
+          }
+          msg = "Intensidade do LED C6 ajustada para " + String(v) + "%";
+        }
+
+        if (!doc["mode_idx"].isNull() && doc["color"].is<const char *>()) {
+          int idx = doc["mode_idx"].as<int>();
+          String hex = String(doc["color"].as<const char *>());
+          if (idx >= 0 && idx < FleetManager::C6_LED_MODE_COUNT) {
+            _fleet.setC6ModeColor((uint8_t)idx, hex);
+            String cleanHex = _fleet.getC6ModeColor((uint8_t)idx);
+            changed = true;
+            if (!sendFullCfg && _commandQueueCb) {
+              String h =
+                  cleanHex.startsWith("#") ? cleanHex.substring(1) : cleanHex;
+              String cmd = "CMD:C6LED:MODE:" + String(idx) + ":" + h;
+              _commandQueueCb(cmd.c_str());
+            }
+            msg = "Cor do modo #" + String(idx + 1) + " guardada (" + cleanHex +
+                  ")";
+          }
+        }
+
+        if (doc["colors"].is<JsonArray>()) {
+          JsonArray arr = doc["colors"].as<JsonArray>();
+          uint8_t idx = 0;
+          for (JsonVariant v : arr) {
+            if (idx >= FleetManager::C6_LED_MODE_COUNT)
+              break;
+            if (v.is<const char *>()) {
+              _fleet.setC6ModeColor(idx, String(v.as<const char *>()));
+            }
+            idx++;
+          }
+          changed = true;
+          sendFullCfg = true;
+          msg = "Todas as cores e intensidade do LED C6 foram guardadas!";
+        }
+
+        if (sendFullCfg && _commandQueueCb) {
+          String cmd = _fleet.buildC6LedCfgCommand();
+          _commandQueueCb(cmd.c_str());
+        }
+
+        if (doc["test_color"].is<const char *>()) {
+          String testHex = FleetManager::normalizeHexColor(
+              String(doc["test_color"].as<const char *>()), "#38BDF8");
+          String h = testHex.startsWith("#") ? testHex.substring(1) : testHex;
+          if (_commandQueueCb) {
+            String cmd = "CMD:C6LED:TEST:" + h;
+            _commandQueueCb(cmd.c_str());
+          }
+          msg = "A testar cor " + testHex + " no LED C6...";
+        }
+      }
+    }
+
+    if (changed) {
+      _fleet.saveMissionConfig();
+    }
+
+    JsonDocument res;
+    res["success"] = true;
+    res["c6_led_brightness"] = _fleet.getC6LedBrightness();
+    JsonArray cols = res["c6_mode_colors"].to<JsonArray>();
+    for (uint8_t i = 0; i < FleetManager::C6_LED_MODE_COUNT; i++) {
+      cols.add(_fleet.getC6ModeColor(i));
+    }
+    res["msg"] = msg;
+    String out;
+    serializeJson(res, out);
     _server.send(200, "application/json", out);
   }
 

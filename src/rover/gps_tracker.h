@@ -13,8 +13,9 @@ public:
         rawIdx(0), totalBytesReceived(0), manualLat(0.0), manualLng(0.0),
         manualSpeed(0.0f), manualHeading(0.0f), manualSats(0), manualFix(false),
         hasManualData(false), compassActive(false), compassHeading(0.0f),
-        compassRoll(0.0f), compassPitch(0.0f), compassOffset(0.0f),
-        compassCalSys(0), compassCalMag(0) {
+        compassRawHeading(0.0f), compassRoll(0.0f), compassPitch(0.0f),
+        compassOffset(0.0f), compassCalSys(0), compassCalGyro(0),
+        compassCalAccel(0), compassCalMag(0), compassI2cAddr(0x28) {
     rawSentence[0] = '\0';
     lastValidSentence[0] = '\0';
   }
@@ -199,7 +200,9 @@ public:
 
   void setCompassData(bool active, float headingDeg, float rollDeg = 0.0f,
                       float pitchDeg = 0.0f, uint8_t calSys = 0,
-                      uint8_t calMag = 0, float offsetDeg = 0.0f) {
+                      uint8_t calMag = 0, float offsetDeg = 0.0f,
+                      uint8_t calGyro = 0, uint8_t calAccel = 0,
+                      float rawHeadingDeg = 0.0f, uint8_t i2cAddr = 0x28) {
     compassActive = active;
     compassHeading = headingDeg;
     compassRoll = rollDeg;
@@ -207,15 +210,23 @@ public:
     compassCalSys = calSys;
     compassCalMag = calMag;
     compassOffset = offsetDeg;
+    compassCalGyro = calGyro;
+    compassCalAccel = calAccel;
+    compassRawHeading = rawHeadingDeg;
+    compassI2cAddr = i2cAddr;
   }
 
   bool hasCompass() const { return compassActive; }
   float getCompassHeading() const { return compassHeading; }
+  float getCompassRawHeading() const { return compassRawHeading; }
   float getRoll() const { return compassRoll; }
   float getPitch() const { return compassPitch; }
   uint8_t getCompassCalSys() const { return compassCalSys; }
+  uint8_t getCompassCalGyro() const { return compassCalGyro; }
+  uint8_t getCompassCalAccel() const { return compassCalAccel; }
   uint8_t getCompassCalMag() const { return compassCalMag; }
   float getCompassOffset() const { return compassOffset; }
+  uint8_t getCompassI2cAddr() const { return compassI2cAddr; }
 
   float getGpsCourse() {
     if (isHwEnabled && (isLocked || gps.charsProcessed() > 0)) {
@@ -364,9 +375,13 @@ private:
 
   bool compassActive;
   float compassHeading;
+  float compassRawHeading;
   float compassRoll;
   float compassPitch;
   float compassOffset;
   uint8_t compassCalSys;
+  uint8_t compassCalGyro;
+  uint8_t compassCalAccel;
   uint8_t compassCalMag;
+  uint8_t compassI2cAddr;
 };

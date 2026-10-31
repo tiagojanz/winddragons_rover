@@ -37,6 +37,19 @@ CompassBNO055 compass;
 ActuatorController actuators;
 BatteryMonitor battery;
 Adafruit_NeoPixel rgbLed(1, PIN_RGB_LED, NEO_GRB + NEO_KHZ800);
+static uint8_t c6LedBrightPct = 80;
+static uint32_t c6ModeColors[7] = {
+    0x06B6D4, // 0: MOTOR_IDLE (Ciano)
+    0x10B981, // 1: MOTOR_MANUAL (Verde)
+    0xA855F7, // 2: MOTOR_HOLDING_STATION (Roxo)
+    0xF59E0B, // 3: MOTOR_ANCHORED (Âmbar)
+    0x3B82F6, // 4: MOTOR_MOVING_TO_TARGET (Azul)
+    0xEC4899, // 5: MOTOR_RTL (Magenta)
+    0xEF4444  // 6: MOTOR_FAILSAFE (Vermelho)
+};
+static uint32_t c6PreviewColor = 0;
+static uint32_t c6PreviewUntilMs = 0;
+static bool c6LedForceRefresh = true;
 #if defined(PIN_STROBE_LEDS) && (PIN_STROBE_LEDS >= 0)
 Adafruit_NeoPixel strobeLeds(NUM_STROBE_LEDS, PIN_STROBE_LEDS,
                              NEO_GRB + NEO_KHZ800);
@@ -95,14 +108,16 @@ void sendLoraStatToMaster() {
 }
 
 void sendCompassStatToMaster() {
-  char cmpLine[128];
+  char cmpLine[160];
   // Formato:
-  // COMPASS_STAT:<ready>:<heading>:<roll>:<pitch>:<calSys>:<calMag>:<offset>
+  // COMPASS_STAT:<ready>:<heading>:<roll>:<pitch>:<calSys>:<calMag>:<offset>:<calGyro>:<calAccel>:<rawHeading>:<i2cAddr>
   snprintf(cmpLine, sizeof(cmpLine),
-           "COMPASS_STAT:%d:%.1f:%.1f:%.1f:%u:%u:%.1f\n",
+           "COMPASS_STAT:%d:%.1f:%.1f:%.1f:%u:%u:%.1f:%u:%u:%.1f:%u\n",
            compass.isReady() ? 1 : 0, compass.getHeading(), compass.getRoll(),
            compass.getPitch(), compass.getCalSys(), compass.getCalMag(),
-           compass.getHeadingOffset());
+           compass.getHeadingOffset(), compass.getCalGyro(),
+           compass.getCalAccel(), compass.getRawHeading(),
+           compass.getI2cAddress());
   interSerial.print(cmpLine);
 }
 
@@ -139,6 +154,64 @@ void printLog(const char *format, ...) {
 void setRgbColor(uint8_t r, uint8_t g, uint8_t b) {
   rgbLed.setPixelColor(0, rgbLed.Color(r, g, b));
   rgbLed.show();
+}
+
+uint32_t parseHexColor24(const char *str, uint32_t fallback) {
+  if (!str)
+    return fallback;
+  while (*str == ' ' || *str == '#')
+    str++;
+  if (strlen(str) < 6)
+    return fallback;
+  char buf[7];
+  strncpy(buf, str, 6);
+  buf[6] = '\0';
+  char *endPtr = nullptr;
+  unsigned long val = strtoul(buf, &endPtr, 16);
+  if (endPtr != buf + 6)
+    return fallback;
+  return (uint32_t)(val & 0xFFFFFFUL);
+}
+
+void updateC6StatusLed(uint32_t now) {
+  static uint32_t lastC6LedRender = 0;
+  static uint32_t lastRenderedPacked = 0xFFFFFFFFUL;
+  static uint8_t lastRenderedBrt = 255;
+
+  if (!c6LedForceRefresh && (now - lastC6LedRender < 40))
+    return;
+  lastC6LedRender = now;
+
+  uint8_t hwBrt = (uint8_t)map(constrain(c6LedBrightPct, 0, 100), 0, 100, 0, 255);
+  uint32_t activeRgb = 0;
+
+  if (c6LedBrightPct == 0) {
+    activeRgb = 0;
+  } else if (c6PreviewUntilMs > now) {
+    activeRgb = c6PreviewColor;
+  } else {
+    uint8_t modeIdx = (currentMotorStatus < 7) ? currentMotorStatus : 0;
+    uint32_t modeCol = c6ModeColors[modeIdx];
+    if (currentMotorStatus == MOTOR_FAILSAFE) {
+      bool blinkOn = ((now % 500) < 250);
+      activeRgb = blinkOn ? modeCol : 0;
+    } else {
+      activeRgb = modeCol;
+    }
+  }
+
+  if (c6LedForceRefresh || activeRgb != lastRenderedPacked ||
+      hwBrt != lastRenderedBrt) {
+    c6LedForceRefresh = false;
+    lastRenderedPacked = activeRgb;
+    lastRenderedBrt = hwBrt;
+    rgbLed.setBrightness(hwBrt);
+    uint8_t r = (uint8_t)((activeRgb >> 16) & 0xFF);
+    uint8_t g = (uint8_t)((activeRgb >> 8) & 0xFF);
+    uint8_t b = (uint8_t)(activeRgb & 0xFF);
+    rgbLed.setPixelColor(0, rgbLed.Color(r, g, b));
+    rgbLed.show();
+  }
 }
 
 void updateStrobeLeds(uint32_t now) {
@@ -327,6 +400,14 @@ void updateStrobeLeds(uint32_t now) {
               packet.anchor_status = actuators.getAnchorStatus();
               packet.anchor_depth_cm = actuators.getAnchorDepthCm();
               packet.last_cmd_id = lastExecutedCommandId;
+
+              // Telemetria BNO055 9-DOF IMU / Bússola
+              packet.roll_deg10 = static_cast<int16_t>(roundf(compass.getRoll() * 10.0f));
+              packet.pitch_deg10 = static_cast<int16_t>(roundf(compass.getPitch() * 10.0f));
+              packet.compass_flags = pack_compass_flags(
+                  compass.isReady(), compass.getCalSys(), compass.getCalMag(),
+                  compass.getCalGyro(), compass.getCalAccel());
+
               packet.checksum =
                   calculate_checksum(reinterpret_cast<const uint8_t *>(&packet),
                                      sizeof(packet) - sizeof(packet.checksum));
@@ -398,7 +479,7 @@ void updateStrobeLeds(uint32_t now) {
                 static uint32_t lastCtrlRgbMs = 0;
                 if (millis() - lastCtrlRgbMs >= 1000) {
                   lastCtrlRgbMs = millis();
-                  setRgbColor(0, 50, 0); // Green: Control active
+                  c6LedForceRefresh = true;
                 }
                 printLog("[C6 ROVER] <<< LoRa CTRL recebido: Thr=%d%%, "
                          "Rud=%d%%, Jog=%d "
@@ -759,8 +840,22 @@ void updateStrobeLeds(uint32_t now) {
               printLog(
                   "=======================================================\n");
 
-              // 1. LED RGB NeoPixel
+              // 1. LED RGB NeoPixel da C6 (GPIO 8) - Carregar Brilho e Cores por Modo da NVS
+              c6LedBrightPct = c6Prefs.getUChar("c6l_brt", 80);
+              if (c6LedBrightPct > 100)
+                c6LedBrightPct = 80;
+              static const char *defaultHex[7] = {"06B6D4", "10B981", "A855F7",
+                                                  "F59E0B", "3B82F6", "EC4899",
+                                                  "EF4444"};
+              for (uint8_t i = 0; i < 7; i++) {
+                char key[12];
+                snprintf(key, sizeof(key), "c6l_m%u", i);
+                String savedHex = c6Prefs.getString(key, defaultHex[i]);
+                c6ModeColors[i] =
+                    parseHexColor24(savedHex.c_str(), c6ModeColors[i]);
+              }
               rgbLed.begin();
+              rgbLed.setBrightness(map(c6LedBrightPct, 0, 100, 0, 255));
               setRgbColor(30, 30, 0); // Yellow: Booting
 
               // 2. Inter-ESP UART
@@ -854,7 +949,8 @@ void updateStrobeLeds(uint32_t now) {
                 packetReceived = false;
                 radio.startReceive();
                 Serial.println("[LORA] ★★★ SX1278 PRONTO E EM ESCUTA RX! ★★★");
-                setRgbColor(0, 40, 0); // Green
+                c6LedForceRefresh = true;
+                updateC6StatusLed(millis());
               } else {
                 loraReady = false;
                 Serial.printf("[LORA] Falha na inicialização (código: %d)\n",
@@ -1083,6 +1179,77 @@ void updateStrobeLeds(uint32_t now) {
                            ledStripCount, ledStripBrightPct);
                 }
 #endif
+              } else if (strncmp(cmdStr, "CMD:C6LED:BRIGHT:", 17) == 0) {
+                int brt = atoi(cmdStr + 17);
+                c6LedBrightPct = (uint8_t)constrain(brt, 0, 100);
+                c6Prefs.putUChar("c6l_brt", c6LedBrightPct);
+                c6LedForceRefresh = true;
+                updateC6StatusLed(now);
+                printLog("[C6 ROVER] ★ Intensidade do LED RGB da C6 (GPIO %d) "
+                         "ajustada para %u%%\n",
+                         PIN_RGB_LED, c6LedBrightPct);
+              } else if (strncmp(cmdStr, "CMD:C6LED:MODE:", 15) == 0) {
+                int idx = -1;
+                char hexBuf[16] = "";
+                if (sscanf(cmdStr + 15, "%d:%15s", &idx, hexBuf) == 2 &&
+                    idx >= 0 && idx < 7) {
+                  c6ModeColors[idx] =
+                      parseHexColor24(hexBuf, c6ModeColors[idx]);
+                  char key[12], normHex[8];
+                  snprintf(key, sizeof(key), "c6l_m%d", idx);
+                  snprintf(normHex, sizeof(normHex), "%06lX",
+                           (unsigned long)c6ModeColors[idx]);
+                  c6Prefs.putString(key, normHex);
+                  c6PreviewColor = c6ModeColors[idx];
+                  c6PreviewUntilMs = now + 2200;
+                  c6LedForceRefresh = true;
+                  updateC6StatusLed(now);
+                  printLog("[C6 ROVER] ★ Cor do Modo %d (%s) no LED da C6 "
+                           "definida para #%s\n",
+                           idx, get_motor_status_str((uint8_t)idx), normHex);
+                }
+              } else if (strncmp(cmdStr, "CMD:C6LED:TEST:", 15) == 0) {
+                uint32_t col = parseHexColor24(cmdStr + 15, 0x06B6D4);
+                c6PreviewColor = col;
+                c6PreviewUntilMs = now + 3000;
+                c6LedForceRefresh = true;
+                updateC6StatusLed(now);
+                printLog("[C6 ROVER] ★ Pré-visualização de cor #%06lX no LED "
+                         "RGB da C6 (3s)\n",
+                         (unsigned long)col);
+              } else if (strncmp(cmdStr, "CMD:C6LED:CFG:", 14) == 0) {
+                int brt = c6LedBrightPct;
+                char h[7][12] = {"", "", "", "", "", "", ""};
+                int n = sscanf(cmdStr + 14,
+                               "%d:%11[^:]:%11[^:]:%11[^:]:%11[^:]:%11[^:]:%11["
+                               "^:]:%11[^:\r\n]",
+                               &brt, h[0], h[1], h[2], h[3], h[4], h[5], h[6]);
+                if (n >= 1) {
+                  c6LedBrightPct = (uint8_t)constrain(brt, 0, 100);
+                  c6Prefs.putUChar("c6l_brt", c6LedBrightPct);
+                  for (int i = 0; i < 7 && (i + 2) <= n; i++) {
+                    c6ModeColors[i] = parseHexColor24(h[i], c6ModeColors[i]);
+                    char key[12], normHex[8];
+                    snprintf(key, sizeof(key), "c6l_m%d", i);
+                    snprintf(normHex, sizeof(normHex), "%06lX",
+                             (unsigned long)c6ModeColors[i]);
+                    c6Prefs.putString(key, normHex);
+                  }
+                  c6PreviewUntilMs = 0;
+                  c6LedForceRefresh = true;
+                  updateC6StatusLed(now);
+                  printLog("[C6 ROVER] ★ Config Completa LED RGB C6 gravada: "
+                           "Intensidade=%u%% | IDLE=#%06lX MANUAL=#%06lX "
+                           "HOLD=#%06lX ANCHOR=#%06lX GOTO=#%06lX RTL=#%06lX "
+                           "FAILSAFE=#%06lX\n",
+                           c6LedBrightPct, (unsigned long)c6ModeColors[0],
+                           (unsigned long)c6ModeColors[1],
+                           (unsigned long)c6ModeColors[2],
+                           (unsigned long)c6ModeColors[3],
+                           (unsigned long)c6ModeColors[4],
+                           (unsigned long)c6ModeColors[5],
+                           (unsigned long)c6ModeColors[6]);
+                }
               } else if (strcmp(cmdStr, "CMD:ZERO_ANCHOR") == 0) {
                 actuators.zeroAnchorCounter();
                 printLog("[C6 ROVER] Contador da ancora ZERADO (0.0 cm / 0 "
@@ -1113,6 +1280,27 @@ void updateStrobeLeds(uint32_t now) {
                 printLog("[C6 ROVER] ★ Offset da bussola BNO055 gravado em "
                          "NVS: %.1f°\n",
                          compass.getHeadingOffset());
+              } else if (strcmp(cmdStr, "CMD:COMPASS_REINIT") == 0) {
+                bool ok = compass.reinit();
+                sendCompassStatToMaster();
+                printLog("[C6 ROVER] ★ Re-scan / Reinicializacao BNO055 em "
+                         "J_EXP: %s\n",
+                         ok ? "ONLINE (Modo NDOF 9-Eixos)"
+                            : "NAO DETETADO (Verificar ligacoes J_EXP)");
+              } else if (strcmp(cmdStr, "CMD:COMPASS_DIAG") == 0) {
+                compass.update();
+                sendCompassStatToMaster();
+                printLog("[C6 DIAG] GY-BNO055 (J_EXP SDA=GPIO%d, SCL=GPIO%d): "
+                         "%s | I2C=0x%02X | Proa=%.1f° (Bruto=%.1f°, "
+                         "Offset=%.1f°) | Roll=%.1f° Pitch=%.1f° | "
+                         "Cal[Sys=%u/3 Gyro=%u/3 Acc=%u/3 Mag=%u/3]\n",
+                         PIN_C6_EXP_SDA, PIN_C6_EXP_SCL,
+                         compass.isReady() ? "ONLINE (NDOF)" : "OFFLINE",
+                         compass.getI2cAddress(), compass.getHeading(),
+                         compass.getRawHeading(), compass.getHeadingOffset(),
+                         compass.getRoll(), compass.getPitch(),
+                         compass.getCalSys(), compass.getCalGyro(),
+                         compass.getCalAccel(), compass.getCalMag());
               } else if (strncmp(cmdStr, "CMD:OTA:", 8) == 0) {
                 // Formato esperado: CMD:OTA:<ssid>|<pass>|<url>
                 char otaSsid[64] = "";
@@ -1159,13 +1347,16 @@ void updateStrobeLeds(uint32_t now) {
               // 1. Atualizar sensores e atuadores
               gps.update();
               compass.update();
-              gps.setCompassData(compass.isReady(), compass.getHeading(),
-                                 compass.getRoll(), compass.getPitch(),
-                                 compass.getCalSys(), compass.getCalMag(),
-                                 compass.getHeadingOffset());
+              gps.setCompassData(
+                  compass.isReady(), compass.getHeading(), compass.getRoll(),
+                  compass.getPitch(), compass.getCalSys(), compass.getCalMag(),
+                  compass.getHeadingOffset(), compass.getCalGyro(),
+                  compass.getCalAccel(), compass.getRawHeading(),
+                  compass.getI2cAddress());
               battery.update();
               actuators.update();
               updateStrobeLeds(now);
+              updateC6StatusLed(now);
 
               // 2. Navegação autónoma (10 Hz)
               static uint32_t lastNavUpdate = 0;
@@ -1207,7 +1398,8 @@ void updateStrobeLeds(uint32_t now) {
                 actuators.stopMotor();
                 actuators.stopWinch();
                 currentMotorStatus = MOTOR_FAILSAFE;
-                setRgbColor(40, 10, 0);
+                c6LedForceRefresh = true;
+                updateC6StatusLed(now);
               }
 
               // 5. Envio periódico de telemetria LoRa para a Base (a cada

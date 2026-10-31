@@ -111,6 +111,12 @@ private:
             rObj["lng"] = serialized(String(r.lng, 6));
             rObj["speed"] = serialized(String(r.speed_knots, 2));
             rObj["heading"] = serialized(String(r.heading_deg, 1));
+            rObj["compass_active"] = r.compass_active;
+            rObj["heading_source"] = r.compass_active ? "BNO055" : "GPS_COG";
+            rObj["roll"] = serialized(String(r.roll_deg, 1));
+            rObj["pitch"] = serialized(String(r.pitch_deg, 1));
+            rObj["compass_cal_sys"] = r.compass_cal_sys;
+            rObj["compass_cal_mag"] = r.compass_cal_mag;
             rObj["battery_pct"] = r.battery_pct;
             rObj["battery_voltage"] = serialized(String(r.battery_voltage, 2));
             rObj["motor_status"] = get_motor_status_str(r.motor_status);

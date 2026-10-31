@@ -79,8 +79,41 @@ struct __attribute__((packed)) PacketTelemetry {
     
     // Command confirmation
     uint16_t last_cmd_id;    // Last executed cloud command ID
+
+    // BNO055 9-DOF IMU / Compass Telemetry
+    int16_t  roll_deg10;     // Roll angle in degrees * 10 (e.g. -12.5° -> -125)
+    int16_t  pitch_deg10;    // Pitch angle in degrees * 10 (e.g. +5.3° -> 53)
+    uint8_t  compass_flags;  // Bit 7: active (1=BNO055, 0=GPS_COG), Bits 5..4: cal_sys (0..3), Bits 3..2: cal_mag (0..3), Bits 1..0: cal_imu (0..3)
+
     uint16_t checksum;
 };
+
+// Size of legacy PacketTelemetry before BNO055 fields were added (for backward-compatible RX)
+static constexpr size_t LORA_LEGACY_TELEMETRY_SIZE = sizeof(PacketTelemetry) - 5;
+
+inline uint8_t pack_compass_flags(bool active, uint8_t cal_sys, uint8_t cal_mag, uint8_t cal_gyro = 0, uint8_t cal_accel = 0) {
+    uint8_t imu = (cal_gyro < cal_accel) ? cal_gyro : cal_accel;
+    return (active ? 0x80 : 0x00) |
+           ((cal_sys & 0x03) << 4) |
+           ((cal_mag & 0x03) << 2) |
+           (imu & 0x03);
+}
+
+inline bool unpack_compass_active(uint8_t flags) {
+    return (flags & 0x80) != 0;
+}
+
+inline uint8_t unpack_compass_cal_sys(uint8_t flags) {
+    return (flags >> 4) & 0x03;
+}
+
+inline uint8_t unpack_compass_cal_mag(uint8_t flags) {
+    return (flags >> 2) & 0x03;
+}
+
+inline uint8_t unpack_compass_cal_imu(uint8_t flags) {
+    return flags & 0x03;
+}
 
 // ------------------------------------------
 // 2. Manual Control Packet (Base -> Rover)

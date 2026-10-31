@@ -5,14 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Telemetria GPS - WindDragons Rover</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <link rel="stylesheet" href="/style.css?v=2.1.5">
+  <link rel="stylesheet" href="/style.css?v=2.1.8">
   <script>
     (function(){
       var t = localStorage.getItem('wd_theme') || 'dark';
       document.documentElement.setAttribute('data-theme', t);
     })();
   </script>
-  <script src="/app.js?v=2.1.5"></script>
+  <script src="/app.js?v=2.1.8"></script>
 </head>
 <body>
   <header class="navbar">
@@ -32,7 +32,7 @@
     </nav>
     <div class="nav-actions">
       <a href="/config" id="navVersionBadge" class="badge" style="background:rgba(6,182,212,0.12);border:1px solid rgba(6,182,212,0.3);color:var(--primary);text-decoration:none;font-size:0.75rem;display:inline-flex;align-items:center;gap:6px;" title="Ver detalhes de firmware nas Configurações">
-        <i class="fa-solid fa-code-branch"></i> <span id="navLafvinVer">Lafvin: v2.1.5</span> &bull; <span id="navC6Ver">C6: ...</span>
+        <i class="fa-solid fa-code-branch"></i> <span id="navLafvinVer">Lafvin: v2.1.8</span> &bull; <span id="navC6Ver">C6: ...</span>
       </a>
       <span id="navWifiBadge" class="badge badge-sta">
         <i class="fa-solid fa-wifi"></i> A carregar...
@@ -58,7 +58,7 @@
   <div style="display:flex;align-items:center;gap:8px;">
     <i class="fa-solid fa-microchip" style="color:var(--primary);"></i>
     <span style="color:var(--muted);">Master Lafvin:</span>
-    <strong style="color:var(--green);" id="mainLafvinVer">v2.1.5</strong>
+    <strong style="color:var(--green);" id="mainLafvinVer">v2.1.8</strong>
   </div>
   <div style="display:flex;align-items:center;gap:8px;">
     <i class="fa-solid fa-satellite-dish" style="color:var(--yellow);"></i>
@@ -68,7 +68,7 @@
   <div style="display:flex;align-items:center;gap:8px;">
     <i class="fa-solid fa-box-archive" style="color:var(--primary);"></i>
     <span style="color:var(--muted);">Pacote OTA:</span>
-    <strong style="color:var(--primary);" id="mainBundleVer">v2.1.5</strong>
+    <strong style="color:var(--primary);" id="mainBundleVer">v2.1.8</strong>
   </div>
   <div>
     <a href="/config" class="badge" style="background:rgba(6,182,212,0.15);color:var(--primary);border:1px solid rgba(6,182,212,0.3);text-decoration:none;font-size:0.75rem;padding:4px 10px;">
@@ -163,7 +163,61 @@
   </div>
 </div>
 
+<!-- Painel Bússola 9-DOF GY-BNO055 -->
+<div class="card" style="margin-top:20px;">
+  <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+    <span><i class="fa-solid fa-compass"></i> Telemetria IMU 9-DOF GY-BNO055 (J_EXP: IO1/IO11)</span>
+    <span id="cmpBadge" class="badge" style="background:rgba(245,158,11,0.15);color:var(--yellow);border:1px solid var(--yellow);">
+      AGUARDAR SENSOR (GPS COG)
+    </span>
+  </div>
+  <div class="grid-4" style="margin-top:10px;">
+    <div class="stat-box">
+      <div class="stat-label">Fonte de Rumo</div>
+      <div class="stat-value" id="cmpSrc" style="font-size:1.1rem;color:var(--primary);">GPS COG</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Inclinação (Roll / Pitch)</div>
+      <div class="stat-value" id="cmpTilt" style="font-size:1.1rem;">0.0° / 0.0°</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Calibração (Sys / Mag)</div>
+      <div class="stat-value" id="cmpCal" style="font-size:1.1rem;color:var(--green);">0/3 &bull; 0/3</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Offset Proa</div>
+      <div class="stat-value" id="cmpOff" style="font-size:1.1rem;">0.0°</div>
+    </div>
+  </div>
+  <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+    <button type="button" class="btn btn-primary" onclick="zeroCompass()"><i class="fa-solid fa-compass-drafting"></i> Alinhar Proa Atual = 0° (Norte)</button>
+    <button type="button" class="btn btn-secondary" onclick="resetCompassOffset()"><i class="fa-solid fa-rotate-left"></i> Repor Offset (0.0°)</button>
+    <a href="/config#compassCard" class="btn btn-secondary"><i class="fa-solid fa-Sliders"></i> Depurar / Calibrar BNO055</a>
+    <span id="cmpFeedback" style="font-size:0.8rem;color:var(--green);"></span>
+  </div>
+</div>
+
 <script>
+function zeroCompass() {
+  fetch('/api/compass/calibrate', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({zero: true})
+  }).then(r => r.json()).then(res => {
+    const el = document.getElementById('cmpFeedback');
+    if (el) { el.innerText = res.msg || 'OK'; setTimeout(() => el.innerText = '', 4000); }
+  });
+}
+function resetCompassOffset() {
+  fetch('/api/compass/calibrate', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({offset: 0})
+  }).then(r => r.json()).then(res => {
+    const el = document.getElementById('cmpFeedback');
+    if (el) { el.innerText = res.msg || 'OK'; setTimeout(() => el.innerText = '', 4000); }
+  });
+}
 let selectedRate = 1, rateInitialized = false;
 function selectRate(hz) {
   selectedRate = hz;
@@ -226,6 +280,21 @@ setInterval(() => {
         selectRate(g.rate_hz);
         rateInitialized = true;
       }
+      const cb = document.getElementById('cmpBadge');
+      if (cb) {
+        cb.innerText = g.compass_active ? 'BNO055 ONLINE (NDOF)' : 'AGUARDAR SENSOR (GPS COG)';
+        cb.style.color = g.compass_active ? 'var(--green)' : 'var(--yellow)';
+        cb.style.borderColor = g.compass_active ? 'var(--green)' : 'var(--yellow)';
+        cb.style.background = g.compass_active ? 'rgba(16,185,129,0.2)' : 'rgba(245,158,11,0.15)';
+      }
+      const cs = document.getElementById('cmpSrc');
+      if (cs) cs.innerText = g.compass_active ? 'GY-BNO055' : 'GPS COG';
+      const ct = document.getElementById('cmpTilt');
+      if (ct && g.roll !== undefined) ct.innerText = (g.roll || 0).toFixed(1) + '° / ' + (g.pitch || 0).toFixed(1) + '°';
+      const cc = document.getElementById('cmpCal');
+      if (cc && g.compass_cal_sys !== undefined) cc.innerText = (g.compass_cal_sys || 0) + '/3 • ' + (g.compass_cal_mag || 0) + '/3';
+      const co = document.getElementById('cmpOff');
+      if (co && g.compass_offset !== undefined) co.innerText = (g.compass_offset || 0).toFixed(1) + '°';
     }).catch(() => {});
 }, 1000);
 </script>
@@ -235,11 +304,11 @@ setInterval(() => {
   <footer style="text-align:center;color:var(--muted);font-size:0.75rem;margin-top:24px;display:flex;justify-content:center;align-items:center;gap:12px;flex-wrap:wrap;padding:0 16px;">
     <span>WindDragons Autonomous Surface Rover / Buoy &copy; 2026</span>
     <span>&bull;</span>
-    <span>Master Lafvin: <b style="color:var(--green);" id="footerLafvinVer">v2.1.5</b></span>
+    <span>Master Lafvin: <b style="color:var(--green);" id="footerLafvinVer">v2.1.8</b></span>
     <span>&bull;</span>
     <span>Coprocessador C6: <b style="color:var(--yellow);" id="footerC6Ver">--</b></span>
     <span>&bull;</span>
-    <span>Pacote Bundle: <b style="color:var(--primary);" id="footerBundleVer">v2.1.5</b></span>
+    <span>Pacote Bundle: <b style="color:var(--primary);" id="footerBundleVer">v2.1.8</b></span>
   </footer>
 </body>
 </html>

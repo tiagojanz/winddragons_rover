@@ -394,8 +394,24 @@ private:
             if (_commandQueueCb)
               _commandQueueCb("CMD:COMPASS_ZERO");
             _server.send(200, "application/json",
-                         "{\"status\":\"ok\",\"msg\":\"Proa atual definida "
-                         "como 0° (Norte)\"}");
+                         "{\"status\":\"ok\",\"success\":true,\"msg\":\"Proa "
+                         "atual definida como 0° (Norte) e gravada em NVS!\"}");
+            return;
+          } else if (doc["reinit"].as<bool>()) {
+            if (_commandQueueCb)
+              _commandQueueCb("CMD:COMPASS_REINIT");
+            _server.send(
+                200, "application/json",
+                "{\"status\":\"ok\",\"success\":true,\"msg\":\"Re-scan I2C e "
+                "reinicialização do sensor GY-BNO055 solicitados ao C6!\"}");
+            return;
+          } else if (doc["diag"].as<bool>()) {
+            if (_commandQueueCb)
+              _commandQueueCb("CMD:COMPASS_DIAG");
+            _server.send(
+                200, "application/json",
+                "{\"status\":\"ok\",\"success\":true,\"msg\":\"Relatório de "
+                "diagnóstico BNO055 enviado para a Consola!\"}");
             return;
           } else if (doc["offset"].is<float>() || doc["offset"].is<int>()) {
             float off = doc["offset"].as<float>();
@@ -405,12 +421,14 @@ private:
               _commandQueueCb(cmd);
             _server.send(
                 200, "application/json",
-                "{\"status\":\"ok\",\"msg\":\"Offset da bussola atualizado\"}");
+                "{\"status\":\"ok\",\"success\":true,\"msg\":\"Offset da "
+                "bússola BNO055 atualizado e gravado em NVS!\"}");
             return;
           }
         }
       }
-      _server.send(400, "application/json", "{\"status\":\"error\"}");
+      _server.send(400, "application/json",
+                   "{\"status\":\"error\",\"success\":false}");
     });
 
     // Controle de atuadores
@@ -423,6 +441,7 @@ private:
     _server.on("/api/control/joystick/config", HTTP_POST,
                [this]() { handleApiJoystickConfig(); });
     _server.on("/api/control/leds", [this]() { handleApiLedControl(); });
+    _server.on("/api/control/c6_led", [this]() { handleApiC6LedControl(); });
 
     // Gestão do Cartão SD
     _server.on("/api/sd/list", [this]() { handleApiSdList(); });
@@ -635,7 +654,8 @@ private:
             "radius:8px;overflow:hidden;margin-top:8px;}";
     html += ".progress-bar{height:100%;transition:width 0.3s;}";
     html += ".slider{width:100%;-webkit-appearance:none;height:10px;background:"
-            "#0f172a;border-radius:5px;outline:none;}";
+            "#0f172a;border-radius:5px;outline:none;accent-color:var(--primary);}"
+            ".slider:focus-visible{outline:2px solid var(--primary);outline-offset:4px;}";
     html += ".slider::-webkit-slider-thumb{-webkit-appearance:none;width:24px;"
             "height:24px;border-radius:50%;background:var(--primary);cursor:"
             "pointer;}";
@@ -1522,6 +1542,364 @@ private:
             "class='fa-solid fa-floppy-disk'></i> Guardar Config LEDs</button>";
     html += "</div></div>";
 
+    // Card 4.3b: Controlo da Cor por Modo e Intensidade do LED RGB da C6 (GPIO 8)
+    static const char *modeNamesPt[7] = {
+        "0 • IDLE (Standby)",          "1 • MANUAL (Comando)",
+        "2 • HOLD STATION (Manter)",   "3 • ANCHORED (Ancorado)",
+        "4 • GOTO TARGET (Navegar)",   "5 • RTL (Regresso Home)",
+        "6 • FAILSAFE (Emergência 2Hz)"};
+    static const char *modeDescsPt[7] = {
+        "Aguardando missão / motores parados",
+        "Controlo manual ativo (Web / LoRa / Joystick)",
+        "Manutenção autónoma de posição GPS",
+        "Âncora lançada no fundo",
+        "Navegação autónoma para Waypoint",
+        "Retorno automático ao ponto de partida",
+        "Perda de sinal / paragem de segurança (pisca a 2 Hz)"};
+    uint8_t curSt = (_motorStatus < 7) ? _motorStatus : 0;
+    String curCol = _config.getC6ModeColor(curSt);
+
+    html += "<div class='card' style='border:1px solid #10b981;' id='c6LedCard'>";
+    html += "<div class='card-title' "
+            "style='display:flex;justify-content:space-between;align-items:"
+            "center;flex-wrap:wrap;gap:8px;'>";
+    html += "<span><i class='fa-solid fa-palette' style='color:#10b981;'></i> "
+            "LED RGB do Coprocessador C6 — Cor por Modo &amp; Intensidade "
+            "(GPIO 8)</span>";
+    html += "<div style='display:flex;align-items:center;gap:8px;flex-wrap:wrap;'>";
+    html += "<span id='c6LedActiveBadge' class='badge' "
+            "style='background:rgba(16,185,129,0.18);color:#a7f3d0;border:1px "
+            "solid #10b981;display:inline-flex;align-items:center;gap:6px;'>"
+            "<span id='c6LedActiveDot' style='width:10px;height:10px;border-radius:50%;display:inline-block;background:" +
+            curCol + ";box-shadow:0 0 8px " + curCol +
+            ";'></span>MODO ATUAL: <b id='c6LedActiveModeTxt'>" +
+            String(get_motor_status_str(curSt)) + "</b></span>";
+    html += "<span id='c6LedBrtBadge' class='badge' "
+            "style='background:#064e3b;color:#6ee7b7;border:1px solid #059669;'>"
+            "INTENSIDADE: " +
+            String(_config.getC6LedBrightness()) + "%</span>";
+    html += "</div></div>";
+    html += "<p style='color:var(--muted);font-size:0.85rem;margin-bottom:14px;'>"
+            "Configure a <b>intensidade de brilho (0% a 100%)</b> e a <b>cor RGB "
+            "associada a cada modo de operação</b> no LED RGB endereçável onboard "
+            "do Coprocessador ESP32-C6 (<b>GPIO 8</b>). Pode testar qualquer cor "
+            "em tempo real na placa C6 antes de guardar.</p>";
+
+    // Controlo de Intensidade do LED da C6
+    html += "<div style='margin-bottom:14px;background:rgba(15,23,42,0.6);border:"
+            "1px solid #334155;border-radius:10px;padding:14px;'>";
+    html += "<div style='display:flex;justify-content:space-between;align-items:"
+            "center;margin-bottom:8px;flex-wrap:wrap;gap:8px;'>";
+    html += "<label for='cfg_c6_led_bright' class='stat-label' style='font-size:0.82rem;color:var(--text);'>"
+            "<i class='fa-solid fa-sun' style='color:#fbbf24;'></i> Intensidade "
+            "do LED da C6 (0% Desligado — 100% Máximo):</label>";
+    html += "<span id='c6LedBrightVal' style='font-size:1.25rem;font-weight:800;color:#10b981;'>" +
+            String(_config.getC6LedBrightness()) + "%</span>";
+    html += "</div>";
+    html += "<input type='range' id='cfg_c6_led_bright' min='0' max='100' step='1' value='" +
+            String(_config.getC6LedBrightness()) +
+            "' class='slider' oninput='onC6LedBrightSlide(this.value)'>";
+    html += "<div style='display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;'>";
+    html += "<button type='button' class='btn btn-secondary' style='padding:6px 12px;font-size:0.78rem;' onclick='setC6LedBrightPreset(0)'><i class='fa-solid fa-power-off'></i> 0% (Off)</button>";
+    html += "<button type='button' class='btn btn-secondary' style='padding:6px 12px;font-size:0.78rem;' onclick='setC6LedBrightPreset(25)'>25% (Noturno)</button>";
+    html += "<button type='button' class='btn btn-secondary' style='padding:6px 12px;font-size:0.78rem;' onclick='setC6LedBrightPreset(50)'>50% (Médio)</button>";
+    html += "<button type='button' class='btn btn-secondary' style='padding:6px 12px;font-size:0.78rem;' onclick='setC6LedBrightPreset(80)'>80% (Padrão)</button>";
+    html += "<button type='button' class='btn btn-secondary' style='padding:6px 12px;font-size:0.78rem;' onclick='setC6LedBrightPreset(100)'><i class='fa-solid fa-bolt'></i> 100% ( Sol)</button>";
+    html += "</div></div>";
+
+    // Grelha de Cores por Modo (0..6)
+    html += "<div style='margin-bottom:14px;'>";
+    html += "<div class='stat-label' style='margin-bottom:8px;'><i class='fa-solid fa-sliders'></i> Cor do LED da C6 para cada Modo de Operação:</div>";
+    html += "<div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;'>";
+    for (uint8_t m = 0; m < 7; m++) {
+      String hexCol = _config.getC6ModeColor(m);
+      bool isCur = (m == curSt);
+      html += "<div id='c6ModeCard_" + String(m) +
+              "' style='background:rgba(15,23,42,0.65);border:1px solid " +
+              String(isCur ? "#10b981" : "#334155") +
+              ";border-radius:10px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px;'>";
+      html += "<div style='min-width:0;flex:1;'>";
+      html += "<div style='font-weight:700;font-size:0.84rem;color:var(--text);display:flex;align-items:center;gap:6px;'>";
+      html += "<span id='c6ModeDot_" + String(m) +
+              "' style='width:10px;height:10px;border-radius:50%;display:inline-block;background:" +
+              hexCol + ";box-shadow:0 0 6px " + hexCol + ";flex-shrink:0;'></span>";
+      html += "<span>" + String(modeNamesPt[m]) + "</span></div>";
+      html += "<div style='font-size:0.72rem;color:var(--muted);margin-top:2px;'>" +
+              String(modeDescsPt[m]) + "</div>";
+      html += "</div>";
+      html += "<div style='display:flex;align-items:center;gap:6px;flex-shrink:0;'>";
+      html += "<input type='color' id='cfg_c6_mode_color_" + String(m) +
+              "' value='" + hexCol + "' onchange='onC6ModeColorPick(" +
+              String(m) + ",this.value)' style='width:40px;height:34px;padding:2px;margin:0;cursor:pointer;background:#0f172a;border:1px solid #475569;border-radius:6px;'>";
+      html += "<span id='c6ModeHexLbl_" + String(m) +
+              "' style='font-family:monospace;font-size:0.76rem;color:var(--muted);min-width:58px;'>" +
+              hexCol + "</span>";
+      html += "<button type='button' class='btn btn-secondary' style='padding:6px 10px;font-size:0.75rem;' onclick='testC6ModeColor(" +
+              String(m) + ")' title='Pré-visualizar esta cor por 3s no LED da C6'><i class='fa-solid fa-eye'></i></button>";
+      html += "</div></div>";
+    }
+    html += "</div></div>";
+
+    // Botões de ação do Card C6 LED
+    html += "<div style='display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;background:rgba(15,23,42,0.6);border:1px solid #334155;border-radius:10px;padding:12px;'>";
+    html += "<div class='btn-group'>";
+    html += "<button type='button' onclick='saveC6LedConfig()' class='btn btn-primary' style='background:#10b981;color:#0f172a;'><i class='fa-solid fa-floppy-disk'></i> Guardar Config LED da C6</button>";
+    html += "<button type='button' onclick='resetC6LedDefaults()' class='btn btn-secondary'><i class='fa-solid fa-rotate'></i> Repor Cores Padrão</button>";
+    html += "</div>";
+    html += "<span style='font-size:0.78rem;color:var(--muted);'><i class='fa-solid fa-microchip'></i> Sincronizado em tempo real via UART com o ESP32-C6 (GPIO 8)</span>";
+    html += "</div></div>";
+
+    // Card 4.4: Depuração, Calibração e Orientação 9-DOF — Bússola GY-BNO055
+    // (Ilha J_EXP: IO1=SDA, IO11=SCL)
+    html += "<div class='card' style='border:1px solid #06b6d4;' "
+            "id='compassDebugCard'>";
+    html += "<div class='card-title' "
+            "style='display:flex;justify-content:space-between;align-items:"
+            "center;flex-wrap:wrap;gap:8px;'>";
+    html += "<span><i class='fa-solid fa-compass' "
+            "style='color:var(--primary);'></i> Bússola Magnética & IMU 9-DOF "
+            "GY-BNO055 (J_EXP: IO1=SDA, IO11=SCL)</span>";
+    html += "<div style='display:flex;gap:8px;align-items:center;flex-wrap:"
+            "wrap;'>";
+    html += "<span id='cfgCmpI2cBadge' class='badge' "
+            "style='background:#1e293b;color:#38bdf8;border:1px solid #0284c7;"
+            "font-family:monospace;'>I2C: 0x" +
+            String(_gps.getCompassI2cAddr(), HEX) + "</span>";
+    html += "<span id='cfgCmpStatusBadge' class='badge' style='background:" +
+            String(_gps.hasCompass() ? "#064e3b;color:#a7f3d0;border:1px solid "
+                                       "#059669;"
+                                     : "#78350f;color:#fde68a;border:1px solid "
+                                       "#b45309;") +
+            "'>" +
+            String(_gps.hasCompass() ? "ONLINE (MODO NDOF 9-EIXOS)"
+                                     : "OFFLINE (FALLBACK GPS COG)") +
+            "</span>";
+    html += "</div></div>";
+    html += "<p "
+            "style='color:var(--muted);font-size:0.85rem;margin-bottom:14px;'>"
+            "Depuração em tempo real, estado de calibração dos 4 subsistemas "
+            "internos Bosch (Sistema, Giroscópio, Acelerómetro e Magnetómetro) "
+            "e alinhamento de proa da bússola ligada em <b>J_EXP (3V3, GND, "
+            "SCL=IO11, SDA=IO1)</b>.</p>";
+
+    // Grelha Principal: Rosa dos Ventos Visual + Leituras Ao Vivo
+    html += "<div style='display:grid;grid-template-columns:repeat(auto-fit,"
+            "minmax(250px,1fr));gap:16px;margin-bottom:14px;'>";
+
+    // Coluna 1: Mostrador / Rosa dos Ventos SVG + Horizonte Artificial
+    html += "<div style='background:rgba(15,23,42,0.6);border:1px solid "
+            "#334155;border-radius:10px;padding:14px;display:flex;align-items:"
+            "center;justify-content:space-around;gap:12px;'>";
+    html += "<div style='position:relative;width:110px;height:110px;border-"
+            "radius:50%;border:2px solid #0284c7;background:#090d16;display:"
+            "flex;align-items:center;justify-content:center;box-shadow:inset "
+            "0 0 15px rgba(6,182,212,0.2);flex-shrink:0;'>";
+    html += "<span style='position:absolute;top:4px;font-size:0.7rem;font-"
+            "weight:800;color:#ef4444;'>N</span>";
+    html += "<span style='position:absolute;bottom:4px;font-size:0.65rem;font-"
+            "weight:700;color:#64748b;'>S</span>";
+    html += "<span style='position:absolute;right:6px;font-size:0.65rem;font-"
+            "weight:700;color:#64748b;'>E</span>";
+    html += "<span style='position:absolute;left:6px;font-size:0.65rem;font-"
+            "weight:700;color:#64748b;'>O</span>";
+    html += "<div id='cfgCmpNeedle' style='width:100%;height:100%;position:"
+            "absolute;top:0;left:0;transition:transform 0.25s ease-out;"
+            "transform:rotate(" +
+            String(_gps.getCompassHeading(), 1) + "deg);'>";
+    html += "<div style='width:0;height:0;border-left:6px solid transparent;"
+            "border-right:6px solid transparent;border-bottom:36px solid "
+            "#ef4444;margin:16px auto 0;'></div>";
+    html += "<div style='width:0;height:0;border-left:6px solid transparent;"
+            "border-right:6px solid transparent;border-top:36px solid "
+            "#38bdf8;margin:0 auto;'></div>";
+    html += "</div>";
+    html += "<div style='width:10px;height:10px;border-radius:50%;background:"
+            "#f8fafc;z-index:2;border:2px solid #090d16;'></div>";
+    html += "</div>";
+    html += "<div style='flex:1;'>";
+    html += "<div class='stat-label'>Rumo Proa (Calibrado)</div>";
+    html += "<div style='display:flex;align-items:baseline;gap:8px;'>";
+    html += "<span id='cfgCmpHeading' style='font-size:1.85rem;font-weight:800;"
+            "color:var(--primary);'>" +
+            String(_gps.getCompassHeading(), 1) + "°</span>";
+    html += "<span id='cfgCmpCardDir' style='font-size:0.95rem;font-weight:700;"
+            "color:var(--yellow);'>N</span>";
+    html += "</div>";
+    html += "<div style='font-size:0.78rem;color:var(--muted);margin-top:4px;'>"
+            "Bruto Sensor: <b id='cfgCmpRaw' style='color:var(--text);'>" +
+            String(_gps.getCompassRawHeading(), 1) +
+            "°</b> &bull; Offset: <b id='cfgCmpOffVal' "
+            "style='color:var(--green);'>" +
+            String(_gps.getCompassOffset(), 1) + "°</b></div>";
+    html += "<div style='font-size:0.78rem;color:var(--muted);margin-top:2px;'>"
+            "Fonte Ativa: <b id='cfgCmpSource' style='color:#38bdf8;'>" +
+            String(_gps.hasCompass() ? "GY-BNO055 (NDOF)" : "GPS COG") +
+            "</b></div>";
+    html += "</div></div>";
+
+    // Coluna 2: Inclinómetro Todo-Terreno 3D (Esferas Roll & Pitch) +
+    // Calibração Interna 4-Eixos
+    html += "<div style='background:rgba(15,23,42,0.6);border:1px solid "
+            "#334155;border-radius:10px;padding:14px;display:flex;flex-"
+            "direction:column;justify-content:space-between;gap:12px;'>";
+    html +=
+        "<div style='display:grid;grid-template-columns:1fr 1fr;gap:12px;'>";
+    html += "<div style='background:#090d16;border:1px solid "
+            "#1e293b;border-radius:10px;padding:10px;display:flex;flex-"
+            "direction:column;align-items:center;gap:6px;'>";
+    html += "<div class='stat-label' style='font-size:0.7rem;'>ROLL "
+            "(LATERAL)</div>";
+    html +=
+        "<div "
+        "style='position:relative;width:92px;height:92px;border-radius:50%;"
+        "border:2px solid "
+        "#0284c7;background:#090d16;overflow:hidden;box-shadow:inset 0 0 14px "
+        "rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:"
+        "center;'>";
+    html += "<div id='cfgRollSphere' "
+            "style='position:absolute;width:130%;height:130%;transition:"
+            "transform 0.25s ease-out;transform:rotate(" +
+            String(_gps.getRoll(), 1) +
+            "deg);display:flex;align-items:center;justify-content:center;'>";
+    html += "<div "
+            "style='position:absolute;inset:0;background:linear-gradient("
+            "180deg,rgba(2,132,199,0.35) 0%,rgba(56,189,248,0.15) "
+            "50%,rgba(180,83,9,0.35) 50%,rgba(120,53,15,0.55) 100%);'></div>";
+    html += "<div "
+            "style='position:absolute;left:0;right:0;top:50%;height:2px;"
+            "background:#38bdf8;'></div>";
+    html +=
+        "<svg viewBox='0 0 64 64' "
+        "style='width:54px;height:54px;position:relative;z-index:2;'><path "
+        "d='M14 36 L50 36 L44 44 L20 44 Z' fill='#38bdf8' stroke='#f8fafc' "
+        "stroke-width='1.5'/><rect x='24' y='26' width='16' height='10' rx='2' "
+        "fill='#0284c7' stroke='#f8fafc' stroke-width='1.2'/><line x1='32' "
+        "y1='16' x2='32' y2='26' stroke='#facc15' stroke-width='2'/><circle "
+        "cx='32' cy='15' r='2.5' fill='#ef4444'/></svg></div>";
+    html +=
+        "<div style='position:absolute;inset:4px;border-radius:50%;border:1px "
+        "dashed rgba(148,163,184,0.3);pointer-events:none;z-index:3;'></div>";
+    html +=
+        "<div "
+        "style='position:absolute;left:6px;right:6px;top:50%;border-top:1px "
+        "dotted rgba(248,250,252,0.35);pointer-events:none;z-index:3;'></div>";
+    html += "<span "
+            "style='position:absolute;top:3px;font-size:0.55rem;font-weight:"
+            "700;color:#94a3b8;z-index:3;'>0°</span></div>";
+    html += "<div class='stat-value' id='cfgCmpRoll' "
+            "style='font-size:1.15rem;color:#38bdf8;font-weight:800;'>" +
+            String(_gps.getRoll(), 1) + "°</div></div>";
+    html += "<div style='background:#090d16;border:1px solid "
+            "#1e293b;border-radius:10px;padding:10px;display:flex;flex-"
+            "direction:column;align-items:center;gap:6px;'>";
+    html += "<div class='stat-label' style='font-size:0.7rem;'>PITCH "
+            "(LONGIT.)</div>";
+    html +=
+        "<div "
+        "style='position:relative;width:92px;height:92px;border-radius:50%;"
+        "border:2px solid "
+        "#8b5cf6;background:#090d16;overflow:hidden;box-shadow:inset 0 0 14px "
+        "rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:"
+        "center;'>";
+    html += "<div id='cfgPitchSphere' "
+            "style='position:absolute;width:130%;height:130%;transition:"
+            "transform 0.25s ease-out;transform:rotate(" +
+            String(-_gps.getPitch(), 1) +
+            "deg);display:flex;align-items:center;justify-content:center;'>";
+    html += "<div "
+            "style='position:absolute;inset:0;background:linear-gradient("
+            "180deg,rgba(109,40,217,0.32) 0%,rgba(167,139,250,0.14) "
+            "50%,rgba(180,83,9,0.35) 50%,rgba(120,53,15,0.55) 100%);'></div>";
+    html += "<div "
+            "style='position:absolute;left:0;right:0;top:50%;height:2px;"
+            "background:#a78bfa;'></div>";
+    html += "<svg viewBox='0 0 64 64' "
+            "style='width:54px;height:54px;position:relative;z-index:2;'><path "
+            "d='M10 35 L54 33 L46 43 L14 43 Z' fill='#a78bfa' stroke='#f8fafc' "
+            "stroke-width='1.5'/><polygon points='24,34 38,34 35,25 26,25' "
+            "fill='#7c3aed' stroke='#f8fafc' stroke-width='1.2'/><line x1='33' "
+            "y1='17' x2='33' y2='25' stroke='#facc15' "
+            "stroke-width='2'/></svg></div>";
+    html +=
+        "<div style='position:absolute;inset:4px;border-radius:50%;border:1px "
+        "dashed rgba(148,163,184,0.3);pointer-events:none;z-index:3;'></div>";
+    html +=
+        "<div "
+        "style='position:absolute;left:6px;right:6px;top:50%;border-top:1px "
+        "dotted rgba(248,250,252,0.35);pointer-events:none;z-index:3;'></div>";
+    html += "<span "
+            "style='position:absolute;top:3px;font-size:0.55rem;font-weight:"
+            "700;color:#94a3b8;z-index:3;'>0°</span></div>";
+    html += "<div class='stat-value' id='cfgCmpPitch' "
+            "style='font-size:1.15rem;color:#a78bfa;font-weight:800;'>" +
+            String(_gps.getPitch(), 1) + "°</div></div>";
+    html += "</div>";
+
+    // Barras de Calibração (0/3 a 3/3)
+    html += "<div>";
+    html += "<div style='display:flex;justify-content:space-between;align-"
+            "items:center;margin-bottom:6px;'>";
+    html +=
+        "<span class='stat-label'>Estado de Calibração NDOF (0 a 3):</span>";
+    html += "<span id='cfgCmpCalHint' style='font-size:0.72rem;color:var(--"
+            "yellow);'>Mova em '8' para calibrar Mag</span>";
+    html += "</div>";
+    html += "<div style='display:grid;grid-template-columns:repeat(4,1fr);gap:"
+            "6px;text-align:center;'>";
+    html += "<div style='background:#090d16;padding:6px 4px;border-radius:6px;"
+            "border:1px solid #1e293b;'><div style='font-size:0.68rem;color:"
+            "var(--muted);'>SYS</div><div id='cfgCalSys' style='font-weight:"
+            "700;font-size:0.95rem;'>" +
+            String(_gps.getCompassCalSys()) + "/3</div></div>";
+    html += "<div style='background:#090d16;padding:6px 4px;border-radius:6px;"
+            "border:1px solid #1e293b;'><div style='font-size:0.68rem;color:"
+            "var(--muted);'>GYRO</div><div id='cfgCalGyro' style='font-weight:"
+            "700;font-size:0.95rem;'>" +
+            String(_gps.getCompassCalGyro()) + "/3</div></div>";
+    html += "<div style='background:#090d16;padding:6px 4px;border-radius:6px;"
+            "border:1px solid #1e293b;'><div style='font-size:0.68rem;color:"
+            "var(--muted);'>ACCEL</div><div id='cfgCalAccel' style='font-"
+            "weight:700;font-size:0.95rem;'>" +
+            String(_gps.getCompassCalAccel()) + "/3</div></div>";
+    html += "<div style='background:#090d16;padding:6px 4px;border-radius:6px;"
+            "border:1px solid #1e293b;'><div style='font-size:0.68rem;color:"
+            "var(--muted);'>MAG</div><div id='cfgCalMag' style='font-weight:"
+            "700;font-size:0.95rem;'>" +
+            String(_gps.getCompassCalMag()) + "/3</div></div>";
+    html += "</div></div></div></div>";
+
+    // Controlos de Calibração de Proa, Offset Manual e Diagnóstico I2C
+    html +=
+        "<div style='background:rgba(15,23,42,0.6);border:1px solid "
+        "#334155;border-radius:10px;padding:12px;display:flex;flex-wrap:"
+        "wrap;gap:12px;align-items:flex-end;justify-content:space-between;'>";
+    html += "<div class='btn-group'>";
+    html += "<button type='button' onclick='cfgZeroCompass()' class='btn "
+            "btn-primary'><i class='fa-solid fa-compass-drafting'></i> Alinhar "
+            "Proa Atual = 0.0° (Norte)</button>";
+    html += "<button type='button' onclick='cfgResetCompassOffset()' "
+            "class='btn btn-secondary'><i class='fa-solid fa-rotate-left'></i> "
+            "Repor Offset (0.0°)</button>";
+    html += "<button type='button' onclick='cfgReinitCompass()' class='btn "
+            "btn-secondary' style='background:#0284c7;color:#fff;'><i "
+            "class='fa-solid fa-rotate'></i> Re-Scan I2C / Reiniciar "
+            "BNO055</button>";
+    html += "<button type='button' onclick='cfgDiagCompass()' class='btn "
+            "btn-secondary'><i class='fa-solid fa-terminal'></i> Dump na "
+            "Consola</button>";
+    html += "</div>";
+    html += "<div style='display:flex;align-items:flex-end;gap:8px;'>";
+    html += "<div><label style='display:block;font-size:0.75rem;color:var(--"
+            "muted);margin-bottom:4px;'>Offset Manual (-180° a +180°):</label>";
+    html += "<input type='number' id='cfg_cmp_offset' step='0.5' min='-180' "
+            "max='180' value='" +
+            String(_gps.getCompassOffset(), 1) +
+            "' style='width:110px;margin:0;'></div>";
+    html += "<button type='button' onclick='cfgSaveCompassOffset()' class='btn "
+            "btn-secondary' style='background:#065f46;color:#fff;'><i "
+            "class='fa-solid fa-check'></i> Aplicar Offset</button>";
+    html += "</div></div></div>";
+
     // Card 5: Ações de Gravação & Gestão
     html += "<div class='card' style='border-color:var(--primary);'>";
     html += "<div class='card-title'><span><i class='fa-solid "
@@ -1688,6 +2066,141 @@ private:
             "brightness:brt,save:true})}).then(r=>r.json()).then(res=>"
             "showStatus(res.msg||'Configuração dos LEDs guardada!')).catch(()=>"
             "{});}";
+    html += "let c6LedBrightTimer=null;";
+    html += "function onC6LedBrightSlide(v){const "
+            "el=document.getElementById('c6LedBrightVal');if(el)el.innerText=v+"
+            "'%';const "
+            "b=document.getElementById('c6LedBrtBadge');if(b)b.innerText='"
+            "INTENSIDADE: '+v+'%';if(c6LedBrightTimer)clearTimeout("
+            "c6LedBrightTimer);c6LedBrightTimer=setTimeout(()=>{fetch('/api/"
+            "control/c6_led',{method:'POST',headers:{'Content-Type':'"
+            "application/json'},body:JSON.stringify({brightness:parseInt(v)})})"
+            ".catch(()=>{});},60);}";
+    html += "function setC6LedBrightPreset(v){const "
+            "s=document.getElementById('cfg_c6_led_bright');if(s)s.value=v;"
+            "onC6LedBrightSlide(v);}";
+    html += "function updateC6ModeRowUI(m,hex){if(!hex)return;const "
+            "up=hex.toUpperCase();const "
+            "inp=document.getElementById('cfg_c6_mode_color_'+m);if(inp)inp."
+            "value=up;const "
+            "lbl=document.getElementById('c6ModeHexLbl_'+m);if(lbl)lbl."
+            "innerText=up;const "
+            "dot=document.getElementById('c6ModeDot_'+m);if(dot){dot.style."
+            "background=up;dot.style.boxShadow='0 0 6px '+up;}}";
+    html += "function onC6ModeColorPick(m,hex){updateC6ModeRowUI(m,hex);fetch('"
+            "/api/control/c6_led',{method:'POST',headers:{'Content-Type':'"
+            "application/json'},body:JSON.stringify({mode_index:m,hex:hex})})."
+            "then(r=>r.json()).then(res=>showStatus(res.msg||('Cor do modo '+m+"
+            "' aplicada!'))).catch(()=>{});}";
+    html += "function testC6ModeColor(m){const "
+            "hex=document.getElementById('cfg_c6_mode_color_'+m)?.value||'#"
+            "06B6D4';fetch('/api/control/c6_led',{method:'POST',headers:{'"
+            "Content-Type':'application/json'},body:JSON.stringify({test_hex:"
+            "hex})}).then(r=>r.json()).then(res=>showStatus(res.msg||('A testar"
+            " cor '+hex+' no LED da C6!'))).catch(()=>{});}";
+    html += "function getC6ModeColorsFromUI(){const arr=[];for(let i=0;i<7;i++){"
+            "arr.push((document.getElementById('cfg_c6_mode_color_'+i)?.value||"
+            "'#06B6D4').toUpperCase());}return arr;}";
+    html += "function saveC6LedConfig(){const "
+            "brt=parseInt(document.getElementById('cfg_c6_led_bright')?.value?"
+            "?80);const colors=getC6ModeColorsFromUI();fetch('/api/control/"
+            "c6_led',{method:'POST',headers:{'Content-Type':'application/json'}"
+            ",body:JSON.stringify({brightness:brt,mode_colors:colors,save:true}"
+            ")}).then(r=>r.json()).then(res=>showStatus(res.msg||'Configuração "
+            "do LED da C6 guardada!')).catch(()=>{});}";
+    html += "function resetC6LedDefaults(){fetch('/api/control/c6_led',{method:"
+            "'POST',headers:{'Content-Type':'application/json'},body:JSON."
+            "stringify({reset_defaults:true})}).then(r=>r.json()).then(res=>{if"
+            "(Array.isArray(res.c6_mode_colors)){res.c6_mode_colors.forEach((c,"
+            "i)=>updateC6ModeRowUI(i,c));}showStatus(res.msg||'Cores padrão do "
+            "LED da C6 repostas!');}).catch(()=>{});}";
+    html += "function degToCardinal(d){const "
+            "dirs=['N','NE','E','SE','S','SO','O','NO'];return "
+            "dirs[Math.round(((d%360)+360)%360/45)%8];}";
+    html += "function calColor(v){return v>=3?'var(--green)':(v>=1?'var(--"
+            "yellow)':'var(--red)');}";
+    html += "function pollCompassDebug(){if(window.otaInProgress)return;fetch("
+            "'/api/status').then(r=>r.json()).then(d=>{if(!d||!d.gps)return;"
+            "const g=d.gps;const "
+            "st=document.getElementById('cfgCmpStatusBadge');if(st){st."
+            "innerText=g.compass_active?'ONLINE (MODO NDOF 9-EIXOS)':'OFFLINE "
+            "(FALLBACK GPS COG)';st.style.background=g.compass_active?'#"
+            "064e3b':'#78350f';st.style.color=g.compass_active?'#a7f3d0':'#"
+            "fde68a';st.style.borderColor=g.compass_active?'#059669':'#b45309';"
+            "}const i2c=document.getElementById('cfgCmpI2cBadge');if(i2c&&g."
+            "compass_i2c_addr)i2c.innerText='I2C: 0x'+g.compass_i2c_addr."
+            "toString(16).toUpperCase();const h=g.compass_heading!==undefined?"
+            "g.compass_heading:(g.heading||0);const "
+            "elH=document.getElementById('cfgCmpHeading');if(elH)elH.innerText="
+            "h.toFixed(1)+'°';const "
+            "elC=document.getElementById('cfgCmpCardDir');if(elC)elC.innerText="
+            "degToCardinal(h);const "
+            "ndl=document.getElementById('cfgCmpNeedle');if(ndl)ndl.style."
+            "transform='rotate('+h.toFixed(1)+'deg)';const "
+            "elRaw=document.getElementById('cfgCmpRaw');if(elRaw&&g.compass_"
+            "raw_heading!==undefined)elRaw.innerText=g.compass_raw_heading."
+            "toFixed(1)+'°';const "
+            "elOff=document.getElementById('cfgCmpOffVal');if(elOff&&g.compass_"
+            "offset!==undefined)elOff.innerText=g.compass_offset.toFixed(1)+'°'"
+            ";const elSrc=document.getElementById('cfgCmpSource');if(elSrc)"
+            "elSrc.innerText=g.compass_active?'GY-BNO055 (NDOF)':'GPS COG';"
+            "const elR=document.getElementById('cfgCmpRoll');if(elR&&g.roll!=="
+            "undefined)elR.innerText=g.roll.toFixed(1)+'°';const "
+            "elRS=document.getElementById('cfgRollSphere');if(elRS&&g.roll!=="
+            "undefined)elRS.style.transform='rotate('+Math.max(-65,Math.min(65,"
+            "g.roll||0)).toFixed(1)+'deg)';const "
+            "elP=document.getElementById('cfgCmpPitch');if(elP&&g.pitch!=="
+            "undefined)elP.innerText=g.pitch.toFixed(1)+'°';const "
+            "elPS=document.getElementById('cfgPitchSphere');if(elPS&&g.pitch!=="
+            "undefined)elPS.style.transform='rotate('+(-Math.max(-65,Math.min("
+            "65,g.pitch||0))).toFixed(1)+'deg)';const "
+            "cs=g.compass_cal_sys||0,cg=g.compass_cal_gyro||0,ca=g.compass_cal_"
+            "accel||0,cm=g.compass_cal_mag||0;const "
+            "eS=document.getElementById('cfgCalSys');if(eS){eS.innerText=cs+'/"
+            "3';eS.style.color=calColor(cs);}const "
+            "eG=document.getElementById('cfgCalGyro');if(eG){eG.innerText=cg+'/"
+            "3';eG.style.color=calColor(cg);}const "
+            "eA=document.getElementById('cfgCalAccel');if(eA){eA.innerText=ca+"
+            "'/3';eA.style.color=calColor(ca);}const "
+            "eM=document.getElementById('cfgCalMag');if(eM){eM.innerText=cm+'/"
+            "3';eM.style.color=calColor(cm);}const "
+            "hint=document.getElementById('cfgCmpCalHint');if(hint){if(!g."
+            "compass_active){hint.innerText='Sensor não detetado em J_EXP';hint"
+            ".style.color='var(--red)';}else if(cm>=3&&cs>=2){hint.innerText="
+            "'✔ Calibração NDOF Ótima (3/3)';hint.style.color='var(--green)';}"
+            "else{hint.innerText='Mova a boia em \"8\" para Mag 3/3';hint.style"
+            ".color='var(--yellow)';}}}).catch(()=>{});}";
+    html +=
+        "setInterval(pollCompassDebug,800);setTimeout(pollCompassDebug,250);";
+    html += "function cfgZeroCompass(){fetch('/api/compass/"
+            "calibrate',{method:'POST',headers:{'Content-Type':'application/"
+            "json'},body:JSON.stringify({zero:true})}).then(r=>r.json()).then("
+            "res=>{showStatus(res.msg||'Proa alinhada a 0.0°!');setTimeout("
+            "pollCompassDebug,250);}).catch(()=>{});}";
+    html += "function cfgResetCompassOffset(){const "
+            "inp=document.getElementById('cfg_cmp_offset');if(inp)inp.value='0."
+            "0';fetch('/api/compass/calibrate',{method:'POST',headers:{"
+            "'Content-Type':'application/json'},body:JSON.stringify({offset:0."
+            "0})}).then(r=>r.json()).then(res=>{showStatus(res.msg||'Offset "
+            "reposto a 0.0°!');setTimeout(pollCompassDebug,250);}).catch(()=>{"
+            "});}";
+    html += "function cfgSaveCompassOffset(){const "
+            "v=parseFloat(document.getElementById('cfg_cmp_offset')?.value)||0."
+            "0;fetch('/api/compass/calibrate',{method:'POST',headers:{'Content-"
+            "Type':'application/json'},body:JSON.stringify({offset:v})}).then("
+            "r=>r.json()).then(res=>{showStatus(res.msg||('Offset '+v.toFixed("
+            "1)+'° aplicado!'));setTimeout(pollCompassDebug,250);}).catch(()=>{"
+            "});}";
+    html += "function cfgReinitCompass(){fetch('/api/compass/"
+            "calibrate',{method:'POST',headers:{'Content-Type':'application/"
+            "json'},body:JSON.stringify({reinit:true})}).then(r=>r.json()).then"
+            "(res=>{showStatus(res.msg||'Re-scan I2C BNO055 solicitado!');"
+            "setTimeout(pollCompassDebug,400);}).catch(()=>{});}";
+    html += "function cfgDiagCompass(){fetch('/api/compass/"
+            "calibrate',{method:'POST',headers:{'Content-Type':'application/"
+            "json'},body:JSON.stringify({diag:true})}).then(r=>r.json()).then("
+            "res=>{showStatus(res.msg||'Diagnóstico BNO055 enviado para a "
+            "Consola!');}).catch(()=>{});}";
     html += "function saveAllConfig(e){";
     html += "  e.preventDefault();";
     html += "  const id=parseInt(document.getElementById('cfg_id').value);";
@@ -1718,6 +2231,10 @@ private:
     html += "  const "
             "ledBrt=parseInt(document.getElementById('cfg_led_bright')?.value??"
             "100);";
+    html += "  const "
+            "c6LedBrt=parseInt(document.getElementById('cfg_c6_led_bright')?."
+            "value??80);";
+    html += "  const c6Colors=getC6ModeColorsFromUI();";
     html += "  fetch('/api/rover/config',{";
     html += "    method:'POST',";
     html += "    headers:{'Content-Type':'application/json'},";
@@ -1725,8 +2242,9 @@ private:
             "body:JSON.stringify({rover_id:id,ap_ssid:ssid,ap_password:pass,"
             "screen_brightness:bright,rack_angle_engaged:rEng,rack_angle_"
             "released:rRel,rack_inverted:rInv,anchor_drum_diam_mm:dDiam,anchor_"
-    "pulses_per_rev:pRev,joystick_enabled:joyEn,led_count:ledCnt,led_"
-    "brightness:ledBrt})";
+            "pulses_per_rev:pRev,joystick_enabled:joyEn,led_count:ledCnt,led_"
+            "brightness:ledBrt,c6_led_brightness:c6LedBrt,c6_mode_colors:"
+            "c6Colors})";
     html += "  }).then(r=>r.json()).then(res=>{";
     html += "    if(res.success){";
     html += "      showStatus(res.msg||'Configurações guardadas com sucesso no "
@@ -3320,11 +3838,16 @@ private:
     g["gps_cog"] = _gps.getGpsCourse();
     g["compass_active"] = _gps.hasCompass();
     g["heading_source"] = _gps.hasCompass() ? "BNO055" : "GPS_COG";
+    g["compass_heading"] = _gps.getCompassHeading();
+    g["compass_raw_heading"] = _gps.getCompassRawHeading();
     g["roll"] = _gps.getRoll();
     g["pitch"] = _gps.getPitch();
     g["compass_cal_sys"] = _gps.getCompassCalSys();
+    g["compass_cal_gyro"] = _gps.getCompassCalGyro();
+    g["compass_cal_accel"] = _gps.getCompassCalAccel();
     g["compass_cal_mag"] = _gps.getCompassCalMag();
     g["compass_offset"] = _gps.getCompassOffset();
+    g["compass_i2c_addr"] = _gps.getCompassI2cAddr();
     g["satellites"] = _gps.getSatellites();
     g["fix"] = _gps.hasFix();
     g["chars_processed"] = _gps.getCharsProcessed();
@@ -3335,6 +3858,21 @@ private:
     g["bytes"] = _gps.getTotalBytes();
     g["raw"] = _gps.getRawSentence();
     g["rate_hz"] = _gps.getRateHz();
+
+    JsonObject cmp = doc["compass"].to<JsonObject>();
+    cmp["active"] = _gps.hasCompass();
+    cmp["source"] = _gps.hasCompass() ? "BNO055" : "GPS_COG";
+    cmp["heading"] = _gps.getCompassHeading();
+    cmp["raw_heading"] = _gps.getCompassRawHeading();
+    cmp["fused_heading"] = _gps.getHeading();
+    cmp["offset"] = _gps.getCompassOffset();
+    cmp["roll"] = _gps.getRoll();
+    cmp["pitch"] = _gps.getPitch();
+    cmp["cal_sys"] = _gps.getCompassCalSys();
+    cmp["cal_gyro"] = _gps.getCompassCalGyro();
+    cmp["cal_accel"] = _gps.getCompassCalAccel();
+    cmp["cal_mag"] = _gps.getCompassCalMag();
+    cmp["i2c_addr"] = _gps.getCompassI2cAddr();
 
     JsonObject b = doc["battery"].to<JsonObject>();
     b["pct"] = _battery.getPercentage();
@@ -3378,6 +3916,11 @@ private:
     a["led_b"] = _actuators.getLedB();
     a["led_brightness"] = _config.getLedBrightness();
     a["led_count"] = _config.getLedCount();
+    a["c6_led_brightness"] = _config.getC6LedBrightness();
+    JsonArray c6Cols = a["c6_mode_colors"].to<JsonArray>();
+    for (uint8_t i = 0; i < 7; i++) {
+      c6Cols.add(_config.getC6ModeColor(i));
+    }
 
     JsonObject w = doc["wifi"].to<JsonObject>();
     w["is_ap"] = _wifi.isAPMode();
@@ -3527,6 +4070,13 @@ private:
     doc["led_r"] = _actuators.getLedR();
     doc["led_g"] = _actuators.getLedG();
     doc["led_b"] = _actuators.getLedB();
+    doc["c6_led_brightness"] = _config.getC6LedBrightness();
+    JsonArray c6Colors = doc["c6_mode_colors"].to<JsonArray>();
+    for (uint8_t i = 0; i < 7; i++) {
+      c6Colors.add(_config.getC6ModeColor(i));
+    }
+    doc["motor_status"] = _motorStatus;
+    doc["motor_status_str"] = get_motor_status_str(_motorStatus);
     doc["sd_ready"] = _sd.isReady();
     doc["has_config_file"] = (_sd.isReady() && _sd.fileExists("/config.json"));
     doc["version_lafvin"] = ROVER_LAFVIN_VERSION;
@@ -3626,6 +4176,32 @@ private:
         _commandQueueCb(lCmd);
       }
     }
+    bool c6LedUpdated = false;
+    if (doc["c6_led_brightness"].is<int>()) {
+      int cb = constrain(doc["c6_led_brightness"].as<int>(), 0, 100);
+      _config.setC6LedBrightness((uint8_t)cb, false);
+      c6LedUpdated = true;
+    }
+    if (doc["c6_mode_colors"].is<JsonArray>()) {
+      JsonArray arr = doc["c6_mode_colors"].as<JsonArray>();
+      uint8_t idx = 0;
+      for (JsonVariant v : arr) {
+        if (idx >= 7)
+          break;
+        if (v.is<const char *>()) {
+          _config.setC6ModeColor(idx, v.as<String>(), false);
+        }
+        idx++;
+      }
+      c6LedUpdated = true;
+    }
+    if (c6LedUpdated) {
+      _config.saveConfig();
+      if (_commandQueueCb) {
+        String c6Cmd = _config.buildC6LedCfgCommand();
+        _commandQueueCb(c6Cmd.c_str());
+      }
+    }
     _roverId = _config.getRoverId();
     _battery.setCellCount(cells);
     if (cap >= 500 && cap <= 50000) {
@@ -3653,6 +4229,11 @@ private:
     res["joystick_enabled"] = _config.isJoystickEnabled();
     res["led_count"] = _config.getLedCount();
     res["led_brightness"] = _config.getLedBrightness();
+    res["c6_led_brightness"] = _config.getC6LedBrightness();
+    JsonArray resC6Cols = res["c6_mode_colors"].to<JsonArray>();
+    for (uint8_t i = 0; i < 7; i++) {
+      resC6Cols.add(_config.getC6ModeColor(i));
+    }
 
     String out;
     serializeJson(res, out);
@@ -3781,6 +4362,8 @@ private:
       snprintf(lCmd, sizeof(lCmd), "CMD:LED:CFG:%u:%u", _config.getLedCount(),
                _config.getLedBrightness());
       _commandQueueCb(lCmd);
+      String c6Cmd = _config.buildC6LedCfgCommand();
+      _commandQueueCb(c6Cmd.c_str());
     }
 
     JsonDocument res;
@@ -3794,6 +4377,11 @@ private:
     res["joystick_enabled"] = _config.isJoystickEnabled();
     res["led_count"] = _config.getLedCount();
     res["led_brightness"] = _config.getLedBrightness();
+    res["c6_led_brightness"] = _config.getC6LedBrightness();
+    JsonArray resC6Cols = res["c6_mode_colors"].to<JsonArray>();
+    for (uint8_t i = 0; i < 7; i++) {
+      resC6Cols.add(_config.getC6ModeColor(i));
+    }
 
     String out;
     serializeJson(res, out);
@@ -4457,6 +5045,131 @@ private:
     res["led_b"] = _actuators.getLedB();
     res["led_brightness"] = _actuators.getLedBrightness();
     res["led_count"] = _actuators.getLedCount();
+    String out;
+    serializeJson(res, out);
+    _server.send(200, "application/json", out);
+  }
+
+  void handleApiC6LedControl() {
+    if (_server.method() == HTTP_GET && !_server.hasArg("brightness") &&
+        !_server.hasArg("test_hex")) {
+      JsonDocument res;
+      res["success"] = true;
+      res["c6_led_brightness"] = _config.getC6LedBrightness();
+      JsonArray arr = res["c6_mode_colors"].to<JsonArray>();
+      for (uint8_t i = 0; i < 7; i++) {
+        arr.add(_config.getC6ModeColor(i));
+      }
+      res["motor_status"] = _motorStatus;
+      res["motor_status_str"] = get_motor_status_str(_motorStatus);
+      String out;
+      serializeJson(res, out);
+      _server.send(200, "application/json", out);
+      return;
+    }
+
+    JsonDocument doc;
+    if (_server.hasArg("plain")) {
+      deserializeJson(doc, _server.arg("plain"));
+    }
+
+    String msg = "Configuração do LED RGB da C6 atualizada!";
+    bool shouldSave = doc["save"].as<bool>();
+
+    // 1. Repor cores padrão
+    if (doc["reset_defaults"].as<bool>()) {
+      _config.resetC6ModeColorsDefault(true);
+      if (_commandQueueCb) {
+        String cmd = _config.buildC6LedCfgCommand();
+        _commandQueueCb(cmd.c_str());
+      }
+      msg = "Cores padrão por modo do LED da C6 repostas e guardadas!";
+    }
+    // 2. Pré-visualização rápida de uma cor no LED da C6 (3 segundos)
+    else if (doc["test_hex"].is<const char *>()) {
+      String hex = RoverConfigManager::normalizeHexColor(
+          doc["test_hex"].as<String>(), "#06B6D4");
+      String rawHex = hex.startsWith("#") ? hex.substring(1) : hex;
+      if (_commandQueueCb) {
+        String cmd = "CMD:C6LED:TEST:" + rawHex;
+        _commandQueueCb(cmd.c_str());
+      }
+      msg = "A testar a cor " + hex + " no LED RGB da C6 (GPIO 8) durante 3s!";
+    }
+    // 3. Alteração individual da cor de um modo específico
+    else if (doc["mode_index"].is<int>() && doc["hex"].is<const char *>()) {
+      int idx = doc["mode_index"].as<int>();
+      if (idx >= 0 && idx < 7) {
+        _config.setC6ModeColor((uint8_t)idx, doc["hex"].as<String>(), true);
+        String hex = _config.getC6ModeColor((uint8_t)idx);
+        String rawHex = hex.startsWith("#") ? hex.substring(1) : hex;
+        if (_commandQueueCb) {
+          char cmd[40];
+          snprintf(cmd, sizeof(cmd), "CMD:C6LED:MODE:%d:%s", idx,
+                   rawHex.c_str());
+          _commandQueueCb(cmd);
+        }
+        msg = String("Cor do modo ") + get_motor_status_str((uint8_t)idx) +
+              " definida para " + hex + " no LED da C6!";
+      }
+    }
+    // 4. Atualização de intensidade e/ou tabela completa de cores por modo
+    else {
+      bool hasBrt =
+          doc["brightness"].is<int>() || doc["c6_led_brightness"].is<int>();
+      bool hasColors = doc["mode_colors"].is<JsonArray>() ||
+                       doc["c6_mode_colors"].is<JsonArray>();
+
+      if (hasBrt) {
+        int b = doc["brightness"].is<int>()
+                    ? doc["brightness"].as<int>()
+                    : doc["c6_led_brightness"].as<int>();
+        _config.setC6LedBrightness((uint8_t)constrain(b, 0, 100), false);
+      }
+
+      if (hasColors) {
+        JsonArray arr = doc["mode_colors"].is<JsonArray>()
+                            ? doc["mode_colors"].as<JsonArray>()
+                            : doc["c6_mode_colors"].as<JsonArray>();
+        uint8_t idx = 0;
+        for (JsonVariant v : arr) {
+          if (idx >= 7)
+            break;
+          if (v.is<const char *>()) {
+            _config.setC6ModeColor(idx, v.as<String>(), false);
+          }
+          idx++;
+        }
+      }
+
+      if (shouldSave || hasColors) {
+        _config.saveConfig();
+        if (_commandQueueCb) {
+          String cmd = _config.buildC6LedCfgCommand();
+          _commandQueueCb(cmd.c_str());
+        }
+        msg = String("Configuração do LED da C6 guardada (Intensidade: ") +
+              _config.getC6LedBrightness() + "% + 7 modos)!";
+      } else if (hasBrt) {
+        if (_commandQueueCb) {
+          char cmd[32];
+          snprintf(cmd, sizeof(cmd), "CMD:C6LED:BRIGHT:%u",
+                   _config.getC6LedBrightness());
+          _commandQueueCb(cmd);
+        }
+        msg = String("Intensidade do LED da C6 ajustada para ") +
+              _config.getC6LedBrightness() + "%";
+      }
+    }
+
+    JsonDocument res;
+    res["success"] = true;
+    res["msg"] = msg;
+    res["c6_led_brightness"] = _config.getC6LedBrightness();
+    JsonArray arr = res["c6_mode_colors"].to<JsonArray>();
+    for (uint8_t i = 0; i < 7; i++) {
+      arr.add(_config.getC6ModeColor(i));
+    }
     String out;
     serializeJson(res, out);
     _server.send(200, "application/json", out);

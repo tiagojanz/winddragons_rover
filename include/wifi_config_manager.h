@@ -15,6 +15,12 @@ struct SavedNetwork {
     bool is_default;
 };
 
+struct ScannedNetwork {
+    String ssid;
+    int32_t rssi;
+    bool open;
+};
+
 class WiFiConfigManager {
 public:
     WiFiConfigManager() : _isApMode(false), _apSsid("WindDragons-Base"), _apPass("12345678"), _sdCard(nullptr) {}
@@ -164,6 +170,63 @@ public:
 
     const std::vector<SavedNetwork>& getNetworks() const {
         return _networks;
+    }
+
+    bool hasSavedNetwork(const String &ssid) const {
+        if (ssid.length() == 0) return false;
+        for (const auto &n : _networks) {
+            if (n.ssid == "WIFI_NETWORK_NAME") continue;
+            if (n.ssid.equalsIgnoreCase(ssid)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    const std::vector<ScannedNetwork>& getScannedNetworks() const {
+        return _scannedNetworks;
+    }
+
+    const std::vector<ScannedNetwork>& scanNetworks() {
+        _scannedNetworks.clear();
+        // Se estiver em AP puro, ativar AP+STA para permitir scan sem desligar o AP
+        wifi_mode_t curMode = WiFi.getMode();
+        if (curMode == WIFI_AP) {
+            WiFi.mode(WIFI_AP_STA);
+            delay(50);
+        } else if (curMode == WIFI_OFF) {
+            WiFi.mode(WIFI_STA);
+            delay(50);
+        }
+
+        int n = WiFi.scanNetworks(false, false);
+        if (n > 0) {
+            for (int i = 0; i < n; ++i) {
+                String s = WiFi.SSID(i);
+                if (s.length() == 0) continue;
+                int32_t r = WiFi.RSSI(i);
+                bool isOpen = (WiFi.encryptionType(i) == WIFI_AUTH_OPEN);
+
+                // Evitar SSIDs duplicados (manter o de melhor sinal)
+                bool exists = false;
+                for (auto &item : _scannedNetworks) {
+                    if (item.ssid.equalsIgnoreCase(s)) {
+                        if (r > item.rssi) item.rssi = r;
+                        exists = true;
+                        break;
+                    }
+                }
+                if (!exists) {
+                    ScannedNetwork sn;
+                    sn.ssid = s;
+                    sn.rssi = r;
+                    sn.open = isOpen;
+                    _scannedNetworks.push_back(sn);
+                }
+            }
+        }
+        WiFi.scanDelete();
+        return _scannedNetworks;
     }
 
     bool addOrUpdateNetwork(const String &ssid, const String &password, bool makeDefault = false) {
@@ -401,6 +464,7 @@ private:
     String _apPass;
     String _connectedSsid;
     std::vector<SavedNetwork> _networks;
+    std::vector<ScannedNetwork> _scannedNetworks;
     SDCardManager *_sdCard;
 
     bool attemptConnection(const String &ssid, const String &pass, uint32_t timeoutMs) {

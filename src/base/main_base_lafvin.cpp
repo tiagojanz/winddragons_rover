@@ -50,24 +50,11 @@ BaseLoraDiagnostics baseLoraDiag;
 uint32_t lastControlTxTime = 0;
 const uint32_t CONTROL_TX_INTERVAL_MS = 100; // 10Hz stream de controlo
 
-// Modo de navegação e menu UI
-uint8_t currentNavMode = 0; // 0 = MANUAL, 1 = HOLD STATION
+// Modo de navegação e controlo UI
+uint8_t currentNavMode = 0; // 0 = MANUAL, 1 = HOLD STATION, 2 = RETURN HOME
 uint16_t localCmdId = 1000;
 
-enum UiScreen { SCREEN_PAGES, SCREEN_MENU };
-UiScreen currentScreen = SCREEN_PAGES;
-
-const char *const MENU_ITEMS[] = {"1. MODO MANUAL",   "2. HOLD STATION",
-                                  "3. LANCAR ANCORA", "4. RECOLHER ANCORA",
-                                  "5. PARAR MOTORES", "6. ESTADO BASE",
-                                  "7. TESTE JOYSTICK"};
-const uint8_t MENU_COUNT = sizeof(MENU_ITEMS) / sizeof(MENU_ITEMS[0]);
-uint8_t menuSelectedIndex = 0;
-uint32_t lastMenuActivityMs = 0;
-const char *menuFeedback = nullptr;
-uint32_t menuFeedbackUntilMs = 0;
-
-// Botão BOOT e navegação de ecrãs
+// Botão BOOT
 volatile bool flagPageChange = false;
 volatile uint32_t lastBtnPressTime = 0;
 
@@ -228,10 +215,11 @@ void setup() {
     display.setJoystickScreenEnabled(true);
   }
   webServer.setDisplay(&display);
+  display.setWiFiConfigManager(&wifiConfig);
 
-  // Finalizar ecrã de arranque
+  // Finalizar ecrã de arranque -> vai para o Home Menu
   display.endBootScreen(1200);
-  display.setPage(BASE_PAGE_JOYSTICK);
+  display.setPage(BASE_PAGE_HOME);
 
   // Botão BOOT / Clique Joystick (GPIO 9) gerido com debounce curto/longo em
   // BaseJoystick
@@ -263,13 +251,18 @@ void transmitControlOrCommand() {
   }
 
   // Prioridade 2: Transmissão de controlo manual ao rover selecionado
+  // Apenas conduz o rover por joystick quando no ecrã de Comando Direto
+  // (BASE_PAGE_ROVER_CONTROL)
   uint8_t targetRoverId = fleet.getSelectedRoverId();
   if (targetRoverId == 0)
     targetRoverId = 1;
 
-  int8_t joyThr = (currentScreen != SCREEN_MENU) ? joystick.getThrottle() : 0;
-  int8_t joyRud = (currentScreen != SCREEN_MENU) ? joystick.getRudder() : 0;
-  int8_t joyJog = (currentScreen != SCREEN_MENU) ? joystick.getAnchorJog() : 0;
+  bool inManualControlPage =
+      (display.getCurrentPage() == BASE_PAGE_ROVER_CONTROL &&
+       !display.isControlExitPromptActive());
+  int8_t joyThr = inManualControlPage ? joystick.getThrottle() : 0;
+  int8_t joyRud = inManualControlPage ? joystick.getRudder() : 0;
+  int8_t joyJog = inManualControlPage ? joystick.getAnchorJog() : 0;
   bool joyDeflected = (joyThr != 0 || joyRud != 0 || joyJog != 0);
 
   static uint8_t joyNeutralStopCount = 0;
@@ -321,17 +314,20 @@ void handleUartFromC6() {
 
         if (strncmp(rxBuf, "TELEM:", 6) == 0) {
           // Formato:
-          // TELEM:<id>:<voltMv>:<pct>:<lat7>:<lng7>:<spdCmS>:<head10>:<sats>:<fix>:<motSt>:<ancSt>:<depthCm>:<cmdId>:<rssi>:<snr>
+          // TELEM:<id>:<voltMv>:<pct>:<lat7>:<lng7>:<spdCmS>:<head10>:<sats>:<fix>:<motSt>:<ancSt>:<depthCm>:<cmdId>:<rssi>:<snr>[:<roll10>:<pitch10>:<cmpFlags>]
           uint32_t roverId = 0, batMv = 0, batPct = 0, spdCmS = 0, head10 = 0;
           uint32_t sats = 0, fix = 0, motSt = 0, ancSt = 0, depthCm = 0,
-                   cmdId = 0;
+                   cmdId = 0, cmpFlags = 0;
           long lat7 = 0, lng7 = 0;
           float rssi = 0.0f, snr = 0.0f;
+          int roll10 = 0, pitch10 = 0;
 
-          int parsed = sscanf(
-              rxBuf + 6, "%u:%u:%u:%ld:%ld:%u:%u:%u:%u:%u:%u:%u:%u:%f:%f",
-              &roverId, &batMv, &batPct, &lat7, &lng7, &spdCmS, &head10, &sats,
-              &fix, &motSt, &ancSt, &depthCm, &cmdId, &rssi, &snr);
+          int parsed =
+              sscanf(rxBuf + 6,
+                     "%u:%u:%u:%ld:%ld:%u:%u:%u:%u:%u:%u:%u:%u:%f:%f:%d:%d:%u",
+                     &roverId, &batMv, &batPct, &lat7, &lng7, &spdCmS, &head10,
+                     &sats, &fix, &motSt, &ancSt, &depthCm, &cmdId, &rssi, &snr,
+                     &roll10, &pitch10, &cmpFlags);
           if (parsed >= 12 && roverId > 0) {
             PacketTelemetry pkt;
             memset(&pkt, 0, sizeof(pkt));
@@ -350,20 +346,31 @@ void handleUartFromC6() {
             pkt.anchor_status = (uint8_t)ancSt;
             pkt.anchor_depth_cm = (uint16_t)depthCm;
             pkt.last_cmd_id = (uint16_t)cmdId;
+            pkt.roll_deg10 = (int16_t)roll10;
+            pkt.pitch_deg10 = (int16_t)pitch10;
+            pkt.compass_flags = (uint8_t)cmpFlags;
 
             loraReady = true;
             fleet.updateTelemetry(pkt, (int16_t)rssi);
-            printLog("[BASE LAFVIN] <<< Telemetria Rover #%u (Bat: %.2fV %u%% "
-                     "| RSSI: %.1f dBm)\n",
-                     roverId, batMv / 1000.0f, batPct, rssi);
+            printLog(
+                "[BASE LAFVIN] <<< Telemetria Rover #%u (Bat: %.2fV %u%% "
+                "| Proa: %.1f° [%s] Roll:%.1f° Pitch:%.1f° | RSSI: %.1f dBm)\n",
+                roverId, batMv / 1000.0f, batPct, head10 / 10.0f,
+                unpack_compass_active((uint8_t)cmpFlags) ? "BNO055" : "GPS",
+                roll10 / 10.0f, pitch10 / 10.0f, rssi);
           }
         } else if (strncmp(rxBuf, "PONG:OTA:", 9) == 0) {
           printLog("[BASE LAFVIN] ★ C6 OTA: %s\n", rxBuf + 9);
           webServer.setC6OtaStatus(rxBuf + 9);
         } else if (strncmp(rxBuf, "PONG:VER:", 9) == 0) {
+          bool firstHandshake = webServer.getC6Version().isEmpty();
           printLog("[BASE LAFVIN] ★ Versao Coprocessador C6: %s\n", rxBuf + 9);
           webServer.setC6Version(rxBuf + 9);
           display.setC6Version(rxBuf + 9);
+          if (firstHandshake) {
+            String ledCfgCmd = fleet.buildC6LedCfgCommand();
+            interSerial.println(ledCfgCmd);
+          }
         } else if (strncmp(rxBuf, "LORA_STAT:", 10) == 0) {
           char st[16] = "OK";
           uint32_t txP = 0, rxT = 0, ago = 999999;
@@ -397,119 +404,472 @@ void handleUartFromC6() {
 }
 
 void handleInputsAndMenu(uint32_t now, bool &forceDisplay) {
+  (void)now;
   joystick.update();
   static bool lastModeRaw = false;
   bool curModeRaw = (digitalRead(PIN_BTN_MODE) == LOW);
   bool btnModeEdge = (curModeRaw && !lastModeRaw);
   lastModeRaw = curModeRaw;
 
-  if (currentScreen == SCREEN_PAGES) {
-    BaseScreenPage page = display.getCurrentPage();
+  BaseScreenPage page = display.getCurrentPage();
 
-    // Clique curto no Joystick / BOOT (GPIO 9): avança para o próximo ecrã
-    if (joystick.wasShortClicked()) {
-      display.nextPage();
-      forceDisplay = true;
-      printLog("[BASE] Ecrã alterado para página %d\n",
-               display.getCurrentPage());
-      return;
-    }
+  // Páginas interativas de Joystick (Teste de Joystick e Comando Manual
+  // Direto): Para sair: manter BOOT premido durante 3 segundos -> abre modal
+  // "SAIR | CONTINUAR"
+  if (page == BASE_PAGE_CONFIG_JOY || page == BASE_PAGE_ROVER_CONTROL) {
+    BaseScreenPage parentPage = (page == BASE_PAGE_CONFIG_JOY)
+                                    ? BASE_PAGE_CONFIG_MENU
+                                    : BASE_PAGE_ROVER_MENU;
+    if (!display.isControlExitPromptActive()) {
+      // Atualizar barra visual de hold BOOT (3 segundos)
+      display.setBootHoldProgressPct(joystick.getBootHoldProgressPct(3000));
+      // Consumir cliques curtos/longos normais para não sair acidentalmente
+      joystick.wasShortClicked();
+      joystick.wasLongClicked();
 
-    // Pressão longa (>700ms) no Joystick / BOOT ou botão MODE (GPIO 19): abre
-    // Menu de Controlo
-    if (joystick.wasLongClicked() || btnModeEdge) {
-      if (page == BASE_PAGE_JOYSTICK && btnModeEdge) {
-        display.setPage(BASE_PAGE_STATION);
+      if (joystick.wasBootHeld3s()) {
+        display.setBootHoldProgressPct(0);
+        display.setControlExitPromptActive(true);
+        joystick.disarmNavX();
         forceDisplay = true;
+        printLog("[UI] Hold BOOT 3s -> Mostrar opcao SAIR | CONTINUAR\n");
+      }
+    } else {
+      // Prompt "SAIR | CONTINUAR" ativo:
+      // Y alterna entre SAIR (0) e CONTINUAR (1); X-> ou Clique BOOT confirma
+      int8_t navY = joystick.getNavY();
+      int8_t navX = joystick.getNavX();
+      bool bootClick = joystick.wasShortClicked();
+      joystick.wasLongClicked();
+      joystick.wasBootHeld3s();
+
+      if (navY != 0) {
+        display.setControlExitCursorIdx(
+            (display.getControlExitCursorIdx() + 1) % 2);
+        forceDisplay = true;
+      } else if (navX == 1 || bootClick) {
+        if (display.getControlExitCursorIdx() == 0) {
+          // SAIR selecionado -> Volta para o menu pai
+          display.setControlExitPromptActive(false);
+          display.setPage(parentPage);
+          forceDisplay = true;
+          printLog("[UI] Confirmou SAIR -> Menu Pai\n");
+        } else {
+          // CONTINUAR selecionado -> Fecha o popup e permanece na página
+          display.setControlExitPromptActive(false);
+          forceDisplay = true;
+          printLog("[UI] Confirmou CONTINUAR\n");
+        }
+      } else if (navX == -1) {
+        if (display.getControlExitCursorIdx() == 1) {
+          display.setControlExitCursorIdx(0);
+          forceDisplay = true;
+        } else {
+          display.setControlExitPromptActive(false);
+          display.setPage(parentPage);
+          forceDisplay = true;
+          printLog("[UI] Saiu -> Menu Pai\n");
+        }
+      }
+    }
+    return;
+  }
+
+  // Ecrã de inserção de Password WiFi com teclado QWERTY (navegação 2D por X e
+  // Y):
+  if (page == BASE_PAGE_CONFIG_WIFI_PASS) {
+    int8_t dx = joystick.getNavXRepeat();
+    int8_t dy = joystick.getNavY();
+    bool keyClick = joystick.wasShortClicked();
+    bool longCancel = joystick.wasLongClicked();
+    joystick.wasBootHeld3s();
+
+    if (dx != 0 || dy != 0) {
+      display.moveWifiKbCursor(dx, dy);
+      forceDisplay = true;
+    }
+    if (btnModeEdge) {
+      display.backspaceWifiPass();
+      forceDisplay = true;
+    } else if (longCancel) {
+      display.setPage(BASE_PAGE_CONFIG_WIFI_SCAN);
+      joystick.disarmNavX();
+      forceDisplay = true;
+      printLog("[UI] Password WiFi cancelada -> Scan\n");
+    } else if (keyClick) {
+      uint8_t act = display.pressWifiKbKey();
+      forceDisplay = true;
+      if (act == 1) {
+        // SAIR
+        display.setPage(BASE_PAGE_CONFIG_WIFI_SCAN);
+        joystick.disarmNavX();
+        printLog("[UI] Password WiFi: SAIR -> Scan\n");
+      } else if (act == 2) {
+        // LIGAR: guardar credenciais e conectar
+        String targetSsid = display.getWifiTargetSsid();
+        String targetPass = display.getWifiPassBuf();
+        printLog("[UI] A guardar e ligar a rede WiFi: %s\n",
+                 targetSsid.c_str());
+        display.showWifiConnectingScreen(targetSsid.c_str());
+        wifiConfig.addOrUpdateNetwork(targetSsid, targetPass, true);
+        bool ok = wifiConfig.connectTo(targetSsid, 8000);
+        joystick.disarmNavX();
+        if (ok) {
+          display.showFeedback("WIFI GUARDADO E LIGADO!", 2000);
+          printLog("[UI] Conectado a nova rede WiFi: %s (%s)\n",
+                   targetSsid.c_str(), wifiConfig.getIPAddress().c_str());
+        } else {
+          wifiConfig.startAccessPoint("WindDragons-Base", "12345678");
+          display.showFeedback("FALHA! MODO AP ATIVO", 2000);
+          printLog("[UI] Falha ao ligar a %s -> Fallback Modo AP\n",
+                   targetSsid.c_str());
+        }
+        display.setPage(BASE_PAGE_CONFIG_WIFI);
+        forceDisplay = true;
+      }
+    }
+    return;
+  }
+
+  // Navegação padrão por Joystick:
+  // Eixo Y: itera por cada menu (-1 = Cima, +1 = Baixo)
+  // Eixo X Esquerda (-1): sai da página para o menu/página pai
+  // Eixo X Direita (+1): entra na página ou confirma seleção
+  int8_t navY = joystick.getNavY();
+  int8_t navX = joystick.getNavX();
+  bool clickEnter = joystick.wasShortClicked();
+  bool clickBack = btnModeEdge || joystick.wasLongClicked();
+
+  switch (page) {
+  case BASE_PAGE_HOME:
+    if (navY != 0) {
+      display.setHomeMenuIdx((display.getHomeMenuIdx() + 2 + navY) % 2);
+      forceDisplay = true;
+    }
+    if (navX == 1 || clickEnter) {
+      if (display.getHomeMenuIdx() == 0) {
+        display.setPage(BASE_PAGE_MISSION_MENU);
+        printLog("[UI] Home -> Missao\n");
       } else {
-        currentScreen = SCREEN_MENU;
-        menuSelectedIndex = 0;
-        lastMenuActivityMs = now;
-        menuFeedback = nullptr;
-        forceDisplay = true;
-        printLog("[BASE] Abriu Menu de Controlo\n");
+        display.setPage(BASE_PAGE_CONFIG_MENU);
+        printLog("[UI] Home -> Configuracoes\n");
       }
-    }
-  } else if (currentScreen == SCREEN_MENU) {
-    int8_t step = joystick.getMenuNavStep();
-    if (step != 0) {
-      menuSelectedIndex = (menuSelectedIndex + step + MENU_COUNT) % MENU_COUNT;
-      lastMenuActivityMs = now;
       forceDisplay = true;
     }
+    break;
 
-    if (joystick.wasLongClicked() || btnModeEdge) {
-      currentScreen = SCREEN_PAGES;
-      menuFeedback = nullptr;
+  case BASE_PAGE_MISSION_MENU:
+    if (navY != 0) {
+      display.setMissionMenuIdx((display.getMissionMenuIdx() + 2 + navY) % 2);
       forceDisplay = true;
-      return;
     }
-
-    if (joystick.wasShortClicked()) {
-      lastMenuActivityMs = now;
+    if (navX == -1 || clickBack) {
+      display.setPage(BASE_PAGE_HOME);
       forceDisplay = true;
-      switch (menuSelectedIndex) {
-      case 0: // MODO MANUAL
+      printLog("[UI] Missao -> Home\n");
+    } else if (navX == 1 || clickEnter) {
+      if (display.getMissionMenuIdx() == 0) {
+        display.setStateCursorIdx((uint8_t)fleet.getOperationState());
+        display.setPage(BASE_PAGE_MISSION_STATE);
+        printLog("[UI] Missao -> Estado\n");
+      } else {
+        const auto &rovers = fleet.getRovers();
+        uint8_t selId = fleet.getSelectedRoverId();
+        for (size_t i = 0; i < rovers.size(); ++i) {
+          if (rovers[i].id == selId) {
+            display.setRoverListIdx((uint8_t)i, rovers.size());
+            break;
+          }
+        }
+        display.setPage(BASE_PAGE_ROVER_LIST);
+        printLog("[UI] Missao -> Lista de Rovers\n");
+      }
+      forceDisplay = true;
+    }
+    break;
+
+  case BASE_PAGE_MISSION_STATE:
+    if (navY != 0) {
+      display.setStateCursorIdx((display.getStateCursorIdx() + 4 + navY) % 4);
+      forceDisplay = true;
+    }
+    if (navX == -1 || clickBack) {
+      display.setPage(BASE_PAGE_MISSION_MENU);
+      forceDisplay = true;
+      printLog("[UI] Estado -> Missao\n");
+    } else if (navX == 1 || clickEnter) {
+      BaseOperationState newSt =
+          static_cast<BaseOperationState>(display.getStateCursorIdx());
+      fleet.setOperationState(newSt);
+      char fb[40];
+      snprintf(fb, sizeof(fb), "ESTADO: %s", fleet.getOperationStateStr());
+      display.showFeedback(fb, 1500);
+      forceDisplay = true;
+      printLog("[UI] Estado da Missao alterado para: %s\n",
+               fleet.getOperationStateStr());
+    }
+    break;
+
+  case BASE_PAGE_ROVER_LIST: {
+    const auto &rovers = fleet.getRovers();
+    size_t total = rovers.size();
+    if (navY != 0 && total > 0) {
+      uint8_t nextIdx = (display.getRoverListIdx() + total + navY) % total;
+      display.setRoverListIdx(nextIdx, total);
+      fleet.selectRoverById(rovers[nextIdx].id);
+      forceDisplay = true;
+    }
+    if (navX == -1 || clickBack) {
+      display.setPage(BASE_PAGE_MISSION_MENU);
+      forceDisplay = true;
+      printLog("[UI] Lista de Rovers -> Missao\n");
+    } else if ((navX == 1 || clickEnter) && total > 0) {
+      uint8_t idx = display.getRoverListIdx();
+      if (idx < total) {
+        fleet.selectRoverById(rovers[idx].id);
+      }
+      display.setRoverMenuIdx(0);
+      display.setPage(BASE_PAGE_ROVER_MENU);
+      forceDisplay = true;
+      printLog("[UI] Lista de Rovers -> Rover #%u\n",
+               fleet.getSelectedRoverId());
+    }
+    break;
+  }
+
+  case BASE_PAGE_ROVER_MENU:
+    if (navY != 0) {
+      display.setRoverMenuIdx((display.getRoverMenuIdx() + 2 + navY) % 2);
+      forceDisplay = true;
+    }
+    if (navX == -1 || clickBack) {
+      display.setPage(BASE_PAGE_ROVER_LIST);
+      forceDisplay = true;
+      printLog("[UI] Rover Menu -> Lista de Rovers\n");
+    } else if (navX == 1 || clickEnter) {
+      if (display.getRoverMenuIdx() == 0) {
+        display.setRoverModeIdx(currentNavMode < 3 ? currentNavMode : 0);
+        display.setPage(BASE_PAGE_ROVER_MODE);
+        printLog("[UI] Rover Menu -> Modo\n");
+      } else {
+        joystick.wasBootHeld3s();
+        display.setControlExitPromptActive(false);
+        display.setBootHoldProgressPct(0);
+        display.setPage(BASE_PAGE_ROVER_CONTROL);
+        printLog("[UI] Rover Menu -> Comando\n");
+      }
+      forceDisplay = true;
+    }
+    break;
+
+  case BASE_PAGE_ROVER_MODE:
+    if (navY != 0) {
+      display.setRoverModeIdx((display.getRoverModeIdx() + 3 + navY) % 3);
+      forceDisplay = true;
+    }
+    if (navX == -1 || clickBack) {
+      display.setPage(BASE_PAGE_ROVER_MENU);
+      forceDisplay = true;
+      printLog("[UI] Modo -> Rover Menu\n");
+    } else if (navX == 1 || clickEnter) {
+      uint8_t rId = fleet.getSelectedRoverId();
+      uint8_t mIdx = display.getRoverModeIdx();
+      if (mIdx == 0) {
         currentNavMode = 0;
-        fleet.queueCommand(fleet.getSelectedRoverId(), ++localCmdId,
-                           ACTION_MANUAL);
-        menuFeedback = "MODO MANUAL OK";
-        break;
-      case 1: // HOLD STATION (ANCORA VIRTUAL)
+        fleet.queueCommand(rId, ++localCmdId, ACTION_MANUAL);
+        display.showFeedback("MODO MANUAL ENVIADO!", 1500);
+      } else if (mIdx == 1) {
         currentNavMode = 1;
-        fleet.queueCommand(fleet.getSelectedRoverId(), ++localCmdId,
-                           ACTION_HOLD_STATION);
-        menuFeedback = "HOLD STATION OK";
-        break;
-      case 2: // LANCAR ANCORA
-        fleet.queueCommand(fleet.getSelectedRoverId(), ++localCmdId,
-                           ACTION_DROP_ANCHOR, 500);
-        menuFeedback = "ANCORA A DESCER";
-        break;
-      case 3: // RECOLHER ANCORA
-        fleet.queueCommand(fleet.getSelectedRoverId(), ++localCmdId,
-                           ACTION_RETRIEVE_ANCHOR);
-        menuFeedback = "A RECOLHER...";
-        break;
-      case 4: // PARAR MOTORES
-        fleet.queueCommand(fleet.getSelectedRoverId(), ++localCmdId,
-                           ACTION_STOP);
-        currentNavMode = 0;
-        menuFeedback = "MOTORES PARADOS";
-        break;
-      case 5: // ALTERNAR ESTADO BASE (STORAGE -> WAITING -> IDLE -> GO)
-      {
-        BaseOperationState cur = fleet.getOperationState();
-        BaseOperationState nxt = static_cast<BaseOperationState>((cur + 1) % 4);
-        fleet.setOperationState(nxt);
-        menuFeedback = fleet.getOperationStateStr();
-      } break;
-      case 6: // TESTE JOYSTICK
-        display.setJoystickScreenEnabled(true);
-        display.setPage(BASE_PAGE_JOYSTICK);
-        currentScreen = SCREEN_PAGES;
-        break;
-      default:
-        currentScreen = SCREEN_PAGES;
-        break;
+        fleet.queueCommand(rId, ++localCmdId, ACTION_HOLD_STATION);
+        display.showFeedback("MODO HOLD ENVIADO!", 1500);
+      } else {
+        currentNavMode = 2;
+        fleet.queueCommand(rId, ++localCmdId, ACTION_RTL);
+        display.showFeedback("RETURN HOME ENVIADO!", 1500);
       }
-
-      if (currentScreen == SCREEN_MENU) {
-        menuFeedbackUntilMs = now + 800;
-      }
+      forceDisplay = true;
+      printLog("[UI] Modo #%u enviado ao Rover #%u\n", mIdx, rId);
     }
+    break;
 
-    if (menuFeedback && now > menuFeedbackUntilMs) {
-      currentScreen = SCREEN_PAGES;
-      menuFeedback = nullptr;
+  case BASE_PAGE_CONFIG_MENU:
+    if (navY != 0) {
+      display.setConfigMenuIdx((display.getConfigMenuIdx() + 5 + navY) % 5);
       forceDisplay = true;
     }
-
-    if (now - lastMenuActivityMs > 8000) {
-      currentScreen = SCREEN_PAGES;
-      menuFeedback = nullptr;
+    if (navX == -1 || clickBack) {
+      display.setPage(BASE_PAGE_HOME);
+      forceDisplay = true;
+      printLog("[UI] Configuracoes -> Home\n");
+    } else if (navX == 1 || clickEnter) {
+      uint8_t cIdx = display.getConfigMenuIdx();
+      if (cIdx == 0) {
+        display.setPage(BASE_PAGE_CONFIG_WIFI);
+        printLog("[UI] Configuracoes -> WiFi\n");
+      } else if (cIdx == 1) {
+        joystick.wasBootHeld3s();
+        display.setControlExitPromptActive(false);
+        display.setBootHoldProgressPct(0);
+        display.setPage(BASE_PAGE_CONFIG_JOY);
+        printLog("[UI] Configuracoes -> Joystick\n");
+      } else if (cIdx == 2) {
+        display.setPage(BASE_PAGE_CONFIG_ID);
+        printLog("[UI] Configuracoes -> ID\n");
+      } else if (cIdx == 3) {
+        display.setPage(BASE_PAGE_CONFIG_FW);
+        printLog("[UI] Configuracoes -> Firmware\n");
+      } else {
+        display.setPage(BASE_PAGE_CONFIG_PORTAL);
+        printLog("[UI] Configuracoes -> Portal\n");
+      }
       forceDisplay = true;
     }
+    break;
+
+  case BASE_PAGE_CONFIG_WIFI:
+    if (navX == -1 || clickBack) {
+      display.setPage(BASE_PAGE_CONFIG_MENU);
+      forceDisplay = true;
+      printLog("[UI] WiFi -> Configuracoes\n");
+    } else if (navX == 1 || clickEnter) {
+      const auto &nets = wifiConfig.getNetworks();
+      size_t totalItems = 1 + nets.size(); // 0 = Scan, 1..N = Redes Guardadas
+      display.setWifiListIdx(0, totalItems);
+      display.setPage(BASE_PAGE_CONFIG_WIFI_LIST);
+      forceDisplay = true;
+      printLog("[UI] WiFi -> Lista (Scan + %u redes guardadas)\n",
+               (unsigned)nets.size());
+    }
+    break;
+
+  case BASE_PAGE_CONFIG_WIFI_LIST: {
+    const auto &nets = wifiConfig.getNetworks();
+    size_t total = 1 + nets.size(); // 0 = Scan, 1..N = Redes Guardadas
+    if (navY != 0 && total > 0) {
+      uint8_t nextIdx = (display.getWifiListIdx() + total + navY) % total;
+      display.setWifiListIdx(nextIdx, total);
+      forceDisplay = true;
+    }
+    if (navX == -1 || clickBack) {
+      display.setPage(BASE_PAGE_CONFIG_WIFI);
+      forceDisplay = true;
+      printLog("[UI] Lista -> WiFi\n");
+    } else if (navX == 1 || clickEnter) {
+      uint8_t idx = display.getWifiListIdx();
+      if (idx == 0) {
+        // Item 0: "Scan" -> Varrimento de redes WiFi disponíveis
+        printLog("[UI] A iniciar varrimento de redes WiFi (Scan)...\n");
+        display.showWifiScanningScreen();
+        const auto &scanned = wifiConfig.scanNetworks();
+        joystick.disarmNavX();
+        display.setWifiScanIdx(0, scanned.size());
+        display.setPage(BASE_PAGE_CONFIG_WIFI_SCAN);
+        forceDisplay = true;
+        printLog("[UI] Scan concluido: %u redes encontradas\n",
+                 (unsigned)scanned.size());
+      } else if ((idx - 1) < nets.size()) {
+        String targetSsid = nets[idx - 1].ssid;
+        printLog("[UI] A ligar a rede WiFi guardada: %s\n", targetSsid.c_str());
+        display.showWifiConnectingScreen(targetSsid.c_str());
+        wifiConfig.setDefault(targetSsid);
+        bool ok = wifiConfig.connectTo(targetSsid, 8000);
+        joystick.disarmNavX();
+        if (ok) {
+          display.showFeedback("WIFI CONECTADO!", 2000);
+          printLog("[UI] WiFi conectado com sucesso a: %s (%s)\n",
+                   targetSsid.c_str(), wifiConfig.getIPAddress().c_str());
+        } else {
+          wifiConfig.startAccessPoint("WindDragons-Base", "12345678");
+          display.showFeedback("FALHA! MODO AP ATIVO", 2000);
+          printLog("[UI] Falha ao ligar a %s -> Fallback Modo AP\n",
+                   targetSsid.c_str());
+        }
+        display.setPage(BASE_PAGE_CONFIG_WIFI);
+        forceDisplay = true;
+      }
+    }
+    break;
+  }
+
+  case BASE_PAGE_CONFIG_WIFI_SCAN: {
+    const auto &scanned = wifiConfig.getScannedNetworks();
+    size_t total = scanned.size();
+    if (navY != 0 && total > 0) {
+      uint8_t nextIdx = (display.getWifiScanIdx() + total + navY) % total;
+      display.setWifiScanIdx(nextIdx, total);
+      forceDisplay = true;
+    }
+    if (navX == -1 || clickBack) {
+      display.setPage(BASE_PAGE_CONFIG_WIFI_LIST);
+      forceDisplay = true;
+      printLog("[UI] Scan -> Lista\n");
+    } else if ((navX == 1 || clickEnter) && total > 0) {
+      uint8_t idx = display.getWifiScanIdx();
+      if (idx < total) {
+        const auto &sn = scanned[idx];
+        if (wifiConfig.hasSavedNetwork(sn.ssid)) {
+          // Rede conhecida -> Liga-se diretamente com as credenciais guardadas
+          printLog(
+              "[UI] Rede conhecida selecionada no Scan: %s -> A ligar...\n",
+              sn.ssid.c_str());
+          display.showWifiConnectingScreen(sn.ssid.c_str());
+          wifiConfig.setDefault(sn.ssid);
+          bool ok = wifiConfig.connectTo(sn.ssid, 8000);
+          joystick.disarmNavX();
+          if (ok) {
+            display.showFeedback("WIFI CONECTADO!", 2000);
+          } else {
+            wifiConfig.startAccessPoint("WindDragons-Base", "12345678");
+            display.showFeedback("FALHA! MODO AP ATIVO", 2000);
+          }
+          display.setPage(BASE_PAGE_CONFIG_WIFI);
+          forceDisplay = true;
+        } else if (sn.open) {
+          // Rede aberta sem password -> Guardar e ligar diretamente
+          printLog("[UI] Rede aberta selecionada no Scan: %s -> A ligar...\n",
+                   sn.ssid.c_str());
+          display.showWifiConnectingScreen(sn.ssid.c_str());
+          wifiConfig.addOrUpdateNetwork(sn.ssid, "", true);
+          bool ok = wifiConfig.connectTo(sn.ssid, 8000);
+          joystick.disarmNavX();
+          if (ok) {
+            display.showFeedback("WIFI CONECTADO!", 2000);
+          } else {
+            wifiConfig.startAccessPoint("WindDragons-Base", "12345678");
+            display.showFeedback("FALHA! MODO AP ATIVO", 2000);
+          }
+          display.setPage(BASE_PAGE_CONFIG_WIFI);
+          forceDisplay = true;
+        } else {
+          // Rede desconhecida protegida -> Abrir ecrã QWERTY para inserir
+          // password
+          printLog(
+              "[UI] Rede desconhecida selecionada: %s -> Inserir Password\n",
+              sn.ssid.c_str());
+          display.beginWifiPasswordEntry(sn.ssid.c_str());
+          joystick.disarmNavX();
+          display.setPage(BASE_PAGE_CONFIG_WIFI_PASS);
+          forceDisplay = true;
+        }
+      }
+    }
+    break;
+  }
+
+  case BASE_PAGE_CONFIG_ID:
+  case BASE_PAGE_CONFIG_FW:
+  case BASE_PAGE_CONFIG_PORTAL:
+    if (navX == -1 || clickBack || clickEnter) {
+      display.setPage(BASE_PAGE_CONFIG_MENU);
+      forceDisplay = true;
+      printLog("[UI] Voltou para Configuracoes\n");
+    }
+    break;
+
+  default:
+    display.setPage(BASE_PAGE_HOME);
+    forceDisplay = true;
+    break;
   }
 }
 
@@ -553,7 +913,8 @@ void loop() {
     }
 
     char pingMsg[48];
-    snprintf(pingMsg, sizeof(pingMsg), "PING:%u:1\n", uartSeq);
+    snprintf(pingMsg, sizeof(pingMsg), "PING:%u:%u\n", uartSeq,
+             static_cast<unsigned>(fleet.getOperationState()));
     interSerial.print(pingMsg);
   }
 
@@ -570,38 +931,36 @@ void loop() {
   fleet.checkOnlineStatus();
 
   // 8. Atualizar ecrã LCD ST7789
-  if (currentScreen == SCREEN_MENU) {
-    display.renderMenu(MENU_ITEMS, MENU_COUNT, menuSelectedIndex, menuFeedback);
-  } else {
-    display.update(
-        fleet, network.isConnected(), network.isSyncSuccess(),
-        joystick.getThrottle(), joystick.getRudder(), currentNavMode,
-        sdCard.isReady(), wifiConfig.isAPMode(),
-        wifiConfig.getIPAddress().c_str(), wifiConfig.getSSID().c_str(),
-        wifiConfig.getRSSI(), wifiConfig.getAPStationCount(),
-        wifiConfig.getAPPassword().c_str(), forceDisplay,
-        network.getLastHttpStatus(), network.getSuccessCount(),
-        network.getFailCount(), network.getLastSyncTime(),
-        webServer.getMacAddress().c_str(), joystick.getRawX(),
-        joystick.getRawY(), joystick.getDeadband(), joystick.isBootPressed(),
-        joystick.isModePressed(), joystick.isAnchorUpPressed(),
-        joystick.isAnchorDownPressed(), joystick.getJoyClickCount());
-  }
+  display.update(
+      fleet, network.isConnected(), network.isSyncSuccess(),
+      joystick.getThrottle(), joystick.getRudder(), currentNavMode,
+      sdCard.isReady(), wifiConfig.isAPMode(),
+      wifiConfig.getIPAddress().c_str(), wifiConfig.getSSID().c_str(),
+      wifiConfig.getRSSI(), wifiConfig.getAPStationCount(),
+      wifiConfig.getAPPassword().c_str(), forceDisplay,
+      network.getLastHttpStatus(), network.getSuccessCount(),
+      network.getFailCount(), network.getLastSyncTime(),
+      webServer.getMacAddress().c_str(), joystick.getRawX(), joystick.getRawY(),
+      joystick.getDeadband(), joystick.isBootPressed(),
+      joystick.isModePressed(), joystick.isAnchorUpPressed(),
+      joystick.isAnchorDownPressed(), joystick.getJoyClickCount());
 
-  // 9. Atualizar LED NeoPixel conforme o estado operacional da Base
-  static BaseOperationState lastOpLedState = (BaseOperationState)255;
+  // 9. Atualizar LED NeoPixel conforme o estado operacional da Base e
+  // configuração C6 LED
+  static uint32_t lastLedSyncHash = 0xFFFFFFFF;
   BaseOperationState curOp = fleet.getOperationState();
-  if (curOp != lastOpLedState) {
-    lastOpLedState = curOp;
-    if (curOp == BASE_OP_STORAGE) {
-      setRgbColor(8, 0, 16); // Roxo / Standby
-    } else if (curOp == BASE_OP_WAITING_ROVERS) {
-      setRgbColor(30, 15, 0); // Laranja / À espera de lista
-    } else if (curOp == BASE_OP_IDLE) {
-      setRgbColor(0, 20, 25); // Ciano / Lista pronta
-    } else if (curOp == BASE_OP_GO) {
-      setRgbColor(0, 35, 0); // Verde / Em missão
-    }
+  uint8_t brt = fleet.getC6LedBrightness();
+  String curHex = fleet.getC6ModeColor(static_cast<uint8_t>(curOp));
+  uint32_t hexNum = (curHex.length() >= 7)
+                        ? (uint32_t)strtoul(curHex.c_str() + 1, nullptr, 16)
+                        : 0;
+  uint32_t curHash = (static_cast<uint32_t>(curOp) << 28) ^
+                     (static_cast<uint32_t>(brt) << 20) ^ hexNum;
+  if (curHash != lastLedSyncHash) {
+    lastLedSyncHash = curHash;
+    uint8_t r = 0, g = 0, b = 0;
+    fleet.getScaledModeColorRgb(static_cast<uint8_t>(curOp), r, g, b);
+    setRgbColor(r, g, b);
   }
 
   // 10. Diagnóstico em Tempo Real do Pinout do Joystick via USB Serial

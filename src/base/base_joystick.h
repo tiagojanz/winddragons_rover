@@ -71,22 +71,118 @@ public:
     return false;
   }
 
-  // Menu navigation helper: returns -1 (UP), +1 (DOWN), or 0 (neutral)
-  int8_t getMenuNavStep() {
-    uint32_t now = millis();
-    if (now - lastMenuStepMs < 250)
-      return 0; // Repeat rate limit
+  bool wasBootHeld3s() {
+    if (hold3sOccurred) {
+      hold3sOccurred = false;
+      return true;
+    }
+    return false;
+  }
 
-    if (throttle > 45 || rudder < -45 ||
-        digitalRead(PIN_BTN_ANCHOR_UP) == LOW) {
-      lastMenuStepMs = now;
-      return -1;
-    } else if (throttle < -45 || rudder > 45 ||
-               digitalRead(PIN_BTN_ANCHOR_DOWN) == LOW) {
-      lastMenuStepMs = now;
-      return 1;
+  uint8_t getBootHoldProgressPct(uint32_t targetMs = 3000) const {
+    if (!lastBtnState || hold3sFired) return 0;
+    uint32_t elapsed = millis() - pressStartTime;
+    if (elapsed < 200) return 0;
+    uint32_t pct = (elapsed * 100) / targetMs;
+    return (pct > 100) ? 100 : (uint8_t)pct;
+  }
+
+  // Menu navigation helper (legacy compatibility): returns -1 (UP), +1 (DOWN), or 0 (neutral)
+  int8_t getMenuNavStep() {
+    return getNavY();
+  }
+
+  // Navegação Vertical (Eixo Y do Joystick): -1 = Cima (Anterior), +1 = Baixo (Seguinte), 0 = Neutro
+  int8_t getNavY() {
+    uint32_t now = millis();
+    bool upPressed = (throttle > 45 || digitalRead(PIN_BTN_ANCHOR_UP) == LOW);
+    bool downPressed = (throttle < -45 || digitalRead(PIN_BTN_ANCHOR_DOWN) == LOW);
+
+    if (!upPressed && !downPressed) {
+      if (abs(throttle) < 20) {
+        navYArmed = true;
+      }
+      return 0;
+    }
+
+    if (navYArmed || (now - lastNavYMs >= 260)) {
+      navYArmed = false;
+      lastNavYMs = now;
+      return upPressed ? -1 : 1;
     }
     return 0;
+  }
+
+  // Navegação Horizontal (Eixo X do Joystick): -1 = Esquerda (Sair/Voltar), +1 = Direita (Entrar/Confirmar), 0 = Neutro
+  // Exige retorno ao centro entre ações para evitar saltar múltiplos níveis de menu de uma só vez.
+  int8_t getNavX() {
+    uint32_t now = millis();
+    bool leftPressed = (rudder < -50);
+    bool rightPressed = (rudder > 50);
+
+    if (!leftPressed && !rightPressed) {
+      if (abs(rudder) < 25) {
+        navXArmed = true;
+      }
+      leftHoldStartMs = 0;
+      return 0;
+    }
+
+    if (navXArmed && (now - lastNavXMs >= 220)) {
+      navXArmed = false;
+      lastNavXMs = now;
+      leftHoldStartMs = leftPressed ? now : 0;
+      return leftPressed ? -1 : 1;
+    }
+    return 0;
+  }
+
+  // Navegação Horizontal com auto-repeat (para cursores 2D como teclado QWERTY)
+  int8_t getNavXRepeat() {
+    uint32_t now = millis();
+    bool leftPressed = (rudder < -45);
+    bool rightPressed = (rudder > 45);
+
+    if (!leftPressed && !rightPressed) {
+      if (abs(rudder) < 20) {
+        navXArmed = true;
+      }
+      return 0;
+    }
+
+    if (navXArmed || (now - lastNavXMs >= 200)) {
+      navXArmed = false;
+      lastNavXMs = now;
+      return leftPressed ? -1 : 1;
+    }
+    return 0;
+  }
+
+  // Deteta se o utilizador manteve X para a esquerda (com Y próximo de neutro) para sair de ecrãs interativos (Joystick/Comando)
+  bool isHoldingLeftToExit(uint32_t holdMs = 350) {
+    uint32_t now = millis();
+    if (rudder < -55 && abs(throttle) < 35) {
+      if (leftHoldStartMs == 0) {
+        leftHoldStartMs = now;
+      } else if (!leftHoldFired && (now - leftHoldStartMs >= holdMs)) {
+        leftHoldFired = true;
+        navXArmed = false;
+        lastNavXMs = now;
+        return true;
+      }
+    } else {
+      leftHoldStartMs = 0;
+      if (abs(rudder) < 25) {
+        leftHoldFired = false;
+      }
+    }
+    return false;
+  }
+
+  void disarmNavX() {
+    navXArmed = false;
+    leftHoldFired = true;
+    lastNavXMs = millis();
   }
 
   void update() {
@@ -100,10 +196,9 @@ public:
     rawY = (rawY * 3 + currentY) / 4;
 
     // Mapear Eixo Y (IO0 -> Throttle / Propulsão) com escala adaptativa
-    // (invertido: empurrar para a frente = +100% / bola para cima)
     static int maxUpY = 1200;
     static int maxDownY = 1200;
-    int diffY = centerY - rawY;
+    int diffY = rawY - centerY;
     if (!axisYConnected && rawY > 350 && rawY < 1350) {
       throttle = 0;
     } else if (diffY > deadband) {
@@ -159,10 +254,15 @@ public:
     if (btnState && !lastBtnState) {
       pressStartTime = now;
       longPressFired = false;
+      hold3sFired = false;
     } else if (btnState && lastBtnState) {
       if (!longPressFired && (now - pressStartTime >= 700)) {
         longPressFired = true;
         longPressOccurred = true;
+      }
+      if (!hold3sFired && (now - pressStartTime >= 3000)) {
+        hold3sFired = true;
+        hold3sOccurred = true;
       }
     } else if (!btnState && lastBtnState) {
       if (!longPressFired && (now - pressStartTime >= 40)) {
@@ -214,13 +314,20 @@ private:
   int8_t rudder;
   int deadband;
 
-  // Switch press tracking
+  // Switch press & menu navigation tracking
   bool lastBtnState = false;
   bool longPressFired = false;
+  bool hold3sFired = false;
   bool shortPressOccurred = false;
   bool longPressOccurred = false;
+  bool hold3sOccurred = false;
   uint32_t pressStartTime = 0;
-  uint32_t lastMenuStepMs = 0;
+  bool navYArmed = true;
+  bool navXArmed = true;
+  uint32_t lastNavYMs = 0;
+  uint32_t lastNavXMs = 0;
+  uint32_t leftHoldStartMs = 0;
+  bool leftHoldFired = false;
 
   bool lastBootRawState = false;
   uint16_t joyClickCount = 0;

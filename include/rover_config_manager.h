@@ -28,6 +28,18 @@ struct RoverConfig {
                          // físico (GPIO 3 / GPIO 0)
   uint8_t ledCount;      // Quantidade de LEDs WS2812B na fita (GPIO 19)
   uint8_t ledBrightness; // Brilho da fita de LEDs WS2812B (5 - 100%)
+  uint8_t c6LedBrightness;   // Intensidade do LED RGB onboard da C6 (GPIO 8, 0 - 100%)
+  String c6ModeColors[7];    // Cores #RRGGBB para cada MotorStatus (0=IDLE..6=FAILSAFE)
+};
+
+static constexpr const char *DEFAULT_C6_MODE_COLORS[7] = {
+    "#06B6D4", // 0: MOTOR_IDLE (Ciano)
+    "#10B981", // 1: MOTOR_MANUAL (Verde)
+    "#A855F7", // 2: MOTOR_HOLDING_STATION (Roxo)
+    "#F59E0B", // 3: MOTOR_ANCHORED (Âmbar)
+    "#3B82F6", // 4: MOTOR_MOVING_TO_TARGET (Azul)
+    "#EC4899", // 5: MOTOR_RTL (Magenta)
+    "#EF4444"  // 6: MOTOR_FAILSAFE (Vermelho)
 };
 
 /**
@@ -52,6 +64,28 @@ public:
     _config.joystickEnabled = false;
     _config.ledCount = NUM_STROBE_LEDS;
     _config.ledBrightness = 100;
+    _config.c6LedBrightness = 80;
+    for (uint8_t i = 0; i < 7; i++) {
+      _config.c6ModeColors[i] = DEFAULT_C6_MODE_COLORS[i];
+    }
+  }
+
+  static String normalizeHexColor(const String &raw, const char *fallback) {
+    String s = raw;
+    s.trim();
+    if (s.startsWith("#"))
+      s = s.substring(1);
+    if (s.length() != 6)
+      return String(fallback);
+    for (uint8_t i = 0; i < 6; i++) {
+      char c = s.charAt(i);
+      bool valid = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') ||
+                   (c >= 'A' && c <= 'F');
+      if (!valid)
+        return String(fallback);
+    }
+    s.toUpperCase();
+    return "#" + s;
   }
 
   void begin(SDCardManager *sd = nullptr) {
@@ -85,6 +119,12 @@ public:
   bool isJoystickEnabled() const { return _config.joystickEnabled; }
   uint8_t getLedCount() const { return _config.ledCount; }
   uint8_t getLedBrightness() const { return _config.ledBrightness; }
+  uint8_t getC6LedBrightness() const { return _config.c6LedBrightness; }
+  String getC6ModeColor(uint8_t idx) const {
+    if (idx >= 7)
+      return String(DEFAULT_C6_MODE_COLORS[0]);
+    return _config.c6ModeColors[idx];
+  }
 
   void setRoverId(uint8_t id) { _config.roverId = id; }
 
@@ -139,6 +179,42 @@ public:
     if (brightness >= 5 && brightness <= 100)
       _config.ledBrightness = brightness;
     saveConfig();
+  }
+
+  void setC6LedBrightness(uint8_t brightness, bool save = false) {
+    if (brightness > 100)
+      brightness = 100;
+    _config.c6LedBrightness = brightness;
+    if (save)
+      saveConfig();
+  }
+
+  void setC6ModeColor(uint8_t idx, const String &hex, bool save = false) {
+    if (idx < 7) {
+      _config.c6ModeColors[idx] =
+          normalizeHexColor(hex, DEFAULT_C6_MODE_COLORS[idx]);
+      if (save)
+        saveConfig();
+    }
+  }
+
+  void resetC6ModeColorsDefault(bool save = true) {
+    for (uint8_t i = 0; i < 7; i++) {
+      _config.c6ModeColors[i] = DEFAULT_C6_MODE_COLORS[i];
+    }
+    if (save)
+      saveConfig();
+  }
+
+  String buildC6LedCfgCommand() const {
+    String cmd = "CMD:C6LED:CFG:" + String(_config.c6LedBrightness);
+    for (uint8_t i = 0; i < 7; i++) {
+      String h = _config.c6ModeColors[i];
+      if (h.startsWith("#"))
+        h = h.substring(1);
+      cmd += ":" + h;
+    }
+    return cmd;
   }
 
   void updateConfig(uint8_t id, const String &ssid, const String &password,
@@ -211,6 +287,16 @@ public:
       _config.ledBrightness = prefs.getUChar("led_brt", 100);
       if (_config.ledBrightness < 5 || _config.ledBrightness > 100)
         _config.ledBrightness = 100;
+      _config.c6LedBrightness = prefs.getUChar("c6l_brt", 80);
+      if (_config.c6LedBrightness > 100)
+        _config.c6LedBrightness = 80;
+      for (uint8_t i = 0; i < 7; i++) {
+        char key[12];
+        snprintf(key, sizeof(key), "c6l_m%u", i);
+        String raw = prefs.getString(key, DEFAULT_C6_MODE_COLORS[i]);
+        _config.c6ModeColors[i] =
+            normalizeHexColor(raw, DEFAULT_C6_MODE_COLORS[i]);
+      }
       prefs.end();
       Serial.printf(
           "[CONFIG] Carregado da memoria NVS -> ID: %u | SSID AP: %s | Brilho: "
@@ -253,6 +339,12 @@ public:
     prefs.putBool("joy_en", _config.joystickEnabled);
     prefs.putUChar("led_cnt", _config.ledCount);
     prefs.putUChar("led_brt", _config.ledBrightness);
+    prefs.putUChar("c6l_brt", _config.c6LedBrightness);
+    for (uint8_t i = 0; i < 7; i++) {
+      char key[12];
+      snprintf(key, sizeof(key), "c6l_m%u", i);
+      prefs.putString(key, _config.c6ModeColors[i]);
+    }
     prefs.end();
 
     // Guarda no Cartão MicroSD
@@ -357,6 +449,24 @@ public:
       if (lb >= 5 && lb <= 100)
         _config.ledBrightness = (uint8_t)lb;
     }
+    if (doc["c6_led_brightness"].is<int>()) {
+      int cb = doc["c6_led_brightness"].as<int>();
+      if (cb >= 0 && cb <= 100)
+        _config.c6LedBrightness = (uint8_t)cb;
+    }
+    if (doc["c6_mode_colors"].is<JsonArray>()) {
+      JsonArray arr = doc["c6_mode_colors"].as<JsonArray>();
+      uint8_t idx = 0;
+      for (JsonVariant v : arr) {
+        if (idx >= 7)
+          break;
+        if (v.is<const char *>()) {
+          _config.c6ModeColors[idx] =
+              normalizeHexColor(v.as<String>(), DEFAULT_C6_MODE_COLORS[idx]);
+        }
+        idx++;
+      }
+    }
 
     Serial.printf(
         "[CONFIG] Carregado de /config.json (MicroSD) -> ID: %u | SSID AP: %s "
@@ -393,6 +503,11 @@ public:
     doc["joystick_user_set"] = true;
     doc["led_count"] = _config.ledCount;
     doc["led_brightness"] = _config.ledBrightness;
+    doc["c6_led_brightness"] = _config.c6LedBrightness;
+    JsonArray c6Colors = doc["c6_mode_colors"].to<JsonArray>();
+    for (uint8_t i = 0; i < 7; i++) {
+      c6Colors.add(_config.c6ModeColors[i]);
+    }
 
     String jsonStr;
     serializeJsonPretty(doc, jsonStr);
