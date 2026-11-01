@@ -55,7 +55,11 @@ enum BaseScreenPage : uint8_t {
       14, // Configurações -> WiFi -> Scan -> Password QWERTY
   BASE_PAGE_CONFIG_PORTAL =
       15, // Configurações -> Portal (Estado da Ligação ao Portal Cloud)
-  BASE_PAGE_COUNT = 16,
+  BASE_PAGE_CONFIG_NAME =
+      16, // Configurações -> Nome (Alterar Nome da Estação Base)
+  BASE_PAGE_ROVER_REMOVE =
+      17, // Rover Selecionado -> Remover (Ecrã de Confirmação)
+  BASE_PAGE_COUNT = 18,
 
   // Aliases de compatibilidade
   BASE_PAGE_STATION = BASE_PAGE_CONFIG_ID,
@@ -79,8 +83,9 @@ public:
         _bootLogCount(0), _bootProgress(0), _brightness(85),
         _joyScreenEnabled(true), _otaActive(false), _homeMenuIdx(0),
         _missionMenuIdx(0), _stateCursorIdx(0), _roverListIdx(0),
-        _roverMenuIdx(0), _roverModeIdx(0), _configMenuIdx(0), _wifiListIdx(0),
-        _wifiScanIdx(0), _wifiKbRow(0), _wifiKbCol(0), _wifiKbMode(0),
+        _roverMenuIdx(0), _roverModeIdx(0), _roverRemoveIdx(0),
+        _configMenuIdx(0), _wifiListIdx(0), _wifiScanIdx(0), _wifiKbRow(0),
+        _wifiKbCol(0), _wifiKbMode(0), _wifiTextCursorPos(0),
         _wifiConfig(nullptr), _controlExitPromptActive(false),
         _controlExitCursorIdx(0), _bootHoldPct(0), _feedbackUntilMs(0) {
     strncpy(_c6Version, "Desconhecido", sizeof(_c6Version));
@@ -297,7 +302,13 @@ public:
 
   uint8_t getRoverMenuIdx() const { return _roverMenuIdx; }
   void setRoverMenuIdx(uint8_t idx) {
-    _roverMenuIdx = idx % 2;
+    _roverMenuIdx = idx % 3;
+    lastRender = 0;
+  }
+
+  uint8_t getRoverRemoveIdx() const { return _roverRemoveIdx; }
+  void setRoverRemoveIdx(uint8_t idx) {
+    _roverRemoveIdx = idx % 2;
     lastRender = 0;
   }
 
@@ -309,7 +320,7 @@ public:
 
   uint8_t getConfigMenuIdx() const { return _configMenuIdx; }
   void setConfigMenuIdx(uint8_t idx) {
-    _configMenuIdx = idx % 5;
+    _configMenuIdx = idx % 6;
     lastRender = 0;
   }
 
@@ -334,9 +345,25 @@ public:
       _wifiTargetSsid[0] = '\0';
     }
     _wifiPassBuf[0] = '\0';
+    _wifiTextCursorPos = 0;
     _wifiKbRow = 0;
     _wifiKbCol = 0;
     _wifiKbMode = 0; // 0 = abc, 1 = ABC, 2 = 123/#
+    lastRender = 0;
+  }
+
+  void beginStationNameEntry(const char *currentName) {
+    _wifiTargetSsid[0] = '\0';
+    if (currentName) {
+      strncpy(_wifiPassBuf, currentName, 24);
+      _wifiPassBuf[24] = '\0';
+    } else {
+      _wifiPassBuf[0] = '\0';
+    }
+    _wifiTextCursorPos = (uint8_t)strlen(_wifiPassBuf);
+    _wifiKbRow = 0;
+    _wifiKbCol = 0;
+    _wifiKbMode = 1; // 1 = ABC (maiúsculas por defeito para nome da estação)
     lastRender = 0;
   }
 
@@ -345,10 +372,29 @@ public:
   uint8_t getWifiKbRow() const { return _wifiKbRow; }
   uint8_t getWifiKbCol() const { return _wifiKbCol; }
   uint8_t getWifiKbMode() const { return _wifiKbMode; }
+  uint8_t getWifiTextCursorPos() const { return _wifiTextCursorPos; }
+
+  void insertCharAtWifiCursor(char ch) {
+    size_t len = strlen(_wifiPassBuf);
+    if (len >= sizeof(_wifiPassBuf) - 1)
+      return;
+    if (_wifiTextCursorPos > len)
+      _wifiTextCursorPos = (uint8_t)len;
+    memmove(&_wifiPassBuf[_wifiTextCursorPos + 1],
+            &_wifiPassBuf[_wifiTextCursorPos], len - _wifiTextCursorPos + 1);
+    _wifiPassBuf[_wifiTextCursorPos] = ch;
+    _wifiTextCursorPos++;
+    lastRender = 0;
+  }
 
   void moveWifiKbCursor(int8_t dx, int8_t dy) {
+    size_t len = strlen(_wifiPassBuf);
+    if (_wifiTextCursorPos > len)
+      _wifiTextCursorPos = (uint8_t)len;
+
+    // _wifiKbRow: 0..2 = teclas QWERTY, 3 = barra de ações, 4 = Caixa de Texto
     if (dy != 0) {
-      int nextRow = ((int)_wifiKbRow + 4 + dy) % 4;
+      int nextRow = ((int)_wifiKbRow + 5 + dy) % 5;
       if (_wifiKbRow < 3 && nextRow == 3) {
         // Mapear coluna 0..9 para 0..5
         _wifiKbCol = (_wifiKbCol * 6) / 10;
@@ -356,47 +402,72 @@ public:
         // Mapear coluna 0..5 para 0..9
         const uint8_t mapTo10[6] = {0, 2, 4, 6, 7, 9};
         _wifiKbCol = mapTo10[_wifiKbCol % 6];
+      } else if (_wifiKbRow == 4 && nextRow == 3) {
+        if (_wifiKbCol >= 6)
+          _wifiKbCol = (_wifiKbCol * 6) / 10;
+      } else if (_wifiKbRow == 4 && nextRow < 3) {
+        if (_wifiKbCol >= 10)
+          _wifiKbCol = 9;
       }
       _wifiKbRow = (uint8_t)nextRow;
     }
+
     if (dx != 0) {
-      uint8_t maxCols = (_wifiKbRow == 3) ? 6 : 10;
-      _wifiKbCol = (uint8_t)(((int)_wifiKbCol + maxCols + dx) % maxCols);
+      if (_wifiKbRow == 4) {
+        // Na caixa de texto: X move a posição do cursor de edição (0..len)
+        int nextPos = (int)_wifiTextCursorPos + dx;
+        if (nextPos < 0)
+          nextPos = 0;
+        if (nextPos > (int)len)
+          nextPos = (int)len;
+        _wifiTextCursorPos = (uint8_t)nextPos;
+      } else {
+        uint8_t maxCols = (_wifiKbRow == 3) ? 6 : 10;
+        _wifiKbCol = (uint8_t)(((int)_wifiKbCol + maxCols + dx) % maxCols);
+      }
     }
     lastRender = 0;
   }
 
   void backspaceWifiPass() {
     size_t len = strlen(_wifiPassBuf);
-    if (len > 0) {
-      _wifiPassBuf[len - 1] = '\0';
-      lastRender = 0;
+    if (len == 0)
+      return;
+    if (_wifiTextCursorPos > len)
+      _wifiTextCursorPos = (uint8_t)len;
+    if (_wifiTextCursorPos > 0) {
+      memmove(&_wifiPassBuf[_wifiTextCursorPos - 1],
+              &_wifiPassBuf[_wifiTextCursorPos], len - _wifiTextCursorPos + 1);
+      _wifiTextCursorPos--;
+    } else {
+      memmove(&_wifiPassBuf[0], &_wifiPassBuf[1], len);
     }
+    lastRender = 0;
   }
 
   // Retorna: 0 = tecla normal processada, 1 = utilizador escolheu SAIR, 2 =
-  // utilizador escolheu LIGAR
+  // utilizador escolheu LIGAR/GUARDAR
   uint8_t pressWifiKbKey() {
     static const char *const kbRows[3][3] = {
         {"qwertyuiop", "asdfghjkl-", "zxcvbnm._@"},
         {"QWERTYUIOP", "ASDFGHJKL-", "ZXCVBNM._@"},
         {"1234567890", "!@#$%^&*()", "-_=+/?:;,.~"}};
 
-    if (_wifiKbRow < 3) {
+    if (_wifiKbRow == 4) {
+      // Clique na caixa de texto regressa ao teclado QWERTY
+      _wifiKbRow = 0;
+      lastRender = 0;
+      return 0;
+    } else if (_wifiKbRow < 3) {
       uint8_t m = _wifiKbMode % 3;
       uint8_t c = _wifiKbCol % 10;
       char ch = kbRows[m][_wifiKbRow][c];
-      size_t len = strlen(_wifiPassBuf);
-      if (len < sizeof(_wifiPassBuf) - 1) {
-        _wifiPassBuf[len] = ch;
-        _wifiPassBuf[len + 1] = '\0';
-      }
-      lastRender = 0;
+      insertCharAtWifiCursor(ch);
       return 0;
     } else {
       // Linha 3 de botões especiais:
       // 0: Aa (Shift), 1: 123# (Números/Símbolos), 2: ESP, 3: DEL, 4: SAIR, 5:
-      // LIGAR
+      // LIGAR/GUARDAR
       uint8_t act = _wifiKbCol % 6;
       if (act == 0) {
         // Alternar maiúsculas/minúsculas
@@ -416,12 +487,7 @@ public:
         return 0;
       } else if (act == 2) {
         // Espaço
-        size_t len = strlen(_wifiPassBuf);
-        if (len < sizeof(_wifiPassBuf) - 1) {
-          _wifiPassBuf[len] = ' ';
-          _wifiPassBuf[len + 1] = '\0';
-        }
-        lastRender = 0;
+        insertCharAtWifiCursor(' ');
         return 0;
       } else if (act == 3) {
         // Apagar (Backspace)
@@ -431,7 +497,7 @@ public:
         // SAIR
         return 1;
       } else {
-        // LIGAR
+        // LIGAR / GUARDAR
         return 2;
       }
     }
@@ -527,11 +593,14 @@ public:
       case BASE_PAGE_ROVER_MODE:
         renderRoverModePage(fleet, navMode);
         break;
+      case BASE_PAGE_ROVER_REMOVE:
+        renderRoverRemovePage(fleet);
+        break;
       case BASE_PAGE_ROVER_CONTROL:
         renderControlPage(fleet, throttle, rudder, navMode);
         break;
       case BASE_PAGE_CONFIG_MENU:
-        renderConfigMenuPage(isApMode, ip, ssid, macStr, cloudOk,
+        renderConfigMenuPage(fleet, isApMode, ip, ssid, macStr, cloudOk,
                              lastHttpStatus);
         break;
       case BASE_PAGE_CONFIG_WIFI:
@@ -543,6 +612,9 @@ public:
         break;
       case BASE_PAGE_CONFIG_ID:
         renderStationPage(fleet, macStr);
+        break;
+      case BASE_PAGE_CONFIG_NAME:
+        renderWifiPassPage("GUARDAR");
         break;
       case BASE_PAGE_CONFIG_FW:
         renderFirmwarePage();
@@ -558,7 +630,7 @@ public:
         renderWifiScanPage();
         break;
       case BASE_PAGE_CONFIG_WIFI_PASS:
-        renderWifiPassPage();
+        renderWifiPassPage("LIGAR");
         break;
       default:
         renderHomePage(fleet, wifiOk, cloudOk, sdOk, isApMode);
@@ -798,6 +870,11 @@ private:
       canvas->setTextColor(UI_YELLOW);
       canvas->print("MODO");
       break;
+    case BASE_PAGE_ROVER_REMOVE:
+      canvas->printf("%s > ", rCode);
+      canvas->setTextColor(UI_RED);
+      canvas->print("REMOVER");
+      break;
     case BASE_PAGE_ROVER_CONTROL:
       canvas->printf("%s > ", rCode);
       canvas->setTextColor(UI_YELLOW);
@@ -822,6 +899,11 @@ private:
       canvas->print("CONFIG > ");
       canvas->setTextColor(UI_YELLOW);
       canvas->print("ID (QRCODE)");
+      break;
+    case BASE_PAGE_CONFIG_NAME:
+      canvas->print("CONFIG > ");
+      canvas->setTextColor(UI_YELLOW);
+      canvas->print("ALTERAR NOME");
       break;
     case BASE_PAGE_CONFIG_FW:
       canvas->print("CONFIG > ");
@@ -873,7 +955,7 @@ private:
   }
 
   // =========================================================================
-  // SUBMENU: MISSÃO (-Estado, -Lista de Rovers)
+  // SUBMENU: MISSÃO (Topo: Circuito em letra grande | Abaixo: Estado, Rovers em 1 linha)
   // =========================================================================
   void renderMissionMenuPage(FleetManager &fleet) {
     BaseOperationState opState = fleet.getOperationState();
@@ -885,73 +967,71 @@ private:
         onlineCnt++;
     }
 
-    // Opção 0: Estado
+    // --- Topo da página: Nome do Circuito em letra grande (x=6, y=27, w=308, h=44) ---
+    canvas->fillRect(6, 27, 308, 44, UI_PANEL_BG);
+    canvas->drawRect(6, 27, 308, 44, UI_CARD_BG);
+
+    canvas->setTextSize(1);
+    canvas->setTextColor(UI_LIGHTGREY);
+    canvas->setCursor(14, 32);
+    canvas->print("CIRCUITO:");
+
+    canvas->setTextSize(2);
+    canvas->setTextColor(UI_YELLOW);
+    canvas->setCursor(14, 46);
+    canvas->printf("%.24s", fleet.getMissionName());
+
+    // --- Lista de itens de 1 linha (Estado, Rovers) ---
+    // Item 0: Estado
     {
       bool sel = (_missionMenuIdx == 0);
-      int x = 6, y = 30, w = 308, h = 54;
-      canvas->fillRect(x, y, w, h, sel ? UI_NAVY : UI_PANEL_BG);
-      canvas->drawRect(x, y, w, h, sel ? UI_CYAN : UI_CARD_BG);
-      if (sel)
-        canvas->fillRect(x, y, 5, h, UI_CYAN);
-
-      canvas->setTextSize(2);
-      canvas->setTextColor(sel ? UI_YELLOW : UI_WHITE);
-      canvas->setCursor(x + 14, y + 10);
-      canvas->print("ESTADO");
-
-      // Badge atual à direita
-      canvas->fillRect(x + 150, y + 8, 124, 20, UI_BLACK);
-      canvas->drawRect(x + 150, y + 8, 124, 20, stCol);
-      canvas->setTextSize(1);
-      canvas->setTextColor(stCol);
-      canvas->setCursor(x + 158, y + 14);
-      canvas->printf("%.18s", fleet.getOperationStateStr());
-
-      canvas->setTextSize(1);
-      canvas->setTextColor(sel ? UI_WHITE : UI_LIGHTGREY);
-      canvas->setCursor(x + 14, y + 34);
-      canvas->printf("Missao: %.22s (%s)", fleet.getMissionName(),
-                     fleet.getOperationStateDesc());
-
-      canvas->setTextSize(2);
-      canvas->setTextColor(sel ? UI_CYAN : UI_DARKGREY);
-      canvas->setCursor(x + w - 20, y + 18);
-      canvas->print(">");
-    }
-
-    // Opção 1: Lista de Rovers
-    {
-      bool sel = (_missionMenuIdx == 1);
-      int x = 6, y = 90, w = 308, h = 54;
-      canvas->fillRect(x, y, w, h, sel ? UI_NAVY : UI_PANEL_BG);
-      canvas->drawRect(x, y, w, h, sel ? UI_CYAN : UI_CARD_BG);
-      if (sel)
-        canvas->fillRect(x, y, 5, h, UI_CYAN);
-
-      canvas->setTextSize(2);
-      canvas->setTextColor(sel ? UI_YELLOW : UI_WHITE);
-      canvas->setCursor(x + 14, y + 10);
-      canvas->print("LISTA DE ROVERS");
-
-      canvas->setTextSize(1);
-      canvas->setTextColor(onlineCnt > 0 ? UI_GREEN : UI_LIGHTGREY);
-      canvas->setCursor(x + 210, y + 14);
-      canvas->printf("%u/%u ONLINE", onlineCnt,
-                     (unsigned)fleet.getRovers().size());
-
-      canvas->setTextColor(sel ? UI_WHITE : UI_LIGHTGREY);
-      canvas->setCursor(x + 14, y + 34);
-      FleetRover *selR = fleet.getSelectedRover();
-      if (selR) {
-        canvas->printf("Selecionado: %s (%s)", selR->code,
-                       strlen(selR->role) > 0 ? selR->role : "sem papel");
-      } else {
-        canvas->print("Selecionar rover e enviar comandos");
+      int x = 6, y = 76, w = 308, h = 32;
+      if (sel) {
+        canvas->fillRect(x, y, w, h, UI_NAVY);
+        canvas->drawRect(x, y, w, h, UI_CYAN);
+        canvas->fillRect(x, y, 4, h, UI_CYAN);
       }
 
       canvas->setTextSize(2);
+      canvas->setTextColor(sel ? UI_YELLOW : UI_WHITE);
+      canvas->setCursor(x + 12, y + 8);
+      canvas->print("Estado");
+
+      canvas->setTextSize(1);
+      canvas->setTextColor(stCol);
+      canvas->setCursor(x + 140, y + 12);
+      canvas->printf("%.20s", fleet.getOperationStateStr());
+
+      canvas->setTextSize(2);
       canvas->setTextColor(sel ? UI_CYAN : UI_DARKGREY);
-      canvas->setCursor(x + w - 20, y + 18);
+      canvas->setCursor(x + w - 18, y + 8);
+      canvas->print(">");
+    }
+
+    // Item 1: Rovers
+    {
+      bool sel = (_missionMenuIdx == 1);
+      int x = 6, y = 112, w = 308, h = 32;
+      if (sel) {
+        canvas->fillRect(x, y, w, h, UI_NAVY);
+        canvas->drawRect(x, y, w, h, UI_CYAN);
+        canvas->fillRect(x, y, 4, h, UI_CYAN);
+      }
+
+      canvas->setTextSize(2);
+      canvas->setTextColor(sel ? UI_YELLOW : UI_WHITE);
+      canvas->setCursor(x + 12, y + 8);
+      canvas->print("Rovers");
+
+      canvas->setTextSize(1);
+      canvas->setTextColor(onlineCnt > 0 ? UI_GREEN : UI_LIGHTGREY);
+      canvas->setCursor(x + 140, y + 12);
+      canvas->printf("%u / %u ONLINE", onlineCnt,
+                     (unsigned)fleet.getRovers().size());
+
+      canvas->setTextSize(2);
+      canvas->setTextColor(sel ? UI_CYAN : UI_DARKGREY);
+      canvas->setCursor(x + w - 18, y + 8);
       canvas->print(">");
     }
 
@@ -1179,60 +1259,107 @@ private:
       canvas->print("GPS: Sem Fix");
     }
 
-    // --- Painel Direito: Opções (-Modo, -Comando) (x=150, w=166, h=122) ---
-    // Card 0: Modo
-    {
-      bool sel = (_roverMenuIdx == 0);
-      int x = 150, y = 26, w = 166, h = 58;
-      canvas->fillRect(x, y, w, h, sel ? UI_NAVY : UI_PANEL_BG);
-      canvas->drawRect(x, y, w, h, sel ? UI_CYAN : UI_CARD_BG);
-      if (sel)
-        canvas->fillRect(x, y, 4, h, UI_CYAN);
+    // --- Painel Direito: Opções de 1 linha (Modo, Comando, Remover) (x=150, w=166, h=122) ---
+    canvas->fillRect(150, cardY, 166, cardH, UI_PANEL_BG);
+    canvas->drawRect(150, cardY, 166, cardH, UI_CARD_BG);
+
+    const char *menuTitles[3] = {"Modo", "Comando", "Remover"};
+    for (uint8_t i = 0; i < 3; ++i) {
+      bool sel = (_roverMenuIdx == i);
+      int x = 154;
+      int y = 30 + i * 39;
+      int w = 158;
+      int h = 34;
+      uint16_t accentCol = (i == 2) ? UI_RED : UI_CYAN;
+
+      if (sel) {
+        canvas->fillRect(x, y, w, h, UI_NAVY);
+        canvas->drawRect(x, y, w, h, accentCol);
+        canvas->fillRect(x, y, 4, h, accentCol);
+      }
 
       canvas->setTextSize(2);
-      canvas->setTextColor(sel ? UI_YELLOW : UI_WHITE);
-      canvas->setCursor(x + 12, y + 10);
-      canvas->print("MODO");
+      canvas->setTextColor(sel ? UI_YELLOW : ((i == 2) ? UI_RED : UI_WHITE));
+      canvas->setCursor(x + 10, y + 9);
+      canvas->print(menuTitles[i]);
 
-      canvas->setTextColor(sel ? UI_CYAN : UI_DARKGREY);
-      canvas->setCursor(x + w - 18, y + 16);
+      canvas->setTextColor(sel ? accentCol : UI_DARKGREY);
+      canvas->setCursor(x + w - 16, y + 9);
       canvas->print(">");
-
-      canvas->setTextSize(1);
-      canvas->setTextColor(sel ? UI_WHITE : UI_LIGHTGREY);
-      canvas->setCursor(x + 12, y + 34);
-      canvas->print("Manual, Hold,");
-      canvas->setCursor(x + 12, y + 44);
-      canvas->print("Return Home");
-    }
-
-    // Card 1: Comando
-    {
-      bool sel = (_roverMenuIdx == 1);
-      int x = 150, y = 90, w = 166, h = 58;
-      canvas->fillRect(x, y, w, h, sel ? UI_NAVY : UI_PANEL_BG);
-      canvas->drawRect(x, y, w, h, sel ? UI_CYAN : UI_CARD_BG);
-      if (sel)
-        canvas->fillRect(x, y, 4, h, UI_CYAN);
-
-      canvas->setTextSize(2);
-      canvas->setTextColor(sel ? UI_YELLOW : UI_WHITE);
-      canvas->setCursor(x + 12, y + 10);
-      canvas->print("COMANDO");
-
-      canvas->setTextColor(sel ? UI_CYAN : UI_DARKGREY);
-      canvas->setCursor(x + w - 18, y + 16);
-      canvas->print(">");
-
-      canvas->setTextSize(1);
-      canvas->setTextColor(sel ? UI_WHITE : UI_LIGHTGREY);
-      canvas->setCursor(x + 12, y + 34);
-      canvas->print("Controlo Manual Direto");
-      canvas->setCursor(x + 12, y + 44);
-      canvas->print("+ Telemetria em Vivo");
     }
 
     renderFooter("<-X: Rovers | Y: Opcao | X->: Entrar");
+  }
+
+  // =========================================================================
+  // =========================================================================
+  // ROVER SELECIONADO -> REMOVER (ECRÃ DE CONFIRMAÇÃO IGUAL AO DO JOYSTICK)
+  // =========================================================================
+  void renderRoverRemovePage(FleetManager &fleet) {
+    FleetRover *r = fleet.getSelectedRover();
+    if (!r) {
+      renderRoverListPage(fleet);
+      return;
+    }
+
+    // Desenhar o fundo do menu do Rover por trás do modal
+    renderRoverMenuPage(fleet);
+
+    // Popup centralizado idêntico ao de saída do Joystick: REMOVER | CANCELAR
+    int mx = 22, my = 36, mw = 276, mh = 96;
+    canvas->fillRect(mx - 2, my - 2, mw + 4, mh + 4, UI_BLACK);
+    canvas->fillRect(mx, my, mw, mh, UI_PANEL_BG);
+    canvas->drawRect(mx, my, mw, mh, UI_CYAN);
+
+    canvas->fillRect(mx + 1, my + 1, mw - 2, 20, UI_NAVY);
+    canvas->setTextSize(1);
+    canvas->setTextColor(UI_YELLOW);
+    char titleBuf[44];
+    snprintf(titleBuf, sizeof(titleBuf), "REMOVER %s DA FROTA?", r->code);
+    int titleW = (int)strlen(titleBuf) * 6;
+    int tx = mx + max(8, (mw - titleW) / 2);
+    canvas->setCursor(tx, my + 7);
+    canvas->print(titleBuf);
+
+    // Botão 0: REMOVER
+    bool selRem = (_roverRemoveIdx == 0);
+    int b1x = mx + 12, b1y = my + 32, b1w = 118, b1h = 38;
+    canvas->fillRect(b1x, b1y, b1w, b1h, selRem ? UI_NAVY : UI_CARD_BG);
+    canvas->drawRect(b1x, b1y, b1w, b1h, selRem ? UI_CYAN : UI_DARKGREY);
+    if (selRem) {
+      canvas->drawRect(b1x + 1, b1y + 1, b1w - 2, b1h - 2, UI_YELLOW);
+    }
+    canvas->setTextSize(2);
+    canvas->setTextColor(selRem ? UI_YELLOW : UI_LIGHTGREY);
+    canvas->setCursor(b1x + 17, b1y + 11);
+    canvas->print("REMOVER");
+
+    // Separador "|"
+    canvas->setTextSize(2);
+    canvas->setTextColor(UI_DARKGREY);
+    canvas->setCursor(mx + 134, b1y + 11);
+    canvas->print("|");
+
+    // Botão 1: CANCELAR
+    bool selCanc = (_roverRemoveIdx == 1);
+    int b2x = mx + 146, b2y = my + 32, b2w = 118, b2h = 38;
+    canvas->fillRect(b2x, b2y, b2w, b2h, selCanc ? UI_NAVY : UI_CARD_BG);
+    canvas->drawRect(b2x, b2y, b2w, b2h, selCanc ? UI_CYAN : UI_DARKGREY);
+    if (selCanc) {
+      canvas->drawRect(b2x + 1, b2y + 1, b2w - 2, b2h - 2, UI_YELLOW);
+    }
+    canvas->setTextSize(2);
+    canvas->setTextColor(selCanc ? UI_GREEN : UI_LIGHTGREY);
+    canvas->setCursor(b2x + 11, b2y + 11);
+    canvas->print("CANCELAR");
+
+    // Dica na base do popup
+    canvas->setTextSize(1);
+    canvas->setTextColor(UI_CYAN);
+    canvas->setCursor(mx + 34, my + 78);
+    canvas->print("Y/X: Escolher  |  BOOT: Confirmar");
+
+    renderFooter("REMOVER | CANCELAR -> Clique BOOT p/ confirmar");
   }
 
   // =========================================================================
@@ -1315,18 +1442,19 @@ private:
   }
 
   // =========================================================================
-  // SUBMENU: CONFIGURAÇÕES (-WiFi, -Joystick, -ID, -Firmware, -Portal)
+  // SUBMENU: CONFIGURAÇÕES (-WiFi, -Joystick, -ID, -Nome, -Firmware, -Portal)
   // =========================================================================
-  void renderConfigMenuPage(bool isApMode, const char *ip, const char *ssid,
-                            const char *macStr, bool cloudOk = false,
-                            int lastHttpStatus = 0) {
+  void renderConfigMenuPage(FleetManager &fleet, bool isApMode, const char *ip,
+                            const char *ssid, const char *macStr,
+                            bool cloudOk = false, int lastHttpStatus = 0) {
     (void)ssid;
     String mac =
         (macStr && strlen(macStr) > 0) ? String(macStr) : getDeviceMacAddress();
 
-    const uint8_t total = 5;
+    const uint8_t total = 6;
     const uint8_t visibleRows = 4;
-    const char *titles[5] = {"WIFI", "JOYSTICK", "ID", "FIRMWARE", "PORTAL"};
+    const char *titles[6] = {"WIFI", "JOYSTICK", "ID", "NOME", "FIRMWARE",
+                             "PORTAL"};
 
     uint8_t startIdx = 0;
     if (_configMenuIdx >= visibleRows) {
@@ -1368,6 +1496,10 @@ private:
         canvas->setCursor(x + 124, y + 10);
         canvas->printf("%s", mac.c_str());
       } else if (i == 3) {
+        canvas->setTextColor(UI_YELLOW);
+        canvas->setCursor(x + 124, y + 10);
+        canvas->printf("%.22s", fleet.getStationName());
+      } else if (i == 4) {
         canvas->setTextColor(UI_LIGHTGREY);
         canvas->setCursor(x + 124, y + 10);
         canvas->printf("M:%s | C6:%s", BASE_LAFVIN_VERSION, _c6Version);
@@ -1388,7 +1520,7 @@ private:
       canvas->print(">");
     }
 
-    // Barra de scroll vertical (5 itens, 4 visíveis)
+    // Barra de scroll vertical (6 itens, 4 visíveis)
     int sbX = 308, sbY = 27, sbW = 6, sbH = 118;
     canvas->drawRect(sbX, sbY, sbW, sbH, UI_CARD_BG);
     int thumbH = max(16, sbH * visibleRows / total);
@@ -1663,28 +1795,62 @@ private:
   // =========================================================================
   // CONFIGURAÇÕES -> WIFI -> SCAN -> INSERIR PASSWORD (TECLADO QWERTY)
   // =========================================================================
-  void renderWifiPassPage() {
+  void renderWifiPassPage(const char *confirmLabel = "LIGAR") {
     static const char *const kbRows[3][3] = {
         {"qwertyuiop", "asdfghjkl-", "zxcvbnm._@"},
         {"QWERTYUIOP", "ASDFGHJKL-", "ZXCVBNM._@"},
         {"1234567890", "!@#$%^&*()", "-_=+/?:;,.~"}};
 
-    // 1. Caixa de texto da Password (y=26..48, h=22)
-    canvas->fillRect(6, 26, 308, 22, UI_PANEL_BG);
-    canvas->drawRect(6, 26, 308, 22, UI_CYAN);
+    // 1. Caixa de texto (y=26..48, h=22) - selecionável como linha 4 (_wifiKbRow == 4)
+    bool inTextBox = (_wifiKbRow == 4);
+    canvas->fillRect(6, 26, 308, 22, inTextBox ? UI_NAVY : UI_PANEL_BG);
+    canvas->drawRect(6, 26, 308, 22, inTextBox ? UI_YELLOW : UI_CYAN);
+    if (inTextBox) {
+      canvas->fillRect(6, 26, 4, 22, UI_YELLOW);
+    }
 
     size_t passLen = strlen(_wifiPassBuf);
-    const char *visiblePass = _wifiPassBuf;
-    if (passLen > 22) {
-      visiblePass = _wifiPassBuf + (passLen - 22);
+    uint8_t curPos = (_wifiTextCursorPos > passLen) ? (uint8_t)passLen
+                                                    : _wifiTextCursorPos;
+    const size_t maxVisChars = 22;
+    size_t winStart = 0;
+    if (curPos > maxVisChars) {
+      winStart = curPos - maxVisChars;
     }
 
     canvas->setTextSize(2);
-    canvas->setTextColor(UI_WHITE);
-    canvas->setCursor(12, 30);
-    canvas->print(visiblePass);
-    canvas->setTextColor(UI_CYAN);
-    canvas->print("_");
+    for (size_t i = 0; i <= maxVisChars; ++i) {
+      size_t pos = winStart + i;
+      if (pos > passLen)
+        break;
+      int cx = 14 + (int)i * 12;
+      bool isCur = (pos == curPos);
+
+      if (pos < passLen) {
+        char chStr[2] = {_wifiPassBuf[pos], '\0'};
+        if (isCur) {
+          canvas->fillRect(cx - 1, 28, 12, 18,
+                           inTextBox ? UI_YELLOW : UI_CYAN);
+          canvas->setTextColor(UI_BLACK);
+        } else {
+          canvas->setTextColor(UI_WHITE);
+        }
+        canvas->setCursor(cx, 30);
+        canvas->print(chStr);
+        if (isCur && !inTextBox) {
+          canvas->drawFastHLine(cx - 1, 46, 12, UI_YELLOW);
+        }
+      } else if (isCur) {
+        // Cursor no fim do texto
+        if (inTextBox) {
+          canvas->fillRect(cx, 29, 10, 16, UI_YELLOW);
+        } else {
+          canvas->setTextColor(UI_CYAN);
+          canvas->setCursor(cx, 30);
+          canvas->print("_");
+        }
+      }
+    }
 
     // 2. Linhas 0..2 do Teclado QWERTY (10 colunas por linha)
     uint8_t m = _wifiKbMode % 3;
@@ -1715,7 +1881,7 @@ private:
                                 "ESP",
                                 "<-DEL",
                                 "SAIR",
-                                "LIGAR"};
+                                confirmLabel ? confirmLabel : "LIGAR"};
 
     int by = 120;
     int bh = 24;
@@ -1754,7 +1920,11 @@ private:
       canvas->print(btnLabels[b]);
     }
 
-    renderFooter("XY: Mover | Clique: Tecla | Mode: Apagar");
+    if (inTextBox) {
+      renderFooter("X: Posicao Cursor | Y: Voltar ao QWERTY");
+    } else {
+      renderFooter("XY: Mover | Clique: Tecla | Mode: Apagar");
+    }
   }
 
 public:
@@ -2068,7 +2238,7 @@ private:
     canvas->setTextSize(2);
     canvas->setTextColor(UI_YELLOW);
     canvas->setCursor(rx + 6, cardY + 30);
-    canvas->printf("%.16s", BASE_STATION_ID);
+    canvas->printf("%.16s", fleet.getStationName());
 
     canvas->drawFastHLine(rx + 4, cardY + 60, rw - 8, UI_CARD_BG);
 
@@ -2444,10 +2614,10 @@ private:
       // Dica na base do popup
       canvas->setTextSize(1);
       canvas->setTextColor(UI_CYAN);
-      canvas->setCursor(mx + 22, my + 78);
-      canvas->print("Y/X: Escolher  |  BOOT / X->: Confirmar");
+      canvas->setCursor(mx + 34, my + 78);
+      canvas->print("Y/X: Escolher  |  BOOT: Confirmar");
 
-      renderFooter("SAIR | CONTINUAR -> Escolha e confirme");
+      renderFooter("SAIR | CONTINUAR -> Clique BOOT p/ confirmar");
     } else if (_bootHoldPct > 0) {
       // Barra de progresso no rodapé enquanto mantém BOOT premido (3s)
       canvas->fillRect(0, 150, SCREEN_W, 22, UI_NAVY);
@@ -2618,12 +2788,14 @@ private:
   uint8_t _roverListIdx;
   uint8_t _roverMenuIdx;
   uint8_t _roverModeIdx;
+  uint8_t _roverRemoveIdx;
   uint8_t _configMenuIdx;
   uint8_t _wifiListIdx;
   uint8_t _wifiScanIdx;
   uint8_t _wifiKbRow;
   uint8_t _wifiKbCol;
   uint8_t _wifiKbMode;
+  uint8_t _wifiTextCursorPos;
   char _wifiTargetSsid[33];
   char _wifiPassBuf[64];
   WiFiConfigManager *_wifiConfig;

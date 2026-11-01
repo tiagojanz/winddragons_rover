@@ -2360,10 +2360,10 @@ CONFIG_CONTENT = """
     <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;background:rgba(15,23,42,0.6);border:1px solid #334155;border-radius:8px;padding:12px;">
       <div style="flex:1;min-width:220px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-          <span class="stat-label">Brilho da Fita de LEDs (5% - 100%):</span>
+          <span class="stat-label">Brilho da Fita de LEDs (0% - 100%):</span>
           <span id="ledBrightVal" style="font-weight:700;color:#c084fc;font-size:1.05rem;">100%</span>
         </div>
-        <input type="range" id="cfg_led_bright" min="5" max="100" step="1" value="100" class="slider" oninput="onLedBrightSlide(this.value)">
+        <input type="range" id="cfg_led_bright" min="0" max="100" step="1" value="100" class="slider" oninput="onLedBrightSlide(this.value)">
       </div>
       <div>
         <label style="display:block;font-size:0.8rem;color:var(--muted);margin-bottom:4px;">Nº de LEDs na Fita (1 - 120):</label>
@@ -2399,7 +2399,7 @@ CONFIG_CONTENT = """
         </label>
         <span id="c6LedBrightVal" style="font-size:1.25rem;font-weight:800;color:#10b981;">80%</span>
       </div>
-      <input type="range" id="cfg_c6_led_bright" min="0" max="100" step="1" value="80" class="slider" oninput="onC6LedBrightSlide(this.value)">
+      <input type="range" id="cfg_c6_led_bright" min="0" max="100" step="1" value="80" class="slider" oninput="onC6LedBrightSlide(this.value)" onchange="onC6LedBrightChange(this.value)">
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
         <button type="button" class="btn btn-secondary" style="padding:6px 12px;font-size:0.78rem;" onclick="setC6LedBrightPreset(0)"><i class="fa-solid fa-power-off"></i> 0% (Off)</button>
         <button type="button" class="btn btn-secondary" style="padding:6px 12px;font-size:0.78rem;" onclick="setC6LedBrightPreset(25)">25% (Noturno)</button>
@@ -2985,22 +2985,28 @@ function testLedHex(hex) {
   testLedColor(r, g, b, hex.toUpperCase());
 }
 
+function parsePct(v, def = 80) {
+  const n = parseInt(v, 10);
+  return Number.isNaN(n) ? def : Math.max(0, Math.min(100, n));
+}
+
 function onLedBrightSlide(v) {
+  const pct = parsePct(v, 100);
   const el = document.getElementById('ledBrightVal');
-  if (el) el.innerText = v + '%';
+  if (el) el.innerText = pct + '%';
   if (ledBrightTimer) clearTimeout(ledBrightTimer);
   ledBrightTimer = setTimeout(() => {
     fetch('/api/control/leds', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ brightness: parseInt(v) || 100 })
+      body: JSON.stringify({ brightness: pct })
     }).catch(() => {});
   }, 60);
 }
 
 function saveLedConfig() {
-  const cnt = Math.max(1, Math.min(120, parseInt(document.getElementById('cfg_led_count')?.value) || 8));
-  const brt = Math.max(5, Math.min(100, parseInt(document.getElementById('cfg_led_bright')?.value) || 100));
+  const cnt = Math.max(1, Math.min(120, parseInt(document.getElementById('cfg_led_count')?.value, 10) || 8));
+  const brt = parsePct(document.getElementById('cfg_led_bright')?.value, 100);
   fetch('/api/control/leds', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -3019,7 +3025,7 @@ function saveLedConfig() {
 let c6LedBrightTimer = null;
 
 function onC6LedBrightSlide(v) {
-  const pct = Math.max(0, Math.min(100, parseInt(v) || 0));
+  const pct = parsePct(v, 80);
   const el = document.getElementById('c6LedBrightVal');
   if (el) el.innerText = pct + '%';
   const b = document.getElementById('c6LedBrtBadge');
@@ -3034,10 +3040,28 @@ function onC6LedBrightSlide(v) {
   }, 60);
 }
 
+function onC6LedBrightChange(v) {
+  const pct = parsePct(v, 80);
+  fetch('/api/control/c6_led', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ brightness: pct, save: true })
+  })
+  .then(r => r.json())
+  .then(res => {
+    const msg = res.msg || ('Intensidade do LED da C6: ' + pct + '%');
+    if (typeof showToast === 'function') showToast(msg);
+    showStatus(msg);
+  })
+  .catch(() => {});
+}
+
 function setC6LedBrightPreset(v) {
+  const pct = parsePct(v, 80);
   const s = document.getElementById('cfg_c6_led_bright');
-  if (s) s.value = v;
-  onC6LedBrightSlide(v);
+  if (s) s.value = pct;
+  onC6LedBrightSlide(pct);
+  onC6LedBrightChange(pct);
 }
 
 function updateC6ModeRowUI(m, hex) {
@@ -3113,7 +3137,7 @@ function getC6ModeColorsFromUI() {
 }
 
 function saveC6LedConfig() {
-  const brt = Math.max(0, Math.min(100, parseInt(document.getElementById('cfg_c6_led_bright')?.value ?? 80)));
+  const brt = parsePct(document.getElementById('cfg_c6_led_bright')?.value, 80);
   const colors = getC6ModeColorsFromUI();
   fetch('/api/control/c6_led', {
     method: 'POST',
@@ -3137,6 +3161,13 @@ function resetC6LedDefaults() {
   })
   .then(r => r.json())
   .then(res => {
+    const brt = res.c6_led_brightness ?? 80;
+    const s = document.getElementById('cfg_c6_led_bright');
+    if (s) s.value = brt;
+    const vEl = document.getElementById('c6LedBrightVal');
+    if (vEl) vEl.innerText = brt + '%';
+    const bEl = document.getElementById('c6LedBrtBadge');
+    if (bEl) bEl.innerText = 'INTENSIDADE: ' + brt + '%';
     if (Array.isArray(res.c6_mode_colors)) {
       res.c6_mode_colors.forEach((c, i) => updateC6ModeRowUI(i, c));
     }
@@ -3333,8 +3364,8 @@ function loadConfig() {
     .then(data => {
       document.getElementById('cfg_id').value = data.rover_id || 1;
       updateIdPreview(data.rover_id || 1);
-      document.getElementById('cfg_bright').value = data.screen_brightness || 80;
-      onBrightSlide(data.screen_brightness || 80);
+      document.getElementById('cfg_bright').value = data.screen_brightness ?? 80;
+      onBrightSlide(data.screen_brightness ?? 80);
       document.getElementById('cfg_ssid').value = data.ap_ssid || 'WindDragon-AP';
       document.getElementById('cfg_pass').value = data.ap_password || '12345678';
       if (data.joystick_enabled !== undefined && document.getElementById('cfg_joystick_enabled')) {
@@ -5580,25 +5611,6 @@ BASE_LCD_CARD = """
   </div>
 </div>
 
-<div class="card">
-  <div class="card-title">
-    <span><i class="fa-solid fa-tv"></i> Configuração do Ecrã LCD (Base Station)</span>
-    <span class="badge" style="background:#1e3a8a;color:#93c5fd;">ST7789 320x172</span>
-  </div>
-  <p style="color:var(--muted);font-size:0.875rem;margin-bottom:14px;">
-    O ecrã da Estação Base possui 3 ecrãs principais essenciais: <strong>1. Estação (ID, MAC, Estado)</strong>, <strong>2. Conectividade WiFi</strong> e <strong>3. Rover Selecionado</strong>.
-  </p>
-  <div class="form-group" style="display:flex;align-items:center;gap:12px;padding:12px;background:rgba(255,255,255,0.03);border:1px solid var(--card-border);border-radius:8px;">
-    <input type="checkbox" id="joyScreenCheck" onchange="toggleJoyScreen(this.checked)" style="width:20px;height:20px;cursor:pointer;">
-    <label for="joyScreenCheck" style="cursor:pointer;font-size:0.95rem;font-weight:600;">
-      Ativar 4º Ecrã: Teste do Joystick
-      <div style="font-size:0.75rem;font-weight:normal;color:var(--muted);margin-top:2px;">
-        Adiciona a mira analógica 2D e diagnóstico dos eixos ADC ao carrossel de navegação do ecrã físico.
-      </div>
-    </label>
-  </div>
-</div>
-
 <div class="card" id="baseC6LedConfigCard">
   <div class="card-title">
     <span><i class="fa-solid fa-lightbulb" style="color:#38bdf8;"></i> LED RGB do Coprocessador C6 — Cor por Modo &amp; Intensidade</span>
@@ -5744,37 +5756,44 @@ function showC6LedFeedback(msg, isErr = false) {
   fb.innerText = msg;
   setTimeout(() => { if (fb.innerText === msg) fb.innerText = ''; }, 3000);
 }
+function parseC6Brt(v, def = 80) {
+  const n = parseInt(v, 10);
+  return Number.isNaN(n) ? def : Math.max(0, Math.min(100, n));
+}
 function onC6LedBrightSlide(v) {
+  const bVal = parseC6Brt(v, 80);
   const d = document.getElementById('c6LedBrightDisplayVal');
-  if (d) d.innerText = v + '%';
+  if (d) d.innerText = bVal + '%';
   const b = document.getElementById('c6LedBrightBadge');
-  if (b) b.innerText = v + '%';
+  if (b) b.innerText = bVal + '%';
   if (c6LedSlideTimer) clearTimeout(c6LedSlideTimer);
   c6LedSlideTimer = setTimeout(() => {
     fetch('/api/control/c6_led', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ brightness: parseInt(v) })
+      body: JSON.stringify({ brightness: bVal })
     }).catch(() => {});
   }, 80);
 }
 function onC6LedBrightChange(v) {
+  const bVal = parseC6Brt(v, 80);
   fetch('/api/control/c6_led', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ brightness: parseInt(v) })
+    body: JSON.stringify({ brightness: bVal })
   })
   .then(r => r.json())
   .then(d => {
-    if (d.success) showC6LedFeedback('Intensidade LED C6: ' + d.c6_led_brightness + '%');
+    if (d.success) showC6LedFeedback('Intensidade LED C6: ' + (d.c6_led_brightness ?? bVal) + '%');
   })
   .catch(() => {});
 }
 function setC6LedBrightPreset(v) {
+  const bVal = parseC6Brt(v, 80);
   const el = document.getElementById('cfg_c6_led_bright');
-  if (el) el.value = v;
-  onC6LedBrightSlide(v);
-  onC6LedBrightChange(v);
+  if (el) el.value = bVal;
+  onC6LedBrightSlide(bVal);
+  onC6LedBrightChange(bVal);
 }
 function applyC6ModeUiColor(idx, hex) {
   if (!hex) return;
@@ -5817,7 +5836,7 @@ function testC6ModeColor(idx) {
   .catch(() => {});
 }
 function saveAllC6LedConfig() {
-  const brt = parseInt(document.getElementById('cfg_c6_led_bright')?.value || 80);
+  const brt = parseC6Brt(document.getElementById('cfg_c6_led_bright')?.value, 80);
   const colors = [];
   for (let i = 0; i < 5; i++) {
     colors.push(document.getElementById('c6ModeColor_' + i)?.value || '#A855F7');
@@ -5859,9 +5878,7 @@ function resetC6LedDefaults() {
   .catch(() => {});
 }
 fetch('/api/display').then(r=>r.json()).then(d=>{
-  const c = document.getElementById('joyScreenCheck');
-  if (c) c.checked = !!d.joy_screen;
-  const b = d.screen_brightness || d.brightness || 85;
+  const b = d.screen_brightness ?? d.brightness ?? 85;
   const el = document.getElementById('cfg_bright');
   if (el) el.value = b;
   const elVal = document.getElementById('brightDisplayVal');
@@ -5881,20 +5898,6 @@ fetch('/api/display').then(r=>r.json()).then(d=>{
     d.c6_mode_colors.forEach((col, idx) => applyC6ModeUiColor(idx, col));
   }
 }).catch(()=>{});
-function toggleJoyScreen(enabled){
-  fetch('/api/display',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({joy_screen:enabled})
-  })
-  .then(r=>r.json())
-  .then(res=>{
-    alert(res.joy_screen ? '4º Ecrã (Teste Joystick) ativado no LCD!' : '4º Ecrã desativado. LCD em modo simplificado de 3 ecrãs.');
-  })
-  .catch(e=>{
-    alert('Erro ao guardar configuração do ecrã');
-  });
-}
 </script>
 """
 

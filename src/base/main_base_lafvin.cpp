@@ -67,7 +67,11 @@ void IRAM_ATTR isrBootButton() {
 }
 
 void setRgbColor(uint8_t r, uint8_t g, uint8_t b) {
-  rgbLed.setPixelColor(0, rgbLed.Color(r, g, b));
+  if (r == 0 && g == 0 && b == 0) {
+    rgbLed.clear();
+  } else {
+    rgbLed.setPixelColor(0, rgbLed.Color(r, g, b));
+  }
   rgbLed.show();
 }
 
@@ -121,6 +125,12 @@ void setup() {
 
   // 3.1 Inicializar Frota & Missão (SD / NVS)
   fleet.begin(&sdCard);
+  {
+    uint8_t r = 0, g = 0, b = 0;
+    fleet.getScaledModeColorRgb(static_cast<uint8_t>(fleet.getOperationState()),
+                                r, g, b);
+    setRgbColor(r, g, b);
+  }
   display.bootLogf(UI_GREEN, 48, "[FROTA] %u rovers | %s",
                    (uint32_t)fleet.getRovers().size(),
                    fleet.getOperationStateBadge());
@@ -146,8 +156,9 @@ void setup() {
            PIN_INTER_ESP_LAFVIN_TX, PIN_INTER_ESP_LAFVIN_RX,
            INTER_ESP_BAUDRATE);
 
-  // Consulta imediata de versão ao Coprocessador C6
+  // Consulta imediata de versão e sincronização de LED ao Coprocessador C6
   interSerial.println("CMD:GET_VER");
+  interSerial.println(fleet.buildC6LedCfgCommand());
   interSerial.flush();
 
   // 6. Configurar WiFi e Gestor de Redes
@@ -160,14 +171,12 @@ void setup() {
   if (!wifiOk) {
     printLog("[BASE] Sem rede STA -> A ativar Modo AP (WindDragons-Base)\n");
     wifiConfig.startAccessPoint("WindDragons-Base", "12345678");
-    setRgbColor(30, 15, 0); // Laranja / Modo AP
     display.bootLogf(UI_YELLOW, 85, "[NET ] Falha STA -> Modo AP");
     display.bootLogf(UI_CYAN, 88, "[NET ] AP: WindDragons-Base");
     display.bootLogf(UI_WHITE, 90, "[NET ] IP: 192.168.4.1");
   } else {
     printLog("[BASE] WiFi Conectado! SSID: %s | IP: %s\n",
              wifiConfig.getSSID().c_str(), wifiConfig.getIPAddress().c_str());
-    setRgbColor(0, 30, 0); // Verde / STA Conectado
     display.bootLogf(UI_GREEN, 90, "[NET ] IP: %s",
                      wifiConfig.getIPAddress().c_str());
   }
@@ -363,13 +372,15 @@ void handleUartFromC6() {
           printLog("[BASE LAFVIN] ★ C6 OTA: %s\n", rxBuf + 9);
           webServer.setC6OtaStatus(rxBuf + 9);
         } else if (strncmp(rxBuf, "PONG:VER:", 9) == 0) {
-          bool firstHandshake = webServer.getC6Version().isEmpty();
+          bool firstHandshake = (webServer.getC6Version().isEmpty() ||
+                                 webServer.getC6Version() == "Desconhecido");
           printLog("[BASE LAFVIN] ★ Versao Coprocessador C6: %s\n", rxBuf + 9);
           webServer.setC6Version(rxBuf + 9);
           display.setC6Version(rxBuf + 9);
           if (firstHandshake) {
             String ledCfgCmd = fleet.buildC6LedCfgCommand();
             interSerial.println(ledCfgCmd);
+            interSerial.flush();
           }
         } else if (strncmp(rxBuf, "LORA_STAT:", 10) == 0) {
           char st[16] = "OK";
@@ -436,18 +447,18 @@ void handleInputsAndMenu(uint32_t now, bool &forceDisplay) {
       }
     } else {
       // Prompt "SAIR | CONTINUAR" ativo:
-      // Y alterna entre SAIR (0) e CONTINUAR (1); X-> ou Clique BOOT confirma
+      // Y ou X alterna entre SAIR (0) e CONTINUAR (1); Clique BOOT confirma
       int8_t navY = joystick.getNavY();
       int8_t navX = joystick.getNavX();
       bool bootClick = joystick.wasShortClicked();
       joystick.wasLongClicked();
       joystick.wasBootHeld3s();
 
-      if (navY != 0) {
+      if (navY != 0 || navX != 0) {
         display.setControlExitCursorIdx(
             (display.getControlExitCursorIdx() + 1) % 2);
         forceDisplay = true;
-      } else if (navX == 1 || bootClick) {
+      } else if (bootClick) {
         if (display.getControlExitCursorIdx() == 0) {
           // SAIR selecionado -> Volta para o menu pai
           display.setControlExitPromptActive(false);
@@ -460,24 +471,16 @@ void handleInputsAndMenu(uint32_t now, bool &forceDisplay) {
           forceDisplay = true;
           printLog("[UI] Confirmou CONTINUAR\n");
         }
-      } else if (navX == -1) {
-        if (display.getControlExitCursorIdx() == 1) {
-          display.setControlExitCursorIdx(0);
-          forceDisplay = true;
-        } else {
-          display.setControlExitPromptActive(false);
-          display.setPage(parentPage);
-          forceDisplay = true;
-          printLog("[UI] Saiu -> Menu Pai\n");
-        }
       }
     }
     return;
   }
 
-  // Ecrã de inserção de Password WiFi com teclado QWERTY (navegação 2D por X e
-  // Y):
-  if (page == BASE_PAGE_CONFIG_WIFI_PASS) {
+  // Ecrã de inserção de texto com teclado QWERTY (Password WiFi ou Nome da Estação Base):
+  if (page == BASE_PAGE_CONFIG_WIFI_PASS || page == BASE_PAGE_CONFIG_NAME) {
+    bool isNamePage = (page == BASE_PAGE_CONFIG_NAME);
+    BaseScreenPage backPage =
+        isNamePage ? BASE_PAGE_CONFIG_MENU : BASE_PAGE_CONFIG_WIFI_SCAN;
     int8_t dx = joystick.getNavXRepeat();
     int8_t dy = joystick.getNavY();
     bool keyClick = joystick.wasShortClicked();
@@ -492,40 +495,57 @@ void handleInputsAndMenu(uint32_t now, bool &forceDisplay) {
       display.backspaceWifiPass();
       forceDisplay = true;
     } else if (longCancel) {
-      display.setPage(BASE_PAGE_CONFIG_WIFI_SCAN);
+      display.setPage(backPage);
       joystick.disarmNavX();
       forceDisplay = true;
-      printLog("[UI] Password WiFi cancelada -> Scan\n");
+      printLog("[UI] Teclado QWERTY cancelado -> Voltar\n");
     } else if (keyClick) {
       uint8_t act = display.pressWifiKbKey();
       forceDisplay = true;
       if (act == 1) {
         // SAIR
-        display.setPage(BASE_PAGE_CONFIG_WIFI_SCAN);
+        display.setPage(backPage);
         joystick.disarmNavX();
-        printLog("[UI] Password WiFi: SAIR -> Scan\n");
+        printLog("[UI] Teclado QWERTY: SAIR -> Voltar\n");
       } else if (act == 2) {
-        // LIGAR: guardar credenciais e conectar
-        String targetSsid = display.getWifiTargetSsid();
-        String targetPass = display.getWifiPassBuf();
-        printLog("[UI] A guardar e ligar a rede WiFi: %s\n",
-                 targetSsid.c_str());
-        display.showWifiConnectingScreen(targetSsid.c_str());
-        wifiConfig.addOrUpdateNetwork(targetSsid, targetPass, true);
-        bool ok = wifiConfig.connectTo(targetSsid, 8000);
-        joystick.disarmNavX();
-        if (ok) {
-          display.showFeedback("WIFI GUARDADO E LIGADO!", 2000);
-          printLog("[UI] Conectado a nova rede WiFi: %s (%s)\n",
-                   targetSsid.c_str(), wifiConfig.getIPAddress().c_str());
+        if (isNamePage) {
+          // GUARDAR Nome da Estação Base
+          String newName = display.getWifiPassBuf();
+          newName.trim();
+          joystick.disarmNavX();
+          if (newName.length() > 0) {
+            fleet.setStationName(newName.c_str(), true);
+            display.showFeedback("NOME DA BASE GUARDADO!", 2000);
+            printLog("[UI] Nome da Estacao Base alterado para: %s\n",
+                     fleet.getStationName());
+          } else {
+            display.showFeedback("NOME INVALIDO (VAZIO)", 2000);
+          }
+          display.setPage(BASE_PAGE_CONFIG_MENU);
+          forceDisplay = true;
         } else {
-          wifiConfig.startAccessPoint("WindDragons-Base", "12345678");
-          display.showFeedback("FALHA! MODO AP ATIVO", 2000);
-          printLog("[UI] Falha ao ligar a %s -> Fallback Modo AP\n",
+          // LIGAR: guardar credenciais e conectar
+          String targetSsid = display.getWifiTargetSsid();
+          String targetPass = display.getWifiPassBuf();
+          printLog("[UI] A guardar e ligar a rede WiFi: %s\n",
                    targetSsid.c_str());
+          display.showWifiConnectingScreen(targetSsid.c_str());
+          wifiConfig.addOrUpdateNetwork(targetSsid, targetPass, true);
+          bool ok = wifiConfig.connectTo(targetSsid, 8000);
+          joystick.disarmNavX();
+          if (ok) {
+            display.showFeedback("WIFI GUARDADO E LIGADO!", 2000);
+            printLog("[UI] Conectado a nova rede WiFi: %s (%s)\n",
+                     targetSsid.c_str(), wifiConfig.getIPAddress().c_str());
+          } else {
+            wifiConfig.startAccessPoint("WindDragons-Base", "12345678");
+            display.showFeedback("FALHA! MODO AP ATIVO", 2000);
+            printLog("[UI] Falha ao ligar a %s -> Fallback Modo AP\n",
+                     targetSsid.c_str());
+          }
+          display.setPage(BASE_PAGE_CONFIG_WIFI);
+          forceDisplay = true;
         }
-        display.setPage(BASE_PAGE_CONFIG_WIFI);
-        forceDisplay = true;
       }
     }
     return;
@@ -639,7 +659,7 @@ void handleInputsAndMenu(uint32_t now, bool &forceDisplay) {
 
   case BASE_PAGE_ROVER_MENU:
     if (navY != 0) {
-      display.setRoverMenuIdx((display.getRoverMenuIdx() + 2 + navY) % 2);
+      display.setRoverMenuIdx((display.getRoverMenuIdx() + 3 + navY) % 3);
       forceDisplay = true;
     }
     if (navX == -1 || clickBack) {
@@ -651,12 +671,41 @@ void handleInputsAndMenu(uint32_t now, bool &forceDisplay) {
         display.setRoverModeIdx(currentNavMode < 3 ? currentNavMode : 0);
         display.setPage(BASE_PAGE_ROVER_MODE);
         printLog("[UI] Rover Menu -> Modo\n");
-      } else {
+      } else if (display.getRoverMenuIdx() == 1) {
         joystick.wasBootHeld3s();
         display.setControlExitPromptActive(false);
         display.setBootHoldProgressPct(0);
         display.setPage(BASE_PAGE_ROVER_CONTROL);
         printLog("[UI] Rover Menu -> Comando\n");
+      } else {
+        display.setRoverRemoveIdx(0);
+        display.setPage(BASE_PAGE_ROVER_REMOVE);
+        printLog("[UI] Rover Menu -> Confirmar Remocao\n");
+      }
+      forceDisplay = true;
+    }
+    break;
+
+  case BASE_PAGE_ROVER_REMOVE:
+    if (navY != 0 || navX != 0) {
+      display.setRoverRemoveIdx((display.getRoverRemoveIdx() + 1) % 2);
+      forceDisplay = true;
+    } else if (clickBack) {
+      display.setPage(BASE_PAGE_ROVER_MENU);
+      forceDisplay = true;
+      printLog("[UI] Remover Rover cancelado -> Rover Menu\n");
+    } else if (clickEnter) {
+      if (display.getRoverRemoveIdx() == 0) {
+        uint8_t rId = fleet.getSelectedRoverId();
+        if (fleet.removeSelectedRover(true)) {
+          display.setRoverListIdx(0, fleet.getRovers().size());
+          display.showFeedback("ROVER REMOVIDO!", 2000);
+          printLog("[UI] Rover #%u removido da frota!\n", rId);
+        }
+        display.setPage(BASE_PAGE_ROVER_LIST);
+      } else {
+        display.setPage(BASE_PAGE_ROVER_MENU);
+        printLog("[UI] Remover Rover: Cancelar -> Rover Menu\n");
       }
       forceDisplay = true;
     }
@@ -694,7 +743,7 @@ void handleInputsAndMenu(uint32_t now, bool &forceDisplay) {
 
   case BASE_PAGE_CONFIG_MENU:
     if (navY != 0) {
-      display.setConfigMenuIdx((display.getConfigMenuIdx() + 5 + navY) % 5);
+      display.setConfigMenuIdx((display.getConfigMenuIdx() + 6 + navY) % 6);
       forceDisplay = true;
     }
     if (navX == -1 || clickBack) {
@@ -716,6 +765,12 @@ void handleInputsAndMenu(uint32_t now, bool &forceDisplay) {
         display.setPage(BASE_PAGE_CONFIG_ID);
         printLog("[UI] Configuracoes -> ID\n");
       } else if (cIdx == 3) {
+        display.beginStationNameEntry(fleet.getStationName());
+        joystick.disarmNavX();
+        display.setPage(BASE_PAGE_CONFIG_NAME);
+        printLog("[UI] Configuracoes -> Alterar Nome (%s)\n",
+                 fleet.getStationName());
+      } else if (cIdx == 4) {
         display.setPage(BASE_PAGE_CONFIG_FW);
         printLog("[UI] Configuracoes -> Firmware\n");
       } else {

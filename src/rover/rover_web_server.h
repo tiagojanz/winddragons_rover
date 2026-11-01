@@ -653,9 +653,11 @@ private:
     html += ".progress-bg{width:100%;height:16px;background:#0f172a;border-"
             "radius:8px;overflow:hidden;margin-top:8px;}";
     html += ".progress-bar{height:100%;transition:width 0.3s;}";
-    html += ".slider{width:100%;-webkit-appearance:none;height:10px;background:"
-            "#0f172a;border-radius:5px;outline:none;accent-color:var(--primary);}"
-            ".slider:focus-visible{outline:2px solid var(--primary);outline-offset:4px;}";
+    html +=
+        ".slider{width:100%;-webkit-appearance:none;height:10px;background:"
+        "#0f172a;border-radius:5px;outline:none;accent-color:var(--primary);}"
+        ".slider:focus-visible{outline:2px solid "
+        "var(--primary);outline-offset:4px;}";
     html += ".slider::-webkit-slider-thumb{-webkit-appearance:none;width:24px;"
             "height:24px;border-radius:50%;background:var(--primary);cursor:"
             "pointer;}";
@@ -1520,12 +1522,12 @@ private:
     html += "<div "
             "style='display:flex;justify-content:space-between;align-items:"
             "center;margin-bottom:6px;'>";
-    html += "<span class='stat-label'>Brilho da Fita de LEDs (5% - "
+    html += "<span class='stat-label'>Brilho da Fita de LEDs (0% - "
             "100%):</span>";
     html += "<span id='ledBrightVal' "
             "style='font-weight:700;color:#c084fc;font-size:1.05rem;'>" +
             String(_config.getLedBrightness()) + "%</span></div>";
-    html += "<input type='range' id='cfg_led_bright' min='5' max='100' "
+    html += "<input type='range' id='cfg_led_bright' min='0' max='100' "
             "step='1' value='" +
             String(_config.getLedBrightness()) +
             "' class='slider' oninput='onLedBrightSlide(this.value)'>";
@@ -1542,11 +1544,12 @@ private:
             "class='fa-solid fa-floppy-disk'></i> Guardar Config LEDs</button>";
     html += "</div></div>";
 
-    // Card 4.3b: Controlo da Cor por Modo e Intensidade do LED RGB da C6 (GPIO 8)
+    // Card 4.3b: Controlo da Cor por Modo e Intensidade do LED RGB da C6 (GPIO
+    // 8)
     static const char *modeNamesPt[7] = {
-        "0 • IDLE (Standby)",          "1 • MANUAL (Comando)",
-        "2 • HOLD STATION (Manter)",   "3 • ANCHORED (Ancorado)",
-        "4 • GOTO TARGET (Navegar)",   "5 • RTL (Regresso Home)",
+        "0 • IDLE (Standby)",           "1 • MANUAL (Comando)",
+        "2 • HOLD STATION (Manter)",    "3 • ANCHORED (Ancorado)",
+        "4 • GOTO TARGET (Navegar)",    "5 • RTL (Regresso Home)",
         "6 • FAILSAFE (Emergência 2Hz)"};
     static const char *modeDescsPt[7] = {
         "Aguardando missão / motores parados",
@@ -1559,94 +1562,152 @@ private:
     uint8_t curSt = (_motorStatus < 7) ? _motorStatus : 0;
     String curCol = _config.getC6ModeColor(curSt);
 
-    html += "<div class='card' style='border:1px solid #10b981;' id='c6LedCard'>";
+    html +=
+        "<div class='card' style='border:1px solid #10b981;' id='c6LedCard'>";
     html += "<div class='card-title' "
             "style='display:flex;justify-content:space-between;align-items:"
             "center;flex-wrap:wrap;gap:8px;'>";
     html += "<span><i class='fa-solid fa-palette' style='color:#10b981;'></i> "
             "LED RGB do Coprocessador C6 — Cor por Modo &amp; Intensidade "
             "(GPIO 8)</span>";
-    html += "<div style='display:flex;align-items:center;gap:8px;flex-wrap:wrap;'>";
+    html +=
+        "<div style='display:flex;align-items:center;gap:8px;flex-wrap:wrap;'>";
     html += "<span id='c6LedActiveBadge' class='badge' "
             "style='background:rgba(16,185,129,0.18);color:#a7f3d0;border:1px "
             "solid #10b981;display:inline-flex;align-items:center;gap:6px;'>"
-            "<span id='c6LedActiveDot' style='width:10px;height:10px;border-radius:50%;display:inline-block;background:" +
+            "<span id='c6LedActiveDot' "
+            "style='width:10px;height:10px;border-radius:50%;display:inline-"
+            "block;background:" +
             curCol + ";box-shadow:0 0 8px " + curCol +
             ";'></span>MODO ATUAL: <b id='c6LedActiveModeTxt'>" +
             String(get_motor_status_str(curSt)) + "</b></span>";
-    html += "<span id='c6LedBrtBadge' class='badge' "
-            "style='background:#064e3b;color:#6ee7b7;border:1px solid #059669;'>"
-            "INTENSIDADE: " +
-            String(_config.getC6LedBrightness()) + "%</span>";
+    html +=
+        "<span id='c6LedBrtBadge' class='badge' "
+        "style='background:#064e3b;color:#6ee7b7;border:1px solid #059669;'>"
+        "INTENSIDADE: " +
+        String(_config.getC6LedBrightness()) + "%</span>";
     html += "</div></div>";
-    html += "<p style='color:var(--muted);font-size:0.85rem;margin-bottom:14px;'>"
-            "Configure a <b>intensidade de brilho (0% a 100%)</b> e a <b>cor RGB "
-            "associada a cada modo de operação</b> no LED RGB endereçável onboard "
-            "do Coprocessador ESP32-C6 (<b>GPIO 8</b>). Pode testar qualquer cor "
-            "em tempo real na placa C6 antes de guardar.</p>";
+    html +=
+        "<p style='color:var(--muted);font-size:0.85rem;margin-bottom:14px;'>"
+        "Configure a <b>intensidade de brilho (0% a 100%)</b> e a <b>cor RGB "
+        "associada a cada modo de operação</b> no LED RGB endereçável onboard "
+        "do Coprocessador ESP32-C6 (<b>GPIO 8</b>). Pode testar qualquer cor "
+        "em tempo real na placa C6 antes de guardar.</p>";
 
     // Controlo de Intensidade do LED da C6
-    html += "<div style='margin-bottom:14px;background:rgba(15,23,42,0.6);border:"
-            "1px solid #334155;border-radius:10px;padding:14px;'>";
-    html += "<div style='display:flex;justify-content:space-between;align-items:"
-            "center;margin-bottom:8px;flex-wrap:wrap;gap:8px;'>";
-    html += "<label for='cfg_c6_led_bright' class='stat-label' style='font-size:0.82rem;color:var(--text);'>"
-            "<i class='fa-solid fa-sun' style='color:#fbbf24;'></i> Intensidade "
-            "do LED da C6 (0% Desligado — 100% Máximo):</label>";
-    html += "<span id='c6LedBrightVal' style='font-size:1.25rem;font-weight:800;color:#10b981;'>" +
+    html +=
+        "<div style='margin-bottom:14px;background:rgba(15,23,42,0.6);border:"
+        "1px solid #334155;border-radius:10px;padding:14px;'>";
+    html +=
+        "<div style='display:flex;justify-content:space-between;align-items:"
+        "center;margin-bottom:8px;flex-wrap:wrap;gap:8px;'>";
+    html +=
+        "<label for='cfg_c6_led_bright' class='stat-label' "
+        "style='font-size:0.82rem;color:var(--text);'>"
+        "<i class='fa-solid fa-sun' style='color:#fbbf24;'></i> Intensidade "
+        "do LED da C6 (0% Desligado — 100% Máximo):</label>";
+    html += "<span id='c6LedBrightVal' "
+            "style='font-size:1.25rem;font-weight:800;color:#10b981;'>" +
             String(_config.getC6LedBrightness()) + "%</span>";
     html += "</div>";
-    html += "<input type='range' id='cfg_c6_led_bright' min='0' max='100' step='1' value='" +
+    html += "<input type='range' id='cfg_c6_led_bright' min='0' max='100' "
+            "step='1' value='" +
             String(_config.getC6LedBrightness()) +
-            "' class='slider' oninput='onC6LedBrightSlide(this.value)'>";
-    html += "<div style='display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;'>";
-    html += "<button type='button' class='btn btn-secondary' style='padding:6px 12px;font-size:0.78rem;' onclick='setC6LedBrightPreset(0)'><i class='fa-solid fa-power-off'></i> 0% (Off)</button>";
-    html += "<button type='button' class='btn btn-secondary' style='padding:6px 12px;font-size:0.78rem;' onclick='setC6LedBrightPreset(25)'>25% (Noturno)</button>";
-    html += "<button type='button' class='btn btn-secondary' style='padding:6px 12px;font-size:0.78rem;' onclick='setC6LedBrightPreset(50)'>50% (Médio)</button>";
-    html += "<button type='button' class='btn btn-secondary' style='padding:6px 12px;font-size:0.78rem;' onclick='setC6LedBrightPreset(80)'>80% (Padrão)</button>";
-    html += "<button type='button' class='btn btn-secondary' style='padding:6px 12px;font-size:0.78rem;' onclick='setC6LedBrightPreset(100)'><i class='fa-solid fa-bolt'></i> 100% ( Sol)</button>";
+            "' class='slider' oninput='onC6LedBrightSlide(this.value)' "
+            "onchange='onC6LedBrightChange(this.value)'>";
+    html +=
+        "<div style='display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;'>";
+    html +=
+        "<button type='button' class='btn btn-secondary' style='padding:6px "
+        "12px;font-size:0.78rem;' onclick='setC6LedBrightPreset(0)'><i "
+        "class='fa-solid fa-power-off'></i> 0% (Off)</button>";
+    html += "<button type='button' class='btn btn-secondary' "
+            "style='padding:6px 12px;font-size:0.78rem;' "
+            "onclick='setC6LedBrightPreset(25)'>25% (Noturno)</button>";
+    html += "<button type='button' class='btn btn-secondary' "
+            "style='padding:6px 12px;font-size:0.78rem;' "
+            "onclick='setC6LedBrightPreset(50)'>50% (Médio)</button>";
+    html += "<button type='button' class='btn btn-secondary' "
+            "style='padding:6px 12px;font-size:0.78rem;' "
+            "onclick='setC6LedBrightPreset(80)'>80% (Padrão)</button>";
+    html +=
+        "<button type='button' class='btn btn-secondary' style='padding:6px "
+        "12px;font-size:0.78rem;' onclick='setC6LedBrightPreset(100)'><i "
+        "class='fa-solid fa-bolt'></i> 100% ( Sol)</button>";
     html += "</div></div>";
 
     // Grelha de Cores por Modo (0..6)
     html += "<div style='margin-bottom:14px;'>";
-    html += "<div class='stat-label' style='margin-bottom:8px;'><i class='fa-solid fa-sliders'></i> Cor do LED da C6 para cada Modo de Operação:</div>";
-    html += "<div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;'>";
+    html +=
+        "<div class='stat-label' style='margin-bottom:8px;'><i class='fa-solid "
+        "fa-sliders'></i> Cor do LED da C6 para cada Modo de Operação:</div>";
+    html += "<div "
+            "style='display:grid;grid-template-columns:repeat(auto-fit,minmax("
+            "240px,1fr));gap:10px;'>";
     for (uint8_t m = 0; m < 7; m++) {
       String hexCol = _config.getC6ModeColor(m);
       bool isCur = (m == curSt);
       html += "<div id='c6ModeCard_" + String(m) +
               "' style='background:rgba(15,23,42,0.65);border:1px solid " +
               String(isCur ? "#10b981" : "#334155") +
-              ";border-radius:10px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px;'>";
+              ";border-radius:10px;padding:10px "
+              "12px;display:flex;align-items:center;justify-content:space-"
+              "between;gap:10px;'>";
       html += "<div style='min-width:0;flex:1;'>";
-      html += "<div style='font-weight:700;font-size:0.84rem;color:var(--text);display:flex;align-items:center;gap:6px;'>";
+      html += "<div "
+              "style='font-weight:700;font-size:0.84rem;color:var(--text);"
+              "display:flex;align-items:center;gap:6px;'>";
       html += "<span id='c6ModeDot_" + String(m) +
-              "' style='width:10px;height:10px;border-radius:50%;display:inline-block;background:" +
-              hexCol + ";box-shadow:0 0 6px " + hexCol + ";flex-shrink:0;'></span>";
+              "' "
+              "style='width:10px;height:10px;border-radius:50%;display:inline-"
+              "block;background:" +
+              hexCol + ";box-shadow:0 0 6px " + hexCol +
+              ";flex-shrink:0;'></span>";
       html += "<span>" + String(modeNamesPt[m]) + "</span></div>";
-      html += "<div style='font-size:0.72rem;color:var(--muted);margin-top:2px;'>" +
-              String(modeDescsPt[m]) + "</div>";
+      html +=
+          "<div style='font-size:0.72rem;color:var(--muted);margin-top:2px;'>" +
+          String(modeDescsPt[m]) + "</div>";
       html += "</div>";
-      html += "<div style='display:flex;align-items:center;gap:6px;flex-shrink:0;'>";
-      html += "<input type='color' id='cfg_c6_mode_color_" + String(m) +
-              "' value='" + hexCol + "' onchange='onC6ModeColorPick(" +
-              String(m) + ",this.value)' style='width:40px;height:34px;padding:2px;margin:0;cursor:pointer;background:#0f172a;border:1px solid #475569;border-radius:6px;'>";
+      html += "<div "
+              "style='display:flex;align-items:center;gap:6px;flex-shrink:0;'>";
+      html +=
+          "<input type='color' id='cfg_c6_mode_color_" + String(m) +
+          "' value='" + hexCol + "' onchange='onC6ModeColorPick(" + String(m) +
+          ",this.value)' "
+          "style='width:40px;height:34px;padding:2px;margin:0;cursor:pointer;"
+          "background:#0f172a;border:1px solid #475569;border-radius:6px;'>";
       html += "<span id='c6ModeHexLbl_" + String(m) +
-              "' style='font-family:monospace;font-size:0.76rem;color:var(--muted);min-width:58px;'>" +
+              "' "
+              "style='font-family:monospace;font-size:0.76rem;color:var(--"
+              "muted);min-width:58px;'>" +
               hexCol + "</span>";
-      html += "<button type='button' class='btn btn-secondary' style='padding:6px 10px;font-size:0.75rem;' onclick='testC6ModeColor(" +
-              String(m) + ")' title='Pré-visualizar esta cor por 3s no LED da C6'><i class='fa-solid fa-eye'></i></button>";
+      html +=
+          "<button type='button' class='btn btn-secondary' style='padding:6px "
+          "10px;font-size:0.75rem;' onclick='testC6ModeColor(" +
+          String(m) +
+          ")' title='Pré-visualizar esta cor por 3s no LED da C6'><i "
+          "class='fa-solid fa-eye'></i></button>";
       html += "</div></div>";
     }
     html += "</div></div>";
 
     // Botões de ação do Card C6 LED
-    html += "<div style='display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;background:rgba(15,23,42,0.6);border:1px solid #334155;border-radius:10px;padding:12px;'>";
+    html += "<div "
+            "style='display:flex;justify-content:space-between;align-items:"
+            "center;flex-wrap:wrap;gap:10px;background:rgba(15,23,42,0.6);"
+            "border:1px solid #334155;border-radius:10px;padding:12px;'>";
     html += "<div class='btn-group'>";
-    html += "<button type='button' onclick='saveC6LedConfig()' class='btn btn-primary' style='background:#10b981;color:#0f172a;'><i class='fa-solid fa-floppy-disk'></i> Guardar Config LED da C6</button>";
-    html += "<button type='button' onclick='resetC6LedDefaults()' class='btn btn-secondary'><i class='fa-solid fa-rotate'></i> Repor Cores Padrão</button>";
+    html += "<button type='button' onclick='saveC6LedConfig()' class='btn "
+            "btn-primary' style='background:#10b981;color:#0f172a;'><i "
+            "class='fa-solid fa-floppy-disk'></i> Guardar Config LED da "
+            "C6</button>";
+    html += "<button type='button' onclick='resetC6LedDefaults()' class='btn "
+            "btn-secondary'><i class='fa-solid fa-rotate'></i> Repor Cores "
+            "Padrão</button>";
     html += "</div>";
-    html += "<span style='font-size:0.78rem;color:var(--muted);'><i class='fa-solid fa-microchip'></i> Sincronizado em tempo real via UART com o ESP32-C6 (GPIO 8)</span>";
+    html += "<span style='font-size:0.78rem;color:var(--muted);'><i "
+            "class='fa-solid fa-microchip'></i> Sincronizado em tempo real via "
+            "UART com o ESP32-C6 (GPIO 8)</span>";
     html += "</div></div>";
 
     // Card 4.4: Depuração, Calibração e Orientação 9-DOF — Bússola GY-BNO055
@@ -2051,34 +2112,41 @@ private:
             "r=parseInt(hex.slice(1,3),16)||0,g=parseInt(hex.slice(3,5),16)||0,"
             "b=parseInt(hex.slice(5,7),16)||0;testLedColor(r,g,b,hex."
             "toUpperCase());}";
-    html += "function onLedBrightSlide(v){const "
-            "el=document.getElementById('ledBrightVal');if(el)el.innerText=v+'%"
-            "';if(ledBrightTimer)clearTimeout(ledBrightTimer);ledBrightTimer="
-            "setTimeout(()=>{fetch('/api/control/leds',{method:'POST',headers:{"
-            "'Content-Type':'application/json'},body:JSON.stringify({"
-            "brightness:parseInt(v)})}).catch(()=>{});},60);}";
+    html += "function parsePct(v,def=80){const n=parseInt(v,10);return "
+            "Number.isNaN(n)?def:Math.max(0,Math.min(100,n));}";
+    html += "function onLedBrightSlide(v){const pct=parsePct(v,100);const "
+            "el=document.getElementById('ledBrightVal');if(el)el.innerText="
+            "pct+'%';if(ledBrightTimer)clearTimeout(ledBrightTimer);"
+            "ledBrightTimer=setTimeout(()=>{fetch('/api/control/leds',{"
+            "method:'POST',headers:{'Content-Type':'application/json'},body:"
+            "JSON.stringify({brightness:pct})}).catch(()=>{});},60);}";
     html += "function saveLedConfig(){const "
             "cnt=parseInt(document.getElementById('cfg_led_count')?.value)||8;"
             "const "
-            "brt=parseInt(document.getElementById('cfg_led_bright')?.value)||"
-            "100;fetch('/api/control/leds',{method:'POST',headers:{'Content-"
+            "brt=parsePct(document.getElementById('cfg_led_bright')?.value,"
+            "100);fetch('/api/control/leds',{method:'POST',headers:{'Content-"
             "Type':'application/json'},body:JSON.stringify({count:cnt,"
             "brightness:brt,save:true})}).then(r=>r.json()).then(res=>"
             "showStatus(res.msg||'Configuração dos LEDs guardada!')).catch(()=>"
             "{});}";
     html += "let c6LedBrightTimer=null;";
-    html += "function onC6LedBrightSlide(v){const "
-            "el=document.getElementById('c6LedBrightVal');if(el)el.innerText=v+"
-            "'%';const "
+    html += "function onC6LedBrightSlide(v){const pct=parsePct(v,80);const "
+            "el=document.getElementById('c6LedBrightVal');if(el)el.innerText="
+            "pct+'%';const "
             "b=document.getElementById('c6LedBrtBadge');if(b)b.innerText='"
-            "INTENSIDADE: '+v+'%';if(c6LedBrightTimer)clearTimeout("
+            "INTENSIDADE: '+pct+'%';if(c6LedBrightTimer)clearTimeout("
             "c6LedBrightTimer);c6LedBrightTimer=setTimeout(()=>{fetch('/api/"
             "control/c6_led',{method:'POST',headers:{'Content-Type':'"
-            "application/json'},body:JSON.stringify({brightness:parseInt(v)})})"
+            "application/json'},body:JSON.stringify({brightness:pct})})"
             ".catch(()=>{});},60);}";
-    html += "function setC6LedBrightPreset(v){const "
-            "s=document.getElementById('cfg_c6_led_bright');if(s)s.value=v;"
-            "onC6LedBrightSlide(v);}";
+    html += "function onC6LedBrightChange(v){const pct=parsePct(v,80);fetch('"
+            "/api/control/c6_led',{method:'POST',headers:{'Content-Type':'"
+            "application/json'},body:JSON.stringify({brightness:pct,save:true}"
+            ")}).then(r=>r.json()).then(res=>showStatus(res.msg||('Intensidade"
+            " do LED da C6: '+pct+'%'))).catch(()=>{});}";
+    html += "function setC6LedBrightPreset(v){const pct=parsePct(v,80);const "
+            "s=document.getElementById('cfg_c6_led_bright');if(s)s.value=pct;"
+            "onC6LedBrightSlide(pct);onC6LedBrightChange(pct);}";
     html += "function updateC6ModeRowUI(m,hex){if(!hex)return;const "
             "up=hex.toUpperCase();const "
             "inp=document.getElementById('cfg_c6_mode_color_'+m);if(inp)inp."
@@ -2098,19 +2166,26 @@ private:
             "Content-Type':'application/json'},body:JSON.stringify({test_hex:"
             "hex})}).then(r=>r.json()).then(res=>showStatus(res.msg||('A testar"
             " cor '+hex+' no LED da C6!'))).catch(()=>{});}";
-    html += "function getC6ModeColorsFromUI(){const arr=[];for(let i=0;i<7;i++){"
-            "arr.push((document.getElementById('cfg_c6_mode_color_'+i)?.value||"
-            "'#06B6D4').toUpperCase());}return arr;}";
+    html +=
+        "function getC6ModeColorsFromUI(){const arr=[];for(let i=0;i<7;i++){"
+        "arr.push((document.getElementById('cfg_c6_mode_color_'+i)?.value||"
+        "'#06B6D4').toUpperCase());}return arr;}";
     html += "function saveC6LedConfig(){const "
-            "brt=parseInt(document.getElementById('cfg_c6_led_bright')?.value?"
-            "?80);const colors=getC6ModeColorsFromUI();fetch('/api/control/"
+            "brt=parsePct(document.getElementById('cfg_c6_led_bright')?.value,"
+            "80);const colors=getC6ModeColorsFromUI();fetch('/api/control/"
             "c6_led',{method:'POST',headers:{'Content-Type':'application/json'}"
             ",body:JSON.stringify({brightness:brt,mode_colors:colors,save:true}"
             ")}).then(r=>r.json()).then(res=>showStatus(res.msg||'Configuração "
             "do LED da C6 guardada!')).catch(()=>{});}";
     html += "function resetC6LedDefaults(){fetch('/api/control/c6_led',{method:"
             "'POST',headers:{'Content-Type':'application/json'},body:JSON."
-            "stringify({reset_defaults:true})}).then(r=>r.json()).then(res=>{if"
+            "stringify({reset_defaults:true})}).then(r=>r.json()).then(res=>{"
+            "const brt=res.c6_led_brightness??80;const "
+            "s=document.getElementById('cfg_c6_led_bright');if(s)s.value=brt;"
+            "const vEl=document.getElementById('c6LedBrightVal');if(vEl)vEl."
+            "innerText=brt+'%';const "
+            "bEl=document.getElementById('c6LedBrtBadge');if(bEl)bEl."
+            "innerText='INTENSIDADE: '+brt+'%';if"
             "(Array.isArray(res.c6_mode_colors)){res.c6_mode_colors.forEach((c,"
             "i)=>updateC6ModeRowUI(i,c));}showStatus(res.msg||'Cores padrão do "
             "LED da C6 repostas!');}).catch(()=>{});}";
@@ -4102,16 +4177,28 @@ private:
     uint8_t id = doc["rover_id"] | _config.getRoverId();
     String ssid = doc["ap_ssid"] | _config.getApSsid();
     String pass = doc["ap_password"] | _config.getApPassword();
-    uint8_t bright = doc["screen_brightness"] | doc["brightness"] |
-                     _config.getScreenBrightness();
-    if (bright > 100)
-      bright = 100;
-    uint8_t cells =
-        doc["battery_cells"] | doc["cells"] | _config.getBatteryCells();
+    uint8_t bright = _config.getScreenBrightness();
+    if (!doc["screen_brightness"].isNull()) {
+      bright = (uint8_t)constrain(doc["screen_brightness"].as<int>(), 0, 100);
+    } else if (!doc["brightness"].isNull()) {
+      bright = (uint8_t)constrain(doc["brightness"].as<int>(), 0, 100);
+    }
+    uint8_t cells = _config.getBatteryCells();
+    if (!doc["battery_cells"].isNull()) {
+      cells = doc["battery_cells"].as<uint8_t>();
+    } else if (!doc["cells"].isNull()) {
+      cells = doc["cells"].as<uint8_t>();
+    }
     if (cells != 3 && cells != 4 && cells != 6)
       cells = _config.getBatteryCells();
-    uint16_t cap = doc["battery_capacity_mah"] | doc["capacity_mah"] |
-                   doc["capacity"] | _config.getBatteryCapacityMah();
+    uint16_t cap = _config.getBatteryCapacityMah();
+    if (!doc["battery_capacity_mah"].isNull()) {
+      cap = doc["battery_capacity_mah"].as<uint16_t>();
+    } else if (!doc["capacity_mah"].isNull()) {
+      cap = doc["capacity_mah"].as<uint16_t>();
+    } else if (!doc["capacity"].isNull()) {
+      cap = doc["capacity"].as<uint16_t>();
+    }
 
     _config.updateConfig(id, ssid, pass, bright, cells, cap);
     if (doc["rack_angle_engaged"].is<int>() ||
@@ -4163,9 +4250,15 @@ private:
         _commandQueueCb(jCmd);
       }
     }
-    if (doc["led_count"].is<int>() || doc["led_brightness"].is<int>()) {
-      uint8_t lCnt = doc["led_count"] | _config.getLedCount();
-      uint8_t lBrt = doc["led_brightness"] | _config.getLedBrightness();
+    if (!doc["led_count"].isNull() || !doc["led_brightness"].isNull()) {
+      uint8_t lCnt =
+          !doc["led_count"].isNull()
+              ? (uint8_t)constrain(doc["led_count"].as<int>(), 1, 120)
+              : _config.getLedCount();
+      uint8_t lBrt =
+          !doc["led_brightness"].isNull()
+              ? (uint8_t)constrain(doc["led_brightness"].as<int>(), 0, 100)
+              : _config.getLedBrightness();
       _config.setLedConfig(lCnt, lBrt);
       _actuators.setLedConfigState(_config.getLedCount(),
                                    _config.getLedBrightness());
@@ -4177,7 +4270,7 @@ private:
       }
     }
     bool c6LedUpdated = false;
-    if (doc["c6_led_brightness"].is<int>()) {
+    if (!doc["c6_led_brightness"].isNull()) {
       int cb = constrain(doc["c6_led_brightness"].as<int>(), 0, 100);
       _config.setC6LedBrightness((uint8_t)cb, false);
       c6LedUpdated = true;
@@ -4391,11 +4484,15 @@ private:
   void handleApiDisplayBrightness() {
     uint8_t val = _config.getScreenBrightness();
     if (_server.hasArg("val")) {
-      val = _server.arg("val").toInt();
+      val = (uint8_t)constrain(_server.arg("val").toInt(), 0, 100);
     } else if (_server.hasArg("plain")) {
       JsonDocument doc;
       deserializeJson(doc, _server.arg("plain"));
-      val = doc["screen_brightness"] | doc["brightness"] | val;
+      if (!doc["screen_brightness"].isNull()) {
+        val = (uint8_t)constrain(doc["screen_brightness"].as<int>(), 0, 100);
+      } else if (!doc["brightness"].isNull()) {
+        val = (uint8_t)constrain(doc["brightness"].as<int>(), 0, 100);
+      }
     }
     if (val > 100)
       val = 100;
@@ -4957,16 +5054,16 @@ private:
       else if (_server.hasArg("count"))
         cnt = (uint8_t)constrain(_server.arg("count").toInt(), 1, 120);
 
-      if (doc["brightness"].is<int>())
-        brt = (uint8_t)constrain(doc["brightness"].as<int>(), 5, 100);
-      else if (doc["led_brightness"].is<int>())
-        brt = (uint8_t)constrain(doc["led_brightness"].as<int>(), 5, 100);
+      if (!doc["brightness"].isNull())
+        brt = (uint8_t)constrain(doc["brightness"].as<int>(), 0, 100);
+      else if (!doc["led_brightness"].isNull())
+        brt = (uint8_t)constrain(doc["led_brightness"].as<int>(), 0, 100);
       else if (_server.hasArg("brightness"))
-        brt = (uint8_t)constrain(_server.arg("brightness").toInt(), 5, 100);
+        brt = (uint8_t)constrain(_server.arg("brightness").toInt(), 0, 100);
 
       _actuators.setLedConfigState(cnt, brt);
+      _config.setLedConfig(cnt, brt);
       if (shouldSave) {
-        _config.setLedConfig(cnt, brt);
         if (_commandQueueCb) {
           char lCmd[36];
           snprintf(lCmd, sizeof(lCmd), "CMD:LED:CFG:%u:%u", cnt, brt);
@@ -5052,7 +5149,8 @@ private:
 
   void handleApiC6LedControl() {
     if (_server.method() == HTTP_GET && !_server.hasArg("brightness") &&
-        !_server.hasArg("test_hex")) {
+        !_server.hasArg("val") && !_server.hasArg("test_hex") &&
+        !_server.hasArg("test_color")) {
       JsonDocument res;
       res["success"] = true;
       res["c6_led_brightness"] = _config.getC6LedBrightness();
@@ -5076,19 +5174,28 @@ private:
     String msg = "Configuração do LED RGB da C6 atualizada!";
     bool shouldSave = doc["save"].as<bool>();
 
-    // 1. Repor cores padrão
+    // 1. Repor cores padrão e intensidade (80%)
     if (doc["reset_defaults"].as<bool>()) {
+      _config.setC6LedBrightness(80, false);
       _config.resetC6ModeColorsDefault(true);
       if (_commandQueueCb) {
         String cmd = _config.buildC6LedCfgCommand();
         _commandQueueCb(cmd.c_str());
       }
-      msg = "Cores padrão por modo do LED da C6 repostas e guardadas!";
+      msg = "Cores padrão por modo e intensidade (80%) do LED da C6 repostas!";
     }
     // 2. Pré-visualização rápida de uma cor no LED da C6 (3 segundos)
-    else if (doc["test_hex"].is<const char *>()) {
-      String hex = RoverConfigManager::normalizeHexColor(
-          doc["test_hex"].as<String>(), "#06B6D4");
+    else if (doc["test_hex"].is<const char *>() ||
+             doc["test_color"].is<const char *>() ||
+             _server.hasArg("test_hex") || _server.hasArg("test_color")) {
+      String rawArg = doc["test_hex"].is<const char *>()
+                          ? doc["test_hex"].as<String>()
+                          : (doc["test_color"].is<const char *>()
+                                 ? doc["test_color"].as<String>()
+                                 : (_server.hasArg("test_hex")
+                                        ? _server.arg("test_hex")
+                                        : _server.arg("test_color")));
+      String hex = RoverConfigManager::normalizeHexColor(rawArg, "#06B6D4");
       String rawHex = hex.startsWith("#") ? hex.substring(1) : hex;
       if (_commandQueueCb) {
         String cmd = "CMD:C6LED:TEST:" + rawHex;
@@ -5097,10 +5204,15 @@ private:
       msg = "A testar a cor " + hex + " no LED RGB da C6 (GPIO 8) durante 3s!";
     }
     // 3. Alteração individual da cor de um modo específico
-    else if (doc["mode_index"].is<int>() && doc["hex"].is<const char *>()) {
-      int idx = doc["mode_index"].as<int>();
+    else if ((!doc["mode_index"].isNull() || !doc["mode_idx"].isNull()) &&
+             (doc["hex"].is<const char *>() ||
+              doc["color"].is<const char *>())) {
+      int idx = !doc["mode_index"].isNull() ? doc["mode_index"].as<int>()
+                                            : doc["mode_idx"].as<int>();
+      String colIn = doc["hex"].is<const char *>() ? doc["hex"].as<String>()
+                                                   : doc["color"].as<String>();
       if (idx >= 0 && idx < 7) {
-        _config.setC6ModeColor((uint8_t)idx, doc["hex"].as<String>(), true);
+        _config.setC6ModeColor((uint8_t)idx, colIn, true);
         String hex = _config.getC6ModeColor((uint8_t)idx);
         String rawHex = hex.startsWith("#") ? hex.substring(1) : hex;
         if (_commandQueueCb) {
@@ -5115,22 +5227,33 @@ private:
     }
     // 4. Atualização de intensidade e/ou tabela completa de cores por modo
     else {
-      bool hasBrt =
-          doc["brightness"].is<int>() || doc["c6_led_brightness"].is<int>();
+      bool hasBrt = !doc["brightness"].isNull() ||
+                    !doc["c6_led_brightness"].isNull() ||
+                    _server.hasArg("brightness") || _server.hasArg("val");
       bool hasColors = doc["mode_colors"].is<JsonArray>() ||
-                       doc["c6_mode_colors"].is<JsonArray>();
+                       doc["c6_mode_colors"].is<JsonArray>() ||
+                       doc["colors"].is<JsonArray>();
 
       if (hasBrt) {
-        int b = doc["brightness"].is<int>()
-                    ? doc["brightness"].as<int>()
-                    : doc["c6_led_brightness"].as<int>();
+        int b = (int)_config.getC6LedBrightness();
+        if (!doc["brightness"].isNull()) {
+          b = doc["brightness"].as<int>();
+        } else if (!doc["c6_led_brightness"].isNull()) {
+          b = doc["c6_led_brightness"].as<int>();
+        } else if (_server.hasArg("brightness")) {
+          b = _server.arg("brightness").toInt();
+        } else if (_server.hasArg("val")) {
+          b = _server.arg("val").toInt();
+        }
         _config.setC6LedBrightness((uint8_t)constrain(b, 0, 100), false);
       }
 
       if (hasColors) {
         JsonArray arr = doc["mode_colors"].is<JsonArray>()
                             ? doc["mode_colors"].as<JsonArray>()
-                            : doc["c6_mode_colors"].as<JsonArray>();
+                            : (doc["c6_mode_colors"].is<JsonArray>()
+                                   ? doc["c6_mode_colors"].as<JsonArray>()
+                                   : doc["colors"].as<JsonArray>());
         uint8_t idx = 0;
         for (JsonVariant v : arr) {
           if (idx >= 7)
@@ -5142,8 +5265,11 @@ private:
         }
       }
 
-      if (shouldSave || hasColors) {
+      if (shouldSave || hasColors || hasBrt) {
         _config.saveConfig();
+      }
+
+      if (shouldSave || hasColors) {
         if (_commandQueueCb) {
           String cmd = _config.buildC6LedCfgCommand();
           _commandQueueCb(cmd.c_str());

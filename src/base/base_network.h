@@ -85,7 +85,7 @@ private:
         JsonDocument doc;
         doc["station_id"] = mac;
         doc["mac_address"] = mac;
-        doc["station_name"] = BASE_STATION_ID;
+        doc["station_name"] = fleetManager.getStationName();
         doc["operation_state"] = fleetManager.getOperationStateStr();
         doc["operation_state_id"] = static_cast<uint8_t>(fleetManager.getOperationState());
         doc["race_id"] = fleetManager.getRaceId();

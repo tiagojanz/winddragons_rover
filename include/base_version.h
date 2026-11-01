@@ -6,12 +6,12 @@
 
 #define BASE_VERSION_MAJOR 2
 #define BASE_VERSION_MINOR 1
-#define BASE_VERSION_PATCH 5
+#define BASE_VERSION_PATCH 7
 
-#define BASE_RAW_VERSION_STR      "2.1.5"
-#define BASE_FIRMWARE_VERSION_STR "v2.1.5"
-#define BASE_LAFVIN_VERSION       "v2.1.5"
-#define BASE_C6_VERSION           "v2.1.5"
+#define BASE_RAW_VERSION_STR      "2.1.7"
+#define BASE_FIRMWARE_VERSION_STR "v2.1.7"
+#define BASE_LAFVIN_VERSION       "v2.1.7"
+#define BASE_C6_VERSION           "v2.1.7"
 #define BASE_BUILD_DATE           __DATE__ " " __TIME__
 
 // Aliases para compatibilidade

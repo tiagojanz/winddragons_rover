@@ -522,6 +522,10 @@ private:
                [this]() { handleApiMissionState(); });
     _server.on("/api/mission/rovers", HTTP_POST,
                [this]() { handleApiMissionRovers(); });
+    _server.on("/api/mission/rover/remove", HTTP_POST,
+               [this]() { handleApiMissionRoverRemove(); });
+    _server.on("/api/rover/delete", HTTP_POST,
+               [this]() { handleApiMissionRoverRemove(); });
     _server.on("/api/mission/clear", HTTP_POST,
                [this]() { handleApiMissionClear(); });
 
@@ -858,7 +862,7 @@ private:
             mac + "</div></div>";
     html += "<div class='stat-box'><div class='stat-label'>Nome da Estação "
             "Base</div><div class='stat-value' style='color:var(--yellow);'>" +
-            String(BASE_STATION_ID) + "</div></div>";
+            String(_fleet.getStationName()) + "</div></div>";
     html += "<div class='stat-box'><div class='stat-label'>Modo de "
             "Operação</div><div class='stat-value' style='color:" +
             String(_wifi.isAPMode() ? "var(--yellow)" : "var(--green)") + "'>";
@@ -1098,34 +1102,6 @@ private:
             "class='fa-solid fa-bolt'></i> 100% (Sol Máximo)</button>";
     html += "</div></div></div>";
 
-    // Card 3: Configuração dos Ecrãs LCD da Base Station
-    html += "<div class='card'>";
-    html +=
-        "<div class='card-title'><span><i class='fa-solid fa-tv'></i> Páginas "
-        "do Ecrã LCD (Base Station)</span><span class='badge' "
-        "style='background:#1e3a8a;color:#93c5fd;'>ST7789 320x172</span></div>";
-    html +=
-        "<p "
-        "style='color:var(--muted);font-size:0.875rem;margin-bottom:14px;'>O "
-        "ecrã da Estação Base possui 3 ecrãs principais essenciais: <strong>1. "
-        "Estação (ID, MAC, Estado)</strong>, <strong>2. Conectividade "
-        "WiFi</strong> e <strong>3. Rover Selecionado</strong>.</p>";
-    html += "<div class='form-group' "
-            "style='display:flex;align-items:center;gap:12px;padding:12px;"
-            "background:rgba(255,255,255,0.03);border:1px solid "
-            "var(--card-border);border-radius:8px;'>";
-    html += "<input type='checkbox' id='joyScreenCheck' "
-            "onchange='toggleJoyScreen(this.checked)' "
-            "style='width:20px;height:20px;cursor:pointer;'>";
-    html += "<label for='joyScreenCheck' "
-            "style='cursor:pointer;font-size:0.95rem;font-weight:600;'>";
-    html += "Ativar 4º Ecrã: Teste do Joystick";
-    html += "<div "
-            "style='font-size:0.75rem;font-weight:normal;color:var(--muted);"
-            "margin-top:2px;'>Adiciona a mira analógica 2D e diagnóstico dos "
-            "eixos ADC ao carrossel de navegação do ecrã físico.</div>";
-    html += "</label></div></div>";
-
     // Card 3B: Controlo de Cor por Modo e Intensidade do LED RGB do
     // Coprocessador C6
     uint8_t curC6LedBright = _fleet.getC6LedBrightness();
@@ -1340,41 +1316,45 @@ private:
             "el=document.getElementById('cfg_bright');if(el)el.value=v;"
             "onBrightSlide(v);onBrightChange(v);}";
     html += "fetch('/api/display').then(r=>r.json()).then(d=>{const "
-            "c=document.getElementById('joyScreenCheck');if(c)c.checked=!!d."
-            "joy_screen;const b=d.screen_brightness||d.brightness||85;const "
+            "b=d.screen_brightness??d.brightness??85;const "
             "el=document.getElementById('cfg_bright');if(el)el.value=b;const "
             "elVal=document.getElementById('brightDisplayVal');if(elVal)elVal."
             "innerText=b+'%';const "
             "elBadge=document.getElementById('brightValBadge');if(elBadge)"
-            "elBadge.innerText=b+'%';}).catch(()=>{});";
-    html += "function "
-            "toggleJoyScreen(enabled){fetch('/api/"
-            "display',{method:'POST',headers:{'Content-Type':'application/"
-            "json'},body:JSON.stringify({joy_screen:enabled})}).then(r=>r.json("
-            ")).then(res=>{alert(res.joy_screen?'4º Ecrã (Teste Joystick) "
-            "ativado no LCD!':'4º Ecrã desativado. LCD em modo simplificado de "
-            "3 ecrãs.');}).catch(e=>{alert('Erro ao guardar configuração do "
-            "ecrã');});}";
+            "elBadge.innerText=b+'%';if(d.c6_led_brightness!==undefined){const "
+            "cb=d.c6_led_brightness;const "
+            "cel=document.getElementById('cfg_c6_led_bright');if(cel)cel.value="
+            "cb;const "
+            "cval=document.getElementById('c6LedBrightDisplayVal');if(cval)"
+            "cval.innerText=cb+'%';const "
+            "cbg=document.getElementById('c6LedBrightBadge');if(cbg)cbg."
+            "innerText=cb+'%';}if(Array.isArray(d.c6_mode_colors)){d.c6_mode_"
+            "colors.forEach((col,idx)=>applyC6ModeUiColor(idx,col));}}).catch(("
+            ")=>{});";
     html += "let c6LedSlideTimer=null;";
+    html += "function parseC6Brt(v,def=80){const "
+            "n=parseInt(v,10);return "
+            "Number.isNaN(n)?def:Math.max(0,Math.min(100,n));}";
     html += "function showC6LedFeedback(msg,isErr){const "
             "fb=document.getElementById('c6LedFeedback');if(!fb)return;fb."
             "style.color=isErr?'var(--red)':'var(--green)';fb.innerText=msg;"
             "setTimeout(()=>{if(fb.innerText===msg)fb.innerText='';},3000);}";
-    html += "function onC6LedBrightSlide(v){const "
+    html += "function onC6LedBrightSlide(v){const pct=parseC6Brt(v,0);const "
             "d=document.getElementById('c6LedBrightDisplayVal');if(d)d."
-            "innerText=v+'%';const "
-            "b=document.getElementById('c6LedBrightBadge');if(b)b.innerText=v+'"
-            "%';if(c6LedSlideTimer)clearTimeout(c6LedSlideTimer);"
+            "innerText=pct+'%';const "
+            "b=document.getElementById('c6LedBrightBadge');if(b)b.innerText="
+            "pct+'%';if(c6LedSlideTimer)clearTimeout(c6LedSlideTimer);"
             "c6LedSlideTimer=setTimeout(()=>{fetch('/api/control/"
             "c6_led',{method:'POST',headers:{'Content-Type':'application/"
-            "json'},body:JSON.stringify({brightness:parseInt(v)})}).catch(()=>{"
+            "json'},body:JSON.stringify({brightness:pct})}).catch(()=>{"
             "});},80);}";
-    html += "function "
-            "onC6LedBrightChange(v){fetch('/api/control/"
-            "c6_led',{method:'POST',headers:{'Content-Type':'application/"
-            "json'},body:JSON.stringify({brightness:parseInt(v)})}).then(r=>r."
-            "json()).then(d=>{if(d.success)showC6LedFeedback('Intensidade LED "
-            "C6: '+d.c6_led_brightness+'%');}).catch(()=>{});}";
+    html +=
+        "function "
+        "onC6LedBrightChange(v){const pct=parseC6Brt(v,0);fetch('/api/control/"
+        "c6_led',{method:'POST',headers:{'Content-Type':'application/"
+        "json'},body:JSON.stringify({brightness:pct})}).then(r=>r."
+        "json()).then(d=>{if(d.success)showC6LedFeedback('Intensidade LED "
+        "C6: '+d.c6_led_brightness+'%');}).catch(()=>{});}";
     html += "function setC6LedBrightPreset(v){const "
             "el=document.getElementById('cfg_c6_led_bright');if(el)el.value=v;"
             "onC6LedBrightSlide(v);onC6LedBrightChange(v);}";
@@ -1402,7 +1382,8 @@ private:
             "'+hex.toUpperCase()+' no LED C6 (3s)...');}).catch(()=>{});}";
     html +=
         "function saveAllC6LedConfig(){const "
-        "brt=parseInt(document.getElementById('cfg_c6_led_bright')?.value||80);"
+        "brt=parseC6Brt(document.getElementById('cfg_c6_led_bright')?.value,80)"
+        ";"
         "const colors=[];for(let "
         "i=0;i<5;i++){colors.push(document.getElementById('c6ModeColor_'+i)?."
         "value||'#A855F7');}fetch('/api/control/"
@@ -1495,7 +1476,7 @@ private:
             mac + "</div></div>";
     html += "<div class='stat-box'><div class='stat-label'>Nome da Estação "
             "Base</div><div class='stat-value' style='color:var(--yellow);'>" +
-            String(BASE_STATION_ID) + "</div></div>";
+            String(_fleet.getStationName()) + "</div></div>";
     html += "</div>";
     html +=
         "<div style='margin-top:12px;' class='stat-box'><div "
@@ -1769,8 +1750,10 @@ private:
             "Bóia</button>";
     html += "<button onclick='saveRovers()' class='btn btn-primary' "
             "style='padding:10px 24px;'>💾 Guardar Lista no MicroSD</button>";
+    html += "<button onclick='removeSelectedRover()' class='btn btn-danger'>🗑️ "
+            "Remover Rover Selecionado</button>";
     html += "<button onclick='clearRovers()' class='btn btn-danger' "
-            "style='background:#78350f;'>🔄 Repor Pré-definições</button>";
+            "style='background:#78350f;'>🔄 Limpar Lista</button>";
     html += "</div>";
 
     html += "</div>";
@@ -1792,6 +1775,12 @@ private:
             "select_rover',{method:'POST',headers:{'Content-Type':'application/"
             "json'},body:JSON.stringify({rover_id:parseInt(id)})}).then(()=>"
             "location.reload());}";
+    html += "function removeSelectedRover(){if(confirm('Tem a certeza que "
+            "deseja remover o Rover selecionado da frota?')){fetch('/api/"
+            "mission/rover/remove',{method:'POST',headers:{'Content-Type':"
+            "'application/json'},body:'{}'}).then(r=>r.json()).then(res=>{"
+            "if(res.status==='ok'){location.reload();}else{alert(res.message||"
+            "'Nenhum rover selecionado');}});}}";
 
     html += "function addRow(){";
     html += "const tbody=document.getElementById('roversTbody');";
@@ -1872,7 +1861,7 @@ private:
 
     doc["station_id"] = mac;
     doc["mac_address"] = mac;
-    doc["station_name"] = BASE_STATION_ID;
+    doc["station_name"] = _fleet.getStationName();
     doc["operation_state"] = _fleet.getOperationStateStr();
     doc["operation_state_id"] =
         static_cast<uint8_t>(_fleet.getOperationState());
@@ -2139,11 +2128,15 @@ private:
         newList.push_back(r);
       }
 
-      if (!newList.empty()) {
-        _fleet.getRoversMutable() = newList;
-        if (_fleet.getOperationState() == BASE_OP_WAITING_ROVERS) {
-          _fleet.setOperationState(BASE_OP_IDLE, false);
-        }
+      _fleet.getRoversMutable() = newList;
+      if (newList.empty()) {
+        _fleet.clearSelectedRover();
+      } else if (!_fleet.hasSelectedRover()) {
+        _fleet.selectRoverById(newList[0].id);
+      }
+      if (!newList.empty() &&
+          _fleet.getOperationState() == BASE_OP_WAITING_ROVERS) {
+        _fleet.setOperationState(BASE_OP_IDLE, false);
       }
     }
 
@@ -2158,6 +2151,42 @@ private:
     resp["status"] = "ok";
     resp["rover_count"] = _fleet.getRovers().size();
     resp["operation_state"] = _fleet.getOperationStateStr();
+    String out;
+    serializeJson(resp, out);
+    _server.send(200, "application/json", out);
+  }
+
+  void handleApiMissionRoverRemove() {
+    uint8_t targetId = _fleet.getSelectedRoverId();
+    if (_server.hasArg("plain") && _server.arg("plain").length() > 0) {
+      JsonDocument doc;
+      if (!deserializeJson(doc, _server.arg("plain"))) {
+        if (!doc["rover_id"].isNull()) {
+          targetId = doc["rover_id"].as<uint8_t>();
+        }
+      }
+    }
+    if (targetId == 0 || !_fleet.removeRoverById(targetId, true)) {
+      _server.send(404, "application/json",
+                   "{\"status\":\"error\",\"message\":\"Rover nao encontrado "
+                   "na frota\"}");
+      return;
+    }
+    if (_display) {
+      _display->setRoverListIdx(0, _fleet.getRovers().size());
+      _display->showFeedback("ROVER REMOVIDO VIA WEB", 1500);
+      if (_display->getCurrentPage() == BASE_PAGE_ROVER_MENU ||
+          _display->getCurrentPage() == BASE_PAGE_ROVER_MODE ||
+          _display->getCurrentPage() == BASE_PAGE_ROVER_REMOVE ||
+          _display->getCurrentPage() == BASE_PAGE_ROVER_CONTROL) {
+        _display->setPage(BASE_PAGE_ROVER_LIST);
+      }
+    }
+    JsonDocument resp;
+    resp["status"] = "ok";
+    resp["removed_id"] = targetId;
+    resp["rover_count"] = _fleet.getRovers().size();
+    resp["selected_rover_id"] = _fleet.getSelectedRoverId();
     String out;
     serializeJson(resp, out);
     _server.send(200, "application/json", out);
@@ -2199,8 +2228,9 @@ private:
     bool changed = false;
     String msg = "Configuração do LED do Coprocessador C6 atualizada";
 
-    if (_server.hasArg("val")) {
-      int v = _server.arg("val").toInt();
+    if (_server.hasArg("val") || _server.hasArg("brightness")) {
+      int v = _server.hasArg("val") ? _server.arg("val").toInt()
+                                    : _server.arg("brightness").toInt();
       if (v < 0)
         v = 0;
       if (v > 100)
@@ -2233,15 +2263,20 @@ private:
       } else {
         bool sendFullCfg = false;
         if (!doc["brightness"].isNull() || !doc["c6_led_brightness"].isNull()) {
-          int v = doc["brightness"] | doc["c6_led_brightness"] |
-                  (int)_fleet.getC6LedBrightness();
+          int v = (int)_fleet.getC6LedBrightness();
+          if (!doc["brightness"].isNull()) {
+            v = doc["brightness"].as<int>();
+          } else if (!doc["c6_led_brightness"].isNull()) {
+            v = doc["c6_led_brightness"].as<int>();
+          }
           if (v < 0)
             v = 0;
           if (v > 100)
             v = 100;
           _fleet.setC6LedBrightness((uint8_t)v);
           changed = true;
-          if (doc["colors"].isNull() && doc["mode_idx"].isNull()) {
+          if (doc["colors"].isNull() && doc["mode_colors"].isNull() &&
+              doc["mode_idx"].isNull() && doc["mode_index"].isNull()) {
             if (_commandQueueCb) {
               String cmd = "CMD:C6LED:BRIGHT:" + String(v);
               _commandQueueCb(cmd.c_str());
@@ -2252,9 +2287,14 @@ private:
           msg = "Intensidade do LED C6 ajustada para " + String(v) + "%";
         }
 
-        if (!doc["mode_idx"].isNull() && doc["color"].is<const char *>()) {
-          int idx = doc["mode_idx"].as<int>();
-          String hex = String(doc["color"].as<const char *>());
+        if ((!doc["mode_idx"].isNull() || !doc["mode_index"].isNull()) &&
+            (doc["color"].is<const char *>() ||
+             doc["hex"].is<const char *>())) {
+          int idx = !doc["mode_idx"].isNull() ? doc["mode_idx"].as<int>()
+                                              : doc["mode_index"].as<int>();
+          String hex = doc["color"].is<const char *>()
+                           ? String(doc["color"].as<const char *>())
+                           : String(doc["hex"].as<const char *>());
           if (idx >= 0 && idx < FleetManager::C6_LED_MODE_COUNT) {
             _fleet.setC6ModeColor((uint8_t)idx, hex);
             String cleanHex = _fleet.getC6ModeColor((uint8_t)idx);
@@ -2270,8 +2310,11 @@ private:
           }
         }
 
-        if (doc["colors"].is<JsonArray>()) {
-          JsonArray arr = doc["colors"].as<JsonArray>();
+        if (doc["colors"].is<JsonArray>() ||
+            doc["mode_colors"].is<JsonArray>()) {
+          JsonArray arr = doc["colors"].is<JsonArray>()
+                              ? doc["colors"].as<JsonArray>()
+                              : doc["mode_colors"].as<JsonArray>();
           uint8_t idx = 0;
           for (JsonVariant v : arr) {
             if (idx >= FleetManager::C6_LED_MODE_COUNT)
@@ -2291,9 +2334,13 @@ private:
           _commandQueueCb(cmd.c_str());
         }
 
-        if (doc["test_color"].is<const char *>()) {
-          String testHex = FleetManager::normalizeHexColor(
-              String(doc["test_color"].as<const char *>()), "#38BDF8");
+        if (doc["test_color"].is<const char *>() ||
+            doc["test_hex"].is<const char *>()) {
+          const char *rawTest = doc["test_color"].is<const char *>()
+                                    ? doc["test_color"].as<const char *>()
+                                    : doc["test_hex"].as<const char *>();
+          String testHex =
+              FleetManager::normalizeHexColor(String(rawTest), "#38BDF8");
           String h = testHex.startsWith("#") ? testHex.substring(1) : testHex;
           if (_commandQueueCb) {
             String cmd = "CMD:C6LED:TEST:" + h;
@@ -2347,9 +2394,10 @@ private:
         hasJoy = true;
       }
       if (!doc["screen_brightness"].isNull() || !doc["brightness"].isNull()) {
-        bright = doc["screen_brightness"] | doc["brightness"] | bright;
-        if (bright > 100)
-          bright = 100;
+        int bVal = !doc["screen_brightness"].isNull()
+                       ? doc["screen_brightness"].as<int>()
+                       : doc["brightness"].as<int>();
+        bright = (uint8_t)constrain(bVal, 0, 100);
         prefs.putUChar("brightness", bright);
         hasBright = true;
       }
@@ -2383,7 +2431,10 @@ private:
       JsonDocument doc;
       DeserializationError err = deserializeJson(doc, _server.arg("plain"));
       if (!err) {
-        val = doc["screen_brightness"] | doc["brightness"] | val;
+        if (!doc["screen_brightness"].isNull())
+          val = (uint8_t)constrain(doc["screen_brightness"].as<int>(), 0, 100);
+        else if (!doc["brightness"].isNull())
+          val = (uint8_t)constrain(doc["brightness"].as<int>(), 0, 100);
       }
     }
     if (val > 100)

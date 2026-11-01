@@ -74,11 +74,19 @@ bool c6LedForceRefresh = true;
 void printLog(const char *format, ...);
 
 void setRgbColor(uint8_t r, uint8_t g, uint8_t b) {
-  rgbLed.setPixelColor(0, rgbLed.Color(r, g, b));
+  if (r == 0 && g == 0 && b == 0) {
+    rgbLed.clear();
+  } else {
+    rgbLed.setPixelColor(0, rgbLed.Color(r, g, b));
+  }
   rgbLed.show();
 }
 
 void setRgbHexScaled(uint32_t hexColor, uint8_t pct) {
+  if (pct == 0 || hexColor == 0) {
+    setRgbColor(0, 0, 0);
+    return;
+  }
   if (pct > 100)
     pct = 100;
   uint8_t r = (uint8_t)((((hexColor >> 16) & 0xFF) * (uint32_t)pct) / 100);
@@ -120,12 +128,13 @@ void updateC6StatusLed(uint32_t now) {
     blinkPhase = !blinkPhase;
     lastLedTickMs = now;
   }
-  c6LedForceRefresh = false;
 
   uint32_t activeHex = 0;
-  uint8_t activePct = c6LedBrightPct;
+  uint8_t activePct = (c6LedBrightPct > 100) ? 100 : c6LedBrightPct;
 
-  if (c6PreviewUntilMs > now) {
+  if (activePct == 0) {
+    activeHex = 0;
+  } else if (c6PreviewUntilMs > now) {
     activeHex = c6PreviewColor;
   } else if (!loraReady) {
     // Estado 4: Falha LoRa / Erro RF (Pisca a 2 Hz)
@@ -135,7 +144,9 @@ void updateC6StatusLed(uint32_t now) {
     activeHex = c6ModeColors[idx];
   }
 
-  if (activeHex != lastAppliedColor || activePct != lastAppliedPct) {
+  if (c6LedForceRefresh || activeHex != lastAppliedColor ||
+      activePct != lastAppliedPct) {
+    c6LedForceRefresh = false;
     lastAppliedColor = activeHex;
     lastAppliedPct = activePct;
     setRgbHexScaled(activeHex, activePct);

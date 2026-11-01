@@ -182,8 +182,10 @@ public:
   FleetManager()
       : _sd(nullptr), _opState(BASE_OP_STORAGE), selectedRoverIndex(-1),
         _roversFromPortal(false), _c6LedBrightness(80) {
+    memset(_stationName, 0, sizeof(_stationName));
     memset(_raceId, 0, sizeof(_raceId));
     memset(_missionName, 0, sizeof(_missionName));
+    strncpy(_stationName, BASE_STATION_ID, sizeof(_stationName) - 1);
     strncpy(_raceId, "REGATA-DEFAULT", sizeof(_raceId) - 1);
     strncpy(_missionName, "Percurso de Regata", sizeof(_missionName) - 1);
     resetC6ModeColorsDefault();
@@ -337,6 +339,35 @@ public:
     saveMissionConfig();
   }
 
+  bool removeRoverById(uint8_t id, bool save = true) {
+    for (size_t i = 0; i < rovers.size(); ++i) {
+      if (rovers[i].id == id) {
+        rovers.erase(rovers.begin() + i);
+        if (rovers.empty()) {
+          selectedRoverIndex = -1;
+        } else if (selectedRoverIndex >= (int16_t)rovers.size()) {
+          selectedRoverIndex = (int16_t)rovers.size() - 1;
+        } else if (selectedRoverIndex > (int16_t)i) {
+          selectedRoverIndex--;
+        }
+        if (save) {
+          saveMissionConfig();
+        }
+        Serial.printf("[MISSION] Rover #%u removido (%u restantes)\n", id,
+                      (unsigned)rovers.size());
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool removeSelectedRover(bool save = true) {
+    FleetRover *r = getSelectedRover();
+    if (!r)
+      return false;
+    return removeRoverById(r->id, save);
+  }
+
   bool hasReceivedRoversFromPortal() const { return _roversFromPortal; }
   void setRoversFromPortal(bool v) { _roversFromPortal = v; }
 
@@ -378,6 +409,17 @@ public:
           "[MISSION] Aviso: Estado desconhecido recebido do Portal: '%s'\n",
           stateStr);
       return false;
+    }
+  }
+
+  const char *getStationName() const { return _stationName; }
+  void setStationName(const char *name, bool save = true) {
+    if (name && strlen(name) > 0) {
+      strncpy(_stationName, name, sizeof(_stationName) - 1);
+      _stationName[sizeof(_stationName) - 1] = '\0';
+      if (save) {
+        saveMissionConfig();
+      }
     }
   }
 
@@ -530,7 +572,7 @@ public:
     if (hasSelectedRover()) {
       return rovers[selectedRoverIndex].id;
     }
-    return rovers.empty() ? 1 : rovers[0].id;
+    return rovers.empty() ? 0 : rovers[0].id;
   }
 
   // --- Fila de Comandos LoRa ---
@@ -791,6 +833,13 @@ public:
               _opState = parse_base_op_state(
                   doc["operation_state"].as<const char *>());
             }
+            if (doc["station_name"].is<const char *>()) {
+              const char *sn = doc["station_name"].as<const char *>();
+              if (strlen(sn) > 0) {
+                strncpy(_stationName, sn, sizeof(_stationName) - 1);
+                _stationName[sizeof(_stationName) - 1] = '\0';
+              }
+            }
             if (doc["race_id"].is<const char *>()) {
               strncpy(_raceId, doc["race_id"].as<const char *>(),
                       sizeof(_raceId) - 1);
@@ -825,8 +874,8 @@ public:
               }
             }
 
-            JsonArray arr = doc["rovers"].as<JsonArray>();
-            if (!arr.isNull() && arr.size() > 0) {
+            if (doc["rovers"].is<JsonArray>()) {
+              JsonArray arr = doc["rovers"].as<JsonArray>();
               rovers.clear();
               for (JsonObject rObj : arr) {
                 FleetRover r;
@@ -859,12 +908,17 @@ public:
       if (prefs.begin("base_mission", true)) {
         _opState = static_cast<BaseOperationState>(
             prefs.getUChar("op_state", BASE_OP_STORAGE));
+        String stName = prefs.getString("st_name", BASE_STATION_ID);
         String rId = prefs.getString("race_id", "REGATA-DEFAULT");
         String mName = prefs.getString("m_name", "Percurso de Regata");
+        if (stName.length() > 0) {
+          strncpy(_stationName, stName.c_str(), sizeof(_stationName) - 1);
+          _stationName[sizeof(_stationName) - 1] = '\0';
+        }
         strncpy(_raceId, rId.c_str(), sizeof(_raceId) - 1);
         strncpy(_missionName, mName.c_str(), sizeof(_missionName) - 1);
         uint8_t count = prefs.getUChar("r_count", 0);
-        if (count > 0 && count <= MAX_FLEET_ROVERS) {
+        if (count <= MAX_FLEET_ROVERS) {
           rovers.clear();
           for (uint8_t i = 0; i < count; ++i) {
             char prefix[16];
@@ -899,24 +953,11 @@ public:
       }
     }
 
-    // Se não carregou nenhum rover (sem SD ou NVS vazia), inicializar slot
-    // padrão ROVER-01
-    if (rovers.empty()) {
-      FleetRover r;
-      memset(&r, 0, sizeof(r));
-      r.id = 1;
-      snprintf(r.code, sizeof(r.code), "ROVER-01");
-      snprintf(r.name, sizeof(r.name), "Rover 01");
-      snprintf(r.mac, sizeof(r.mac), "00:00:00:00:00:01");
-      strncpy(r.role, "largada CR", sizeof(r.role) - 1);
-      r.battery_voltage = 12.0f;
-      r.is_online = false;
-      rovers.push_back(r);
-    }
-
     // Selecionar automaticamente o primeiro rover caso nenhum esteja
     // selecionado
-    if (!hasSelectedRover() && !rovers.empty()) {
+    if (rovers.empty()) {
+      selectedRoverIndex = -1;
+    } else if (!hasSelectedRover()) {
       selectedRoverIndex = 0;
     }
 
@@ -933,6 +974,7 @@ public:
     Preferences prefs;
     if (prefs.begin("base_mission", false)) {
       prefs.putUChar("op_state", static_cast<uint8_t>(_opState));
+      prefs.putString("st_name", _stationName);
       prefs.putString("race_id", _raceId);
       prefs.putString("m_name", _missionName);
       prefs.putBool("from_portal", _roversFromPortal);
@@ -962,6 +1004,7 @@ public:
       }
 
       JsonDocument doc;
+      doc["station_name"] = _stationName;
       doc["operation_state"] = get_base_op_state_str(_opState);
       doc["race_id"] = _raceId;
       doc["mission_name"] = _missionName;
@@ -1009,6 +1052,7 @@ public:
 private:
   SDCardManager *_sd;
   BaseOperationState _opState;
+  char _stationName[32];
   char _raceId[32];
   char _missionName[48];
 

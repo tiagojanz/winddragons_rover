@@ -28,8 +28,10 @@ struct RoverConfig {
                          // físico (GPIO 3 / GPIO 0)
   uint8_t ledCount;      // Quantidade de LEDs WS2812B na fita (GPIO 19)
   uint8_t ledBrightness; // Brilho da fita de LEDs WS2812B (5 - 100%)
-  uint8_t c6LedBrightness;   // Intensidade do LED RGB onboard da C6 (GPIO 8, 0 - 100%)
-  String c6ModeColors[7];    // Cores #RRGGBB para cada MotorStatus (0=IDLE..6=FAILSAFE)
+  uint8_t c6LedBrightness; // Intensidade do LED RGB onboard da C6 (GPIO 8, 0 -
+                           // 100%)
+  String c6ModeColors[7];  // Cores #RRGGBB para cada MotorStatus
+                           // (0=IDLE..6=FAILSAFE)
 };
 
 static constexpr const char *DEFAULT_C6_MODE_COLORS[7] = {
@@ -176,7 +178,7 @@ public:
   void setLedConfig(uint8_t count, uint8_t brightness) {
     if (count >= 1 && count <= 120)
       _config.ledCount = count;
-    if (brightness >= 5 && brightness <= 100)
+    if (brightness <= 100)
       _config.ledBrightness = brightness;
     saveConfig();
   }
@@ -187,6 +189,26 @@ public:
     _config.c6LedBrightness = brightness;
     if (save)
       saveConfig();
+  }
+
+  void getScaledC6ModeColorRgb(uint8_t idx, uint8_t &rOut, uint8_t &gOut,
+                               uint8_t &bOut) const {
+    if (_config.c6LedBrightness == 0) {
+      rOut = 0;
+      gOut = 0;
+      bOut = 0;
+      return;
+    }
+    String hex = getC6ModeColor(idx < 7 ? idx : 0);
+    if (hex.startsWith("#"))
+      hex = hex.substring(1);
+    uint32_t val = (uint32_t)strtoul(hex.c_str(), nullptr, 16);
+    uint8_t r = (val >> 16) & 0xFF;
+    uint8_t g = (val >> 8) & 0xFF;
+    uint8_t b = val & 0xFF;
+    rOut = (uint8_t)(((uint16_t)r * _config.c6LedBrightness) / 100);
+    gOut = (uint8_t)(((uint16_t)g * _config.c6LedBrightness) / 100);
+    bOut = (uint8_t)(((uint16_t)b * _config.c6LedBrightness) / 100);
   }
 
   void setC6ModeColor(uint8_t idx, const String &hex, bool save = false) {
@@ -285,7 +307,7 @@ public:
       if (_config.ledCount < 1 || _config.ledCount > 120)
         _config.ledCount = NUM_STROBE_LEDS;
       _config.ledBrightness = prefs.getUChar("led_brt", 100);
-      if (_config.ledBrightness < 5 || _config.ledBrightness > 100)
+      if (_config.ledBrightness > 100)
         _config.ledBrightness = 100;
       _config.c6LedBrightness = prefs.getUChar("c6l_brt", 80);
       if (_config.c6LedBrightness > 100)
@@ -308,8 +330,8 @@ public:
           _config.anchorDrumDiamMm, _config.anchorPulsesPerRev,
           _config.rackAngleEngaged, _config.rackAngleReleased,
           _config.rackInverted ? 1 : 0,
-          _config.joystickEnabled ? "ATIVO" : "DESATIVADO",
-          _config.ledCount, _config.ledBrightness);
+          _config.joystickEnabled ? "ATIVO" : "DESATIVADO", _config.ledCount,
+          _config.ledBrightness);
     }
 
     // 3. Se o cartão SD estiver presente mas ainda não possuir o /config.json,
@@ -446,7 +468,7 @@ public:
     }
     if (doc["led_brightness"].is<int>()) {
       int lb = doc["led_brightness"].as<int>();
-      if (lb >= 5 && lb <= 100)
+      if (lb >= 0 && lb <= 100)
         _config.ledBrightness = (uint8_t)lb;
     }
     if (doc["c6_led_brightness"].is<int>()) {
@@ -478,9 +500,9 @@ public:
         _config.anchorDrumDiamMm, _config.anchorPulsesPerRev,
         _config.rackAngleEngaged, _config.rackAngleReleased,
         _config.rackInverted ? 1 : 0,
-        _config.joystickEnabled ? "ATIVO" : "DESATIVADO",
-        _config.ledCount, _config.ledBrightness);
-        return true;
+        _config.joystickEnabled ? "ATIVO" : "DESATIVADO", _config.ledCount,
+        _config.ledBrightness);
+    return true;
   }
 
   bool saveConfigToSD() {

@@ -114,7 +114,11 @@ void IRAM_ATTR isrBootButton() {
 }
 
 void setRgbColor(uint8_t r, uint8_t g, uint8_t b) {
-  rgbLed.setPixelColor(0, rgbLed.Color(r, g, b));
+  if (r == 0 && g == 0 && b == 0) {
+    rgbLed.clear();
+  } else {
+    rgbLed.setPixelColor(0, rgbLed.Color(r, g, b));
+  }
   rgbLed.show();
 }
 
@@ -164,6 +168,11 @@ void setup() {
 
   // 4. Carregar configurações da memória NVS (Flash) e MicroSD
   roverConfig.begin(&sdCard);
+  {
+    uint8_t r = 0, g = 0, b = 0;
+    roverConfig.getScaledC6ModeColorRgb(0, r, g, b);
+    setRgbColor(r, g, b);
+  }
   uint8_t currentRoverId = roverConfig.getRoverId();
   webServer.setRoverId(currentRoverId);
   battery.setCellCount(roverConfig.getBatteryCells());
@@ -488,8 +497,7 @@ void loop() {
                              roverConfig.isRackInverted() ? 1 : 0);
           interSerial.printf("CMD:JOY_EN:%d\n",
                              roverConfig.isJoystickEnabled() ? 1 : 0);
-          interSerial.printf("CMD:LED:CFG:%u:%u\n",
-                             roverConfig.getLedCount(),
+          interSerial.printf("CMD:LED:CFG:%u:%u\n", roverConfig.getLedCount(),
                              roverConfig.getLedBrightness());
           interSerial.println(roverConfig.buildC6LedCfgCommand());
           interSerial.flush();
@@ -552,10 +560,10 @@ void loop() {
                 cmpRawHead = 0.0f;
           uint32_t calSys = 0, calMag = 0, calGyro = 0, calAccel = 0,
                    i2cAddr = 0x28;
-          int n = sscanf(rxBuf + 13, "%d:%f:%f:%f:%u:%u:%f:%u:%u:%f:%u",
-                         &cmpReady, &cmpHead, &cmpRoll, &cmpPitch, &calSys,
-                         &calMag, &cmpOff, &calGyro, &calAccel, &cmpRawHead,
-                         &i2cAddr);
+          int n =
+              sscanf(rxBuf + 13, "%d:%f:%f:%f:%u:%u:%f:%u:%u:%f:%u", &cmpReady,
+                     &cmpHead, &cmpRoll, &cmpPitch, &calSys, &calMag, &cmpOff,
+                     &calGyro, &calAccel, &cmpRawHead, &i2cAddr);
           if (n >= 6) {
             gps.setCompassData(cmpReady != 0, cmpHead, cmpRoll, cmpPitch,
                                (uint8_t)calSys, (uint8_t)calMag, cmpOff,
@@ -589,6 +597,29 @@ void loop() {
         wifiConfig.getAPStationCount(), wifiConfig.getAPPassword().c_str());
   }
 
+  // 5b. Atualizar LED NeoPixel onboard (GPIO 8) conforme modo e intensidade C6
+  static uint32_t lastLafvinLedHash = 0xFFFFFFFFUL;
+  uint8_t c6Brt = roverConfig.getC6LedBrightness();
+  uint8_t mIdx = (currentMotorStatus < 7) ? currentMotorStatus : 0;
+  bool blinkOff =
+      (currentMotorStatus == MOTOR_FAILSAFE) && ((now % 500) >= 250);
+  String mHex = roverConfig.getC6ModeColor(mIdx);
+  uint32_t mHexNum = (mHex.length() >= 7)
+                         ? (uint32_t)strtoul(mHex.c_str() + 1, nullptr, 16)
+                         : 0;
+  uint32_t curLedHash = ((uint32_t)mIdx << 28) ^ ((uint32_t)c6Brt << 20) ^
+                        ((uint32_t)(blinkOff ? 1 : 0) << 19) ^ mHexNum;
+  if (curLedHash != lastLafvinLedHash) {
+    lastLafvinLedHash = curLedHash;
+    if (c6Brt == 0 || blinkOff) {
+      setRgbColor(0, 0, 0);
+    } else {
+      uint8_t r = 0, g = 0, b = 0;
+      roverConfig.getScaledC6ModeColorRgb(mIdx, r, g, b);
+      setRgbColor(r, g, b);
+    }
+  }
+
   // 6. Gravação de log no cartão MicroSD (a cada 5000ms se o servidor web não
   // estiver ocupado)
   static uint32_t lastSdLogTime = 0;
@@ -596,14 +627,15 @@ void loop() {
       (now - lastSdLogTime >= 5000)) {
     lastSdLogTime = now;
     char logBuf[220];
-    snprintf(logBuf, sizeof(logBuf),
-             "%lu,%.6f,%.6f,%.1f,%.1f,%u,%.2fV,%.2fA,%u,%s,%d,%s,%.1f,%.1f,%u,%u\n",
-             now, gps.getLatitude(), gps.getLongitude(), gps.getSpeedKnots(),
-             gps.getHeading(), battery.getPercentage(),
-             battery.getVoltageMv() / 1000.0f, battery.getCurrentAmps(),
-             currentMotorStatus, loraStatusStr, currentLoraRssi,
-             gps.hasCompass() ? "BNO055" : "GPS_COG", gps.getRoll(),
-             gps.getPitch(), gps.getCompassCalSys(), gps.getCompassCalMag());
+    snprintf(
+        logBuf, sizeof(logBuf),
+        "%lu,%.6f,%.6f,%.1f,%.1f,%u,%.2fV,%.2fA,%u,%s,%d,%s,%.1f,%.1f,%u,%u\n",
+        now, gps.getLatitude(), gps.getLongitude(), gps.getSpeedKnots(),
+        gps.getHeading(), battery.getPercentage(),
+        battery.getVoltageMv() / 1000.0f, battery.getCurrentAmps(),
+        currentMotorStatus, loraStatusStr, currentLoraRssi,
+        gps.hasCompass() ? "BNO055" : "GPS_COG", gps.getRoll(), gps.getPitch(),
+        gps.getCompassCalSys(), gps.getCompassCalMag());
     sdCard.appendFile("/telemetry.csv", logBuf);
   }
 
