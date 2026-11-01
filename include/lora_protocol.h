@@ -1,6 +1,8 @@
 #pragma once
 
 #include <stdint.h>
+#include <string.h>
+#include <strings.h>
 
 // ==========================================
 // LORA PROTOCOL DEFINITIONS FOR MULTI-ROVER
@@ -50,7 +52,18 @@ enum CloudAction : uint8_t {
     ACTION_RTL             = 7, // Return to Base / Launch
     ACTION_ALARM           = 8, // Strobe LED & acoustic alarm
     ACTION_PING            = 9, // Request immediate telemetry
-    ACTION_MANUAL          = 10 // Manual joystick control
+    ACTION_MANUAL          = 10,// Manual joystick control
+    ACTION_SET_BUOY_ROLE   = 18 // Set regatta buoy LED role/rounding (BuoyLightRole in target_depth_cm)
+};
+
+// Regatta Buoy LED Role / Rounding signaling on Rover WS2812B LEDs
+enum BuoyLightRole : uint8_t {
+    BUOY_ROLE_NONE      = 0, // Sem função obrigatória ("none") -> LEDs apagados em standby
+    BUOY_ROLE_PORT      = 1, // Bombordo ("port" / BB) -> Vermelho náutico
+    BUOY_ROLE_STARBOARD = 2, // Estibordo ("starboard" / EB) -> Verde náutico
+    BUOY_ROLE_START     = 3, // Largada ("start") -> Amarelo / Âmbar
+    BUOY_ROLE_FINISH    = 4, // Meta / Chegada ("finish") -> Azul / Ciano
+    BUOY_ROLE_GATE      = 5  // Porta intermédia ("gate") -> Bombordo/Estibordo (Vermelho + Verde)
 };
 
 // ------------------------------------------
@@ -191,8 +204,53 @@ inline const char* get_action_str(uint8_t action) {
         case ACTION_ALARM:           return "ALARM";
         case ACTION_PING:            return "PING";
         case ACTION_MANUAL:          return "MANUAL";
+        case ACTION_SET_BUOY_ROLE:   return "SET_BUOY_ROLE";
         default:                     return "NONE";
     }
+}
+
+inline const char* get_buoy_light_role_str(uint8_t bRole) {
+    switch (bRole) {
+        case BUOY_ROLE_PORT:      return "PORT_BB";
+        case BUOY_ROLE_STARBOARD: return "STARBOARD_EB";
+        case BUOY_ROLE_START:     return "START";
+        case BUOY_ROLE_FINISH:    return "FINISH";
+        case BUOY_ROLE_GATE:      return "GATE";
+        case BUOY_ROLE_NONE:
+        default:                  return "NONE";
+    }
+}
+
+inline uint8_t resolve_buoy_light_role(const char* role, const char* rounding) {
+    const char* r = role ? role : "";
+    const char* rnd = rounding ? rounding : "";
+
+    // 1. Largada ("start" / "largada")
+    if (strcasecmp(r, "start") == 0 || strcasestr(r, "largada") != nullptr) {
+        return BUOY_ROLE_START;
+    }
+    // 2. Chegada / Meta ("finish" / "meta" / "chegada")
+    if (strcasecmp(r, "finish") == 0 || strcasestr(r, "meta") != nullptr ||
+        strcasestr(r, "chegada") != nullptr) {
+        return BUOY_ROLE_FINISH;
+    }
+    // 3. Bombordo ("port" / "bombordo" / "bb")
+    if (strcasecmp(rnd, "port") == 0 || strcasestr(rnd, "bombordo") != nullptr ||
+        strcasecmp(rnd, "bb") == 0 || strcasestr(r, "bombordo") != nullptr) {
+        return BUOY_ROLE_PORT;
+    }
+    // 4. Estibordo ("starboard" / "estibordo" / "eb")
+    if (strcasecmp(rnd, "starboard") == 0 ||
+        strcasestr(rnd, "estibordo") != nullptr ||
+        strcasecmp(rnd, "eb") == 0 || strcasestr(r, "estibordo") != nullptr) {
+        return BUOY_ROLE_STARBOARD;
+    }
+    // 5. Porta ("gate" / "porta")
+    if (strcasecmp(r, "gate") == 0 || strcasestr(r, "porta") != nullptr ||
+        strcasecmp(rnd, "gate") == 0) {
+        return BUOY_ROLE_GATE;
+    }
+    return BUOY_ROLE_NONE;
 }
 
 inline const char* get_anchor_status_str(uint8_t status) {

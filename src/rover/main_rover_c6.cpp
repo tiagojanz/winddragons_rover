@@ -67,6 +67,7 @@ static LedStripTestMode ledTestMode = LED_MODE_OFF;
 static uint8_t ledSolidR = 255, ledSolidG = 255, ledSolidB = 255;
 static uint8_t ledStripCount = NUM_STROBE_LEDS;
 static uint8_t ledStripBrightPct = 100;
+static uint8_t buoyLightRole = BUOY_ROLE_NONE;
 static bool ledForceRefresh = false;
 #endif
 
@@ -376,6 +377,54 @@ void updateStrobeLeds(uint32_t now) {
       strobeLeds.show();
     }
   }
+  // Prioridade 4: Sinalização de Função da Boia na Regata (Bombordo / Estibordo / Largada / Chegada / Porta)
+  else if (buoyLightRole != BUOY_ROLE_NONE) {
+    static uint8_t lastRenderedBuoyRole = BUOY_ROLE_NONE;
+    // Farol náutico de regata: 1600ms ON / 400ms OFF (ciclo de 2 segundos)
+    bool isOn = ((now % 2000) < 1600);
+    if (isOn != wasLit || lastRenderedMode != LED_MODE_OFF ||
+        lastRenderedBuoyRole != buoyLightRole || ledForceRefresh) {
+      wasLit = isOn;
+      lastRenderedMode = LED_MODE_OFF;
+      lastRenderedBuoyRole = buoyLightRole;
+      ledForceRefresh = false;
+      if (!isOn) {
+        strobeLeds.clear();
+      } else if (buoyLightRole == BUOY_ROLE_GATE) {
+        uint16_t half = nLeds / 2;
+        if (half == 0)
+          half = 1;
+        for (uint16_t i = 0; i < nLeds; i++) {
+          strobeLeds.setPixelColor(
+              i, (i < half) ? strobeLeds.Color(255, 0, 0)
+                            : strobeLeds.Color(0, 255, 0));
+        }
+      } else {
+        uint32_t color = 0;
+        switch (buoyLightRole) {
+        case BUOY_ROLE_PORT: // Bombordo (BB) -> Vermelho
+          color = strobeLeds.Color(255, 0, 0);
+          break;
+        case BUOY_ROLE_STARBOARD: // Estibordo (EB) -> Verde
+          color = strobeLeds.Color(0, 255, 0);
+          break;
+        case BUOY_ROLE_START: // Largada -> Amarelo / Âmbar
+          color = strobeLeds.Color(255, 180, 0);
+          break;
+        case BUOY_ROLE_FINISH: // Chegada / Meta -> Azul / Ciano
+          color = strobeLeds.Color(0, 140, 255);
+          break;
+        default:
+          color = 0;
+          break;
+        }
+        for (uint16_t i = 0; i < nLeds; i++) {
+          strobeLeds.setPixelColor(i, color);
+        }
+      }
+      strobeLeds.show();
+    }
+  }
   // Estado Normal: LEDs apagados (standby silencioso)
   else {
     if (wasLit || lastRenderedMode != LED_MODE_OFF || ledForceRefresh) {
@@ -576,6 +625,23 @@ void processIncomingLoRa(uint8_t *buffer, int len) {
     case 17: // RELEASE RACK
       actuators.releaseRack();
       break;
+    case ACTION_SET_BUOY_ROLE: { // 18: SET BUOY ROLE (LEDs de Regata)
+#if defined(PIN_STROBE_LEDS) && (PIN_STROBE_LEDS >= 0)
+      uint8_t newRole = (uint8_t)(cmd->target_depth_cm > 0 ? cmd->target_depth_cm
+                                                           : cmd->duration_s);
+      if (newRole > BUOY_ROLE_GATE)
+        newRole = BUOY_ROLE_NONE;
+      buoyLightRole = newRole;
+      c6Prefs.putUChar("buoy_role", buoyLightRole);
+      ledTestMode = LED_MODE_OFF;
+      ledForceRefresh = true;
+      updateStrobeLeds(millis());
+      printLog("[C6 ROVER] ★ Funcao de Boia nos LEDs definida via LoRa: %u "
+               "(%s)\n",
+               buoyLightRole, get_buoy_light_role_str(buoyLightRole));
+#endif
+      break;
+    }
     default:
       break;
     }
@@ -910,6 +976,9 @@ void setup() {
   ledStripBrightPct = c6Prefs.getUChar("led_brt", 100);
   if (ledStripBrightPct > 100)
     ledStripBrightPct = 100;
+  buoyLightRole = c6Prefs.getUChar("buoy_role", BUOY_ROLE_NONE);
+  if (buoyLightRole > BUOY_ROLE_GATE)
+    buoyLightRole = BUOY_ROLE_NONE;
   strobeLeds.begin();
   if (ledStripCount != strobeLeds.numPixels()) {
     strobeLeds.updateLength(ledStripCount);
@@ -918,9 +987,11 @@ void setup() {
       ledStripBrightPct == 0 ? 0 : map(ledStripBrightPct, 1, 100, 3, 254));
   strobeLeds.clear();
   strobeLeds.show();
+  ledForceRefresh = true;
   Serial.printf("[STROBE] LEDs WS2812B Strobe iniciados no GPIO %d "
-                "(%u LEDs, Brilho=%u%%)\n",
-                PIN_STROBE_LEDS, ledStripCount, ledStripBrightPct);
+                "(%u LEDs, Brilho=%u%%, Boia=%s)\n",
+                PIN_STROBE_LEDS, ledStripCount, ledStripBrightPct,
+                get_buoy_light_role_str(buoyLightRole));
 #endif
 
   // 7. LoRa SX1278 (FSPI Hardware)
@@ -1111,12 +1182,70 @@ void handleIncomingCommand(const char *cmdStr) {
       ledTestMode = LED_MODE_POLICE;
     } else if (strcasecmp(m, "SOLID") == 0) {
       ledTestMode = LED_MODE_SOLID;
+    } else if (strcasecmp(m, "BUOY_PORT") == 0 || strcasecmp(m, "PORT") == 0) {
+      buoyLightRole = BUOY_ROLE_PORT;
+      c6Prefs.putUChar("buoy_role", buoyLightRole);
+      ledTestMode = LED_MODE_OFF;
+    } else if (strcasecmp(m, "BUOY_STARBOARD") == 0 ||
+               strcasecmp(m, "STARBOARD") == 0) {
+      buoyLightRole = BUOY_ROLE_STARBOARD;
+      c6Prefs.putUChar("buoy_role", buoyLightRole);
+      ledTestMode = LED_MODE_OFF;
+    } else if (strcasecmp(m, "BUOY_START") == 0 ||
+               strcasecmp(m, "START") == 0) {
+      buoyLightRole = BUOY_ROLE_START;
+      c6Prefs.putUChar("buoy_role", buoyLightRole);
+      ledTestMode = LED_MODE_OFF;
+    } else if (strcasecmp(m, "BUOY_FINISH") == 0 ||
+               strcasecmp(m, "FINISH") == 0) {
+      buoyLightRole = BUOY_ROLE_FINISH;
+      c6Prefs.putUChar("buoy_role", buoyLightRole);
+      ledTestMode = LED_MODE_OFF;
+    } else if (strcasecmp(m, "BUOY_GATE") == 0 || strcasecmp(m, "GATE") == 0) {
+      buoyLightRole = BUOY_ROLE_GATE;
+      c6Prefs.putUChar("buoy_role", buoyLightRole);
+      ledTestMode = LED_MODE_OFF;
+    } else if (strcasecmp(m, "BUOY_NONE") == 0) {
+      buoyLightRole = BUOY_ROLE_NONE;
+      c6Prefs.putUChar("buoy_role", buoyLightRole);
+      ledTestMode = LED_MODE_OFF;
     }
     ledForceRefresh = true;
     updateStrobeLeds(now);
-    printLog("[C6 ROVER] ★ Fita de LEDs WS2812B Modo='%s' (%u LEDs "
+    printLog("[C6 ROVER] ★ Fita de LEDs WS2812B Modo='%s' | Boia=%s (%u LEDs "
              "no GPIO %d)\n",
-             m, ledStripCount, PIN_STROBE_LEDS);
+             m, get_buoy_light_role_str(buoyLightRole), ledStripCount,
+             PIN_STROBE_LEDS);
+  } else if (strncmp(cmdStr, "CMD:LED:BUOY:", 13) == 0) {
+    const char *bStr = cmdStr + 13;
+    uint8_t newRole = BUOY_ROLE_NONE;
+    if (isdigit((unsigned char)bStr[0])) {
+      newRole = (uint8_t)atoi(bStr);
+    } else if (strcasecmp(bStr, "PORT") == 0 ||
+               strcasecmp(bStr, "BOMBORDO") == 0) {
+      newRole = BUOY_ROLE_PORT;
+    } else if (strcasecmp(bStr, "STARBOARD") == 0 ||
+               strcasecmp(bStr, "ESTIBORDO") == 0) {
+      newRole = BUOY_ROLE_STARBOARD;
+    } else if (strcasecmp(bStr, "START") == 0 ||
+               strcasecmp(bStr, "LARGADA") == 0) {
+      newRole = BUOY_ROLE_START;
+    } else if (strcasecmp(bStr, "FINISH") == 0 ||
+               strcasecmp(bStr, "META") == 0) {
+      newRole = BUOY_ROLE_FINISH;
+    } else if (strcasecmp(bStr, "GATE") == 0 ||
+               strcasecmp(bStr, "PORTA") == 0) {
+      newRole = BUOY_ROLE_GATE;
+    }
+    if (newRole > BUOY_ROLE_GATE)
+      newRole = BUOY_ROLE_NONE;
+    buoyLightRole = newRole;
+    c6Prefs.putUChar("buoy_role", buoyLightRole);
+    ledTestMode = LED_MODE_OFF;
+    ledForceRefresh = true;
+    updateStrobeLeds(now);
+    printLog("[C6 ROVER] ★ Funcao de Boia nos LEDs definida: %u (%s)\n",
+             buoyLightRole, get_buoy_light_role_str(buoyLightRole));
   } else if (strncmp(cmdStr, "CMD:LED:SOLID:", 14) == 0) {
     int r = 255, g = 255, b = 255;
     if (sscanf(cmdStr + 14, "%d:%d:%d", &r, &g, &b) == 3) {

@@ -3,8 +3,8 @@
 #include <Arduino.h>
 #include <cstdarg>
 
-#define WEB_CONSOLE_MAX_LINES 100
-#define WEB_CONSOLE_LINE_LEN  160
+#define WEB_CONSOLE_MAX_LINES 40
+#define WEB_CONSOLE_LINE_LEN  128
 
 struct WebConsoleLine {
     uint32_t id;

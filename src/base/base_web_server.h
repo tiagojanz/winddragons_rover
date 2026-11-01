@@ -1945,6 +1945,9 @@ private:
       sObj["name"] = sel->name;
       sObj["mac"] = sel->mac;
       sObj["role"] = sel->role;
+      sObj["rounding"] = sel->rounding;
+      sObj["rounding_side"] = sel->rounding;
+      sObj["buoy_light_role"] = sel->buoy_light_role;
       sObj["target_lat"] = sel->target_lat;
       sObj["target_lng"] = sel->target_lng;
       sObj["lat"] = sel->lat;
@@ -1977,6 +1980,9 @@ private:
       rObj["name"] = r.name;
       rObj["mac"] = r.mac;
       rObj["role"] = r.role;
+      rObj["rounding"] = r.rounding;
+      rObj["rounding_side"] = r.rounding;
+      rObj["buoy_light_role"] = r.buoy_light_role;
       rObj["target_lat"] = r.target_lat;
       rObj["target_lng"] = r.target_lng;
       rObj["lat"] = r.lat;
@@ -1999,6 +2005,24 @@ private:
       rObj["anchor_depth_m"] = r.anchor_depth_m;
       rObj["rssi"] = r.rssi;
       rObj["is_online"] = r.is_online;
+    }
+
+    JsonArray buoysArr = doc["circuit_buoys"].to<JsonArray>();
+    for (const auto &b : _fleet.getCircuitBuoys()) {
+      JsonObject bObj = buoysArr.add<JsonObject>();
+      bObj["id"] = b.id;
+      bObj["name"] = b.name;
+      bObj["mac"] = b.mac;
+      bObj["mac_address"] = b.mac;
+      bObj["role"] = b.role;
+      bObj["rounding"] = b.rounding;
+      bObj["rounding_side"] = b.rounding;
+      bObj["buoy_light_role"] = b.buoy_light_role;
+      bObj["lat"] = b.lat;
+      bObj["lng"] = b.lng;
+      bObj["target_lat"] = b.lat;
+      bObj["target_lng"] = b.lng;
+      bObj["has_rover"] = b.has_rover;
     }
 
     String res;
@@ -2029,6 +2053,9 @@ private:
       rObj["mac"] = r.mac;
       rObj["mac_address"] = r.mac;
       rObj["role"] = r.role;
+      rObj["rounding"] = r.rounding;
+      rObj["rounding_side"] = r.rounding;
+      rObj["buoy_light_role"] = r.buoy_light_role;
       rObj["target_lat"] = r.target_lat;
       rObj["target_lng"] = r.target_lng;
       rObj["lat"] = r.lat;
@@ -2049,6 +2076,24 @@ private:
       rObj["anchor_depth_m"] = r.anchor_depth_m;
       rObj["rssi"] = r.rssi;
       rObj["is_online"] = r.is_online;
+    }
+
+    JsonArray buoysArr = doc["circuit_buoys"].to<JsonArray>();
+    for (const auto &b : _fleet.getCircuitBuoys()) {
+      JsonObject bObj = buoysArr.add<JsonObject>();
+      bObj["id"] = b.id;
+      bObj["name"] = b.name;
+      bObj["mac"] = b.mac;
+      bObj["mac_address"] = b.mac;
+      bObj["role"] = b.role;
+      bObj["rounding"] = b.rounding;
+      bObj["rounding_side"] = b.rounding;
+      bObj["buoy_light_role"] = b.buoy_light_role;
+      bObj["lat"] = b.lat;
+      bObj["lng"] = b.lng;
+      bObj["target_lat"] = b.lat;
+      bObj["target_lng"] = b.lng;
+      bObj["has_rover"] = b.has_rover;
     }
 
     String res;
@@ -2118,7 +2163,11 @@ private:
         strncpy(r.name, rObj["name"] | "", sizeof(r.name) - 1);
         strncpy(r.mac, rObj["mac_address"] | (rObj["mac"] | ""),
                 sizeof(r.mac) - 1);
-        strncpy(r.role, rObj["role"] | "", sizeof(r.role) - 1);
+        strncpy(r.role, rObj["role"] | "mark", sizeof(r.role) - 1);
+        strncpy(r.rounding,
+                rObj["rounding"] | (rObj["rounding_side"] | "none"),
+                sizeof(r.rounding) - 1);
+        r.buoy_light_role = resolve_buoy_light_role(r.role, r.rounding);
         r.target_lat = rObj["lat"] | (rObj["target_lat"] | 0.0);
         r.target_lng = rObj["lng"] | (rObj["target_lng"] | 0.0);
         r.battery_voltage = 12.0f;
@@ -2148,7 +2197,13 @@ private:
         newList.push_back(r);
       }
 
-      _fleet.getRoversMutable() = newList;
+      auto &mutRovers = _fleet.getRoversMutable();
+      mutRovers.clear();
+      for (const auto &item : newList) {
+        mutRovers.push_back(item);
+        _fleet.queueCommand(item.id, 900 + item.id, ACTION_SET_BUOY_ROLE,
+                            item.buoy_light_role, item.buoy_light_role);
+      }
       if (newList.empty()) {
         _fleet.clearSelectedRover();
       } else if (!_fleet.hasSelectedRover()) {

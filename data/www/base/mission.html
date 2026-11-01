@@ -1017,14 +1017,15 @@
             <th>ID</th>
             <th>Nome</th>
             <th>MAC Address</th>
-            <th>Papel / Role</th>
+            <th>Função (Role)</th>
+            <th>Rondagem / LED</th>
             <th>Coord. Alvo (Lat, Lng)</th>
             <th>Status LoRa / Bat / Âncora</th>
             <th>Ações</th>
           </tr>
         </thead>
         <tbody id="roversTbody">
-          <tr><td colspan="7" style="text-align:center;color:var(--muted);">A carregar lista de bóias...</td></tr>
+          <tr><td colspan="8" style="text-align:center;color:var(--muted);">A carregar lista de bóias...</td></tr>
         </tbody>
       </table>
     </div>
@@ -1076,8 +1077,41 @@
 // --- ESTADO GLOBAL ---
 let selectedRoverId = 1;
 let currentRoversData = [];
+let currentCircuitBuoys = [];
 let currentMissionData = null;
-const rolesList = ['largada CR', 'largada', 'boia 1', 'boia 2', 'boia 3', 'boia 4', 'chegada CR', 'chegada'];
+const rolesList = [
+  { val: 'start', label: 'Largada (start)' },
+  { val: 'mark', label: 'Marcação (mark)' },
+  { val: 'finish', label: 'Meta (finish)' },
+  { val: 'gate', label: 'Porta (gate)' }
+];
+const roundingsList = [
+  { val: 'port', label: 'Bombordo BB (port)' },
+  { val: 'starboard', label: 'Estibordo EB (starboard)' },
+  { val: 'gate', label: 'Gate / Linha (gate)' },
+  { val: 'none', label: 'Livre (none)' }
+];
+
+function getBuoyVisualInfo(role, rounding) {
+  const r = (role || 'mark').toLowerCase();
+  const rnd = (rounding || 'none').toLowerCase();
+  if (r.includes('start') || r.includes('largada')) {
+    return { color: '#f59e0b', border: '#fef08a', rolePt: 'Largada', rndPt: 'Gate / Linha', ledPt: 'LED Amarelo (Largada)' };
+  }
+  if (r.includes('finish') || r.includes('meta') || r.includes('chegada')) {
+    return { color: '#3b82f6', border: '#93c5fd', rolePt: 'Meta', rndPt: 'Gate / Linha', ledPt: 'LED Azul (Meta)' };
+  }
+  if (rnd.includes('port') || rnd.includes('bombordo') || rnd === 'bb') {
+    return { color: '#ef4444', border: '#fca5a5', rolePt: (r === 'gate' ? 'Porta' : 'Marcação'), rndPt: 'Bombordo (BB)', ledPt: 'LED Vermelho (BB)' };
+  }
+  if (rnd.includes('starboard') || rnd.includes('estibordo') || rnd === 'eb') {
+    return { color: '#22c55e', border: '#86efac', rolePt: (r === 'gate' ? 'Porta' : 'Marcação'), rndPt: 'Estibordo (EB)', ledPt: 'LED Verde (EB)' };
+  }
+  if (r.includes('gate') || r.includes('porta') || rnd === 'gate') {
+    return { color: '#a855f7', border: '#d8b4fe', rolePt: 'Porta', rndPt: 'Gate / Linha', ledPt: 'LED Vermelho+Verde (Porta)' };
+  }
+  return { color: '#64748b', border: '#cbd5e1', rolePt: 'Marcação', rndPt: 'Livre', ledPt: 'LED Standby' };
+}
 
 // Estado do Mapa Leaflet
 let map = null;
@@ -1088,6 +1122,8 @@ let isDragging = false;
 let roverMarkers = {};
 let targetMarkers = {};
 let targetLines = {};
+let circuitBuoyMarkers = {};
+let circuitCourseLine = null;
 let hasCenteredInitial = false;
 
 // --- GESTÃO DE ABAS / TABS ---
@@ -1306,7 +1342,333 @@ function centerMapOnRovers() {
     const group = valid.map(r => [r.lat, r.lng]);
     if (group.length === 1) map.setView(group[0], 17);
     else map.fitBounds(L.latLngBounds(group).pad(0.2));
+    return;
   }
+  const validBuoys = (currentCircuitBuoys || []).filter(b => b.lat && b.lng && (b.lat !== 0 || b.lng !== 0));
+  if (validBuoys.length > 0) {
+    const group = validBuoys.map(b => [b.lat, b.lng]);
+    if (group.length === 1) map.setView(group[0], 16);
+    else map.fitBounds(L.latLngBounds(group).pad(0.25));
+    return;
+  }
+  const validTargets = currentRoversData.filter(r => r.target_lat && r.target_lng && (r.target_lat !== 0 || r.target_lng !== 0));
+  if (validTargets.length > 0) {
+    const group = validTargets.map(r => [r.target_lat, r.target_lng]);
+    if (group.length === 1) map.setView(group[0], 16);
+    else map.fitBounds(L.latLngBounds(group).pad(0.25));
+  }
+}
+
+// ============================================================================
+// 1. CONSTANTES E GEOMETRIA DO PERCURSO (Arcos de Rondagem & Distâncias)
+// ============================================================================
+const ARC_RADIUS_FACTOR = 0.55;
+const ARC_MIN = 0.000005;
+const ARC_MAX = 0.00035;
+const ARC_STEPS = 42;
+
+function projDist(a, b) {
+  const dx = (a.lng - b.lng) * Math.cos((a.lat + b.lat) * Math.PI / 360);
+  const dy = a.lat - b.lat;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+function angleBetween(a, b) {
+  return Math.atan2(b.lat - a.lat, (b.lng - a.lng) * Math.cos((a.lat + b.lat) * Math.PI / 360));
+}
+
+function pointFrom(center, r, ang) {
+  return {
+    lat: center.lat + r * Math.sin(ang),
+    lng: center.lng + (r * Math.cos(ang)) / Math.cos(center.lat * Math.PI / 180)
+  };
+}
+
+function normAngle(a) {
+  while (a < 0) a += Math.PI * 2;
+  while (a >= Math.PI * 2) a -= Math.PI * 2;
+  return a;
+}
+
+/**
+ * Calcula o trajeto suave (com arcos de rondagem port/starboard), pernas (legs) e distância total.
+ * @param {Array} starts   - Boias com role === 'start'
+ * @param {Array} marks    - Boias com role === 'mark' ou 'gate'
+ * @param {Array} finishes - Boias com role === 'finish'
+ */
+function buildCoursePath(starts, marks, finishes) {
+  const ordered = [];
+
+  // 1. Ponto central da Linha de Largada (Start Gate)
+  if (starts.length >= 2) {
+    ordered.push({
+      lat: (starts[0].lat + starts[1].lat) / 2,
+      lng: (starts[0].lng + starts[1].lng) / 2,
+      name: 'Start'
+    });
+  } else if (starts.length === 1) {
+    ordered.push({ lat: starts[0].lat, lng: starts[0].lng, name: 'Start' });
+  }
+
+  // 2. Boias de Marcação (Marks)
+  marks.forEach((m, idx) => {
+    ordered.push({
+      lat: m.lat,
+      lng: m.lng,
+      _isMark: true,
+      roundingSide: m.rounding, // 'port' | 'starboard' | 'none' | 'gate'
+      name: m.name || `Mark ${idx + 1}`
+    });
+  });
+
+  // 3. Ponto central da Linha de Meta (Finish Gate)
+  if (finishes.length >= 2) {
+    ordered.push({
+      lat: (finishes[0].lat + finishes[1].lat) / 2,
+      lng: (finishes[0].lng + finishes[1].lng) / 2,
+      name: 'Finish'
+    });
+  } else if (finishes.length === 1) {
+    ordered.push({ lat: finishes[0].lat, lng: finishes[0].lng, name: 'Finish' });
+  }
+
+  // Fallback se só existirem boias de marcação
+  if (!ordered.length && marks.length) {
+    marks.forEach(m => ordered.push({
+      lat: m.lat,
+      lng: m.lng,
+      _isMark: true,
+      roundingSide: m.rounding,
+      name: m.name
+    }));
+  }
+
+  // 4. Calcular distância de cada perna (leg)
+  const legs = [];
+  let totalMeters = 0;
+  for (let k = 0; k < ordered.length - 1; k++) {
+    const from = ordered[k];
+    const to = ordered[k + 1];
+    const d = (window.L && window.L.latLng)
+      ? window.L.latLng(from.lat, from.lng).distanceTo(window.L.latLng(to.lat, to.lng))
+      : (projDist(from, to) * 111320);
+    totalMeters += d;
+    legs.push({
+      legIndex: k + 1,
+      fromName: from.name,
+      toName: to.name,
+      distanceMeters: Math.round(d),
+      midLat: (from.lat + to.lat) / 2,
+      midLng: (from.lng + to.lng) / 2
+    });
+  }
+
+  // 5. Gerar coordenadas da linha com arcos de contorno nas boias (port / starboard)
+  let smoothCoords = [];
+  if (ordered.length >= 2) {
+    const path = [ordered[0]];
+    for (let i = 1; i < ordered.length - 1; i++) {
+      const mark = ordered[i];
+      if (!mark._isMark) { path.push(mark); continue; }
+      const before = ordered[i - 1];
+      const after = ordered[i + 1];
+      if (!before || !after) { path.push(mark); continue; }
+
+      const d1 = projDist(before, mark);
+      const d2 = projDist(mark, after);
+      let r = Math.min(d1, d2) * ARC_RADIUS_FACTOR;
+      if (r < ARC_MIN) r = ARC_MIN;
+      if (r > ARC_MAX) r = ARC_MAX;
+
+      const angIn = angleBetween(before, mark);
+      const angOut = angleBetween(mark, after);
+      const vin = { x: (mark.lng - before.lng) * Math.cos((mark.lat + before.lat) * Math.PI / 360), y: (mark.lat - before.lat) };
+      const vout = { x: (after.lng - mark.lng) * Math.cos((after.lat + mark.lat) * Math.PI / 360), y: (after.lat - mark.lat) };
+      const cross = vin.x * vout.y - vin.y * vout.x;
+      let leftTurn = cross > 0;
+
+      // Forçar sentido do arco conforme Bombordo ('port') ou Estibordo ('starboard')
+      if (mark.roundingSide === 'port') leftTurn = false;
+      else if (mark.roundingSide === 'starboard') leftTurn = true;
+
+      const entryAngle = angIn + (leftTurn ? -Math.PI / 2 : Math.PI / 2);
+      const exitAngle = angOut + (leftTurn ? -Math.PI / 2 : Math.PI / 2);
+      let aStart = normAngle(entryAngle), aEnd = normAngle(exitAngle);
+      let sweep = leftTurn
+        ? (aEnd - aStart <= 0 ? aEnd - aStart + Math.PI * 2 : aEnd - aStart)
+        : (aEnd - aStart >= 0 ? aEnd - aStart - Math.PI * 2 : aEnd - aStart);
+
+      const entryPt = pointFrom(mark, r, entryAngle);
+      const exitPt = pointFrom(mark, r, exitAngle);
+      path.push(entryPt);
+
+      for (let s = 1; s < ARC_STEPS; s++) {
+        const tStep = s / ARC_STEPS;
+        const a = aStart + sweep * tStep;
+        path.push(pointFrom(mark, r, a));
+      }
+      path.push(exitPt);
+    }
+    path.push(ordered[ordered.length - 1]);
+    smoothCoords = path.map(p => [p.lat, p.lng]);
+  } else if (ordered.length === 1) {
+    smoothCoords = [[ordered[0].lat, ordered[0].lng]];
+  }
+
+  return { ordered, legs, totalMeters: Math.round(totalMeters), smoothCoords };
+}
+
+// ============================================================================
+// 2. FUNÇÃO DE PLOTAGEM NO MAPA LEAFLET (Recebe mission.rovers / circuit_buoys da API)
+// ============================================================================
+let courseLayerGroup = null;
+let lastCourseSignature = '';
+
+/**
+ * Desenha o circuito completo num mapa Leaflet.
+ * @param {L.Map} map - Instância do mapa Leaflet
+ * @param {Array} roversList - Array `mission.rovers` ou `circuit_buoys` recebido na telemetria
+ */
+function plotCourseOnMap(map, roversList = []) {
+  if (!map) return;
+
+  // Limpar camada anterior se existir
+  if (courseLayerGroup) {
+    courseLayerGroup.clearLayers();
+  } else {
+    courseLayerGroup = L.layerGroup().addTo(map);
+  }
+
+  const starts = [];
+  const marks = [];
+  const finishes = [];
+  let markCounter = 0;
+
+  // 1. Separar boias por role ('start', 'mark', 'finish', 'gate') e desenhar marcadores
+  roversList.forEach((item, index) => {
+    const lat = Number(item.target_lat ?? item.coordinates?.lat ?? item.lat);
+    const lng = Number(item.target_lng ?? item.coordinates?.lng ?? item.lng);
+    if (isNaN(lat) || isNaN(lng) || (lat === 0 && lng === 0)) return;
+
+    let rawRole = String(item.role || 'mark').toLowerCase();
+    let role = rawRole;
+    if (rawRole.includes('start') || rawRole.includes('largada')) role = 'start';
+    else if (rawRole.includes('finish') || rawRole.includes('meta') || rawRole.includes('chegada')) role = 'finish';
+    else if (rawRole.includes('gate') || rawRole.includes('porta')) role = 'gate';
+    else role = 'mark';
+
+    const rounding = String(item.rounding || item.rounding_side || 'none').toLowerCase(); // 'port' | 'starboard' | 'gate' | 'none'
+    const name = item.name || `Buoy ${index + 1}`;
+    const macAddr = (item.mac_address && String(item.mac_address).includes(':')) ? item.mac_address : ((item.mac && String(item.mac).includes(':')) ? item.mac : null);
+
+    const pointObj = { lat, lng, role, rounding, name, mac_address: macAddr };
+
+    if (role === 'start') {
+      starts.push(pointObj);
+    } else if (role === 'finish') {
+      finishes.push(pointObj);
+    } else {
+      marks.push(pointObj);
+    }
+
+    // Cor e texto do ícone consoante role / rounding
+    let bgColor = '#f59e0b'; // mark default (amber)
+    let badgeText = '';
+    if (role === 'start') {
+      bgColor = '#10b981'; // verde
+      badgeText = 'S';
+    } else if (role === 'finish') {
+      bgColor = '#ef4444'; // vermelho
+      badgeText = 'F';
+    } else if (role === 'gate') {
+      bgColor = '#8b5cf6'; // roxo
+      badgeText = 'G';
+    } else {
+      markCounter++;
+      badgeText = String(markCounter);
+    }
+
+    const pipColor = rounding === 'port' ? '#ef4444' : (rounding === 'starboard' ? '#10b981' : null);
+    const pipText = rounding === 'port' ? 'P' : (rounding === 'starboard' ? 'S' : '');
+    const pipHtml = pipColor
+      ? `<span style="position:absolute;top:-5px;right:-5px;background:${pipColor};color:#fff;font-size:9px;font-weight:700;padding:1px 4px;border-radius:999px;border:1.5px solid #fff;">${pipText}</span>`
+      : '';
+
+    const icon = L.divIcon({
+      className: 'course-buoy-icon',
+      html: `<div style="position:relative;width:30px;height:30px;border-radius:50%;background:${bgColor};color:#fff;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.35);">${badgeText}${pipHtml}</div>`,
+      iconSize: [30, 30],
+      iconAnchor: [15, 15]
+    });
+
+    const marker = L.marker([lat, lng], { icon }).addTo(courseLayerGroup);
+    marker.bindPopup(`
+      <b>${name}</b><br>
+      Role: <b>${role}</b> | Rounding: <b>${rounding}</b><br>
+      Rover MAC: <code>${macAddr || 'null (Sem Rover)'}</code><br>
+      Target: ${lat.toFixed(6)}, ${lng.toFixed(6)}
+    `);
+  });
+
+  // 2. Desenhar Linha de Largada (Start Gate) se houver >= 2 boias 'start'
+  if (starts.length >= 2) {
+    L.polyline([[starts[0].lat, starts[0].lng], [starts[1].lat, starts[1].lng]], {
+      color: '#ff9800',
+      weight: 5,
+      opacity: 0.9,
+      dashArray: '8, 6'
+    }).bindPopup('<b>Start Gate</b>').addTo(courseLayerGroup);
+  }
+
+  // 3. Desenhar Linha de Meta (Finish Gate) se houver >= 2 boias 'finish'
+  if (finishes.length >= 2) {
+    L.polyline([[finishes[0].lat, finishes[0].lng], [finishes[1].lat, finishes[1].lng]], {
+      color: '#0284c7',
+      weight: 5,
+      opacity: 0.9,
+      dashArray: '8, 6'
+    }).bindPopup('<b>Finish Gate</b>').addTo(courseLayerGroup);
+  }
+
+  // 4. Construir e desenhar a linha tracejada do percurso com arcos de rondagem
+  const { legs, totalMeters, smoothCoords } = buildCoursePath(starts, marks, finishes);
+
+  if (smoothCoords.length >= 2) {
+    L.polyline(smoothCoords, {
+      color: '#0ea5e9',
+      weight: 4,
+      opacity: 0.9,
+      dashArray: '8, 6',
+      lineJoin: 'round',
+      lineCap: 'round'
+    }).addTo(courseLayerGroup);
+  }
+
+  // 5. Desenhar etiquetas de distância a meio de cada perna (leg)
+  legs.forEach(leg => {
+    if (leg.distanceMeters > 0) {
+      L.marker([leg.midLat, leg.midLng], {
+        icon: L.divIcon({
+          className: 'course-leg-badge',
+          html: `<div style="background:rgba(15,23,42,0.85);color:#fff;font-size:11px;font-weight:600;padding:2px 6px;border-radius:6px;border:1px solid rgba(56,189,248,0.4);white-space:nowrap;text-align:center;">${leg.distanceMeters} m</div>`,
+          iconSize: [64, 20],
+          iconAnchor: [32, 10]
+        }),
+        interactive: false
+      }).addTo(courseLayerGroup);
+    }
+  });
+
+  return { totalMeters, legs };
+}
+
+function renderCircuitOnMap(buoys) {
+  if (!map || !Array.isArray(buoys)) return;
+  currentCircuitBuoys = buoys;
+  const sig = JSON.stringify(buoys);
+  if (sig === lastCourseSignature && courseLayerGroup) return;
+  lastCourseSignature = sig;
+  plotCourseOnMap(map, buoys);
 }
 
 function createRoverIconHtml(rover, isSelected) {
@@ -1469,7 +1831,7 @@ function renderRoversTable(rovers) {
   if (!tbody || tbody.contains(document.activeElement)) return;
 
   if (!rovers || rovers.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:16px;">Nenhum rover na frota.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:16px;">Nenhum rover na frota.</td></tr>';
     return;
   }
 
@@ -1478,17 +1840,31 @@ function renderRoversTable(rovers) {
     const isOnline = r.is_online;
     const isSelected = (selectedRoverId === r.id);
     const batCol = (r.battery_pct < 25) ? 'var(--red)' : ((r.battery_pct < 50) ? 'var(--yellow)' : 'var(--green)');
-    
+    const curRole = (r.role || 'mark').toLowerCase();
+    const curRnd = (r.rounding || r.rounding_side || 'none').toLowerCase();
+    const vis = getBuoyVisualInfo(curRole, curRnd);
+
     let optHtml = '';
     rolesList.forEach(ro => {
-      optHtml += `<option value="${ro}" ${(r.role === ro) ? 'selected' : ''}>${ro}</option>`;
+      optHtml += `<option value="${ro.val}" ${(curRole === ro.val) ? 'selected' : ''}>${ro.label}</option>`;
+    });
+
+    let rndHtml = '';
+    roundingsList.forEach(rn => {
+      rndHtml += `<option value="${rn.val}" ${(curRnd === rn.val) ? 'selected' : ''}>${rn.label}</option>`;
     });
 
     html += `<tr id="rRow_${r.id}">
       <td><strong>${r.id}</strong></td>
-      <td><input type="text" class="r-name" value="${r.name || ('Rover ' + r.id)}" style="width:110px;padding:6px;"></td>
-      <td><input type="text" class="r-mac" value="${r.mac || r.mac_address || ''}" style="width:130px;font-family:monospace;padding:6px;"></td>
-      <td><select class="r-role" style="width:110px;padding:6px;">${optHtml}</select></td>
+      <td><input type="text" class="r-name" value="${r.name || ('Rover ' + r.id)}" style="width:105px;padding:6px;"></td>
+      <td><input type="text" class="r-mac" value="${r.mac || r.mac_address || ''}" style="width:125px;font-family:monospace;padding:6px;"></td>
+      <td><select class="r-role" style="width:130px;padding:6px;">${optHtml}</select></td>
+      <td>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span title="${vis.ledPt}" style="width:12px;height:12px;border-radius:50%;background:${vis.color};border:1.5px solid ${vis.border};display:inline-block;flex-shrink:0;"></span>
+          <select class="r-rounding" style="width:140px;padding:6px;">${rndHtml}</select>
+        </div>
+      </td>
       <td>
         <div style="display:flex;gap:4px;">
           <input type="number" step="0.000001" class="r-lat" value="${(r.target_lat || 0).toFixed(6)}" placeholder="Lat" style="width:85px;padding:6px;">
@@ -1531,13 +1907,18 @@ function addRow() {
   
   let optHtml = '';
   rolesList.forEach((ro, i) => {
-    optHtml += `<option value="${ro}" ${i === 0 ? 'selected' : ''}>${ro}</option>`;
+    optHtml += `<option value="${ro.val}" ${ro.val === 'mark' ? 'selected' : ''}>${ro.label}</option>`;
+  });
+  let rndHtml = '';
+  roundingsList.forEach((rn, i) => {
+    rndHtml += `<option value="${rn.val}" ${rn.val === 'port' ? 'selected' : ''}>${rn.label}</option>`;
   });
 
   tr.innerHTML = `<td><strong>${id}</strong></td>
-    <td><input type="text" class="r-name" value="WD-Boia-${id}" style="width:110px;padding:6px;"></td>
-    <td><input type="text" class="r-mac" value="00:00:00:00:00:0${id}" style="width:130px;font-family:monospace;padding:6px;"></td>
-    <td><select class="r-role" style="width:110px;padding:6px;">${optHtml}</select></td>
+    <td><input type="text" class="r-name" value="WD-Boia-${id}" style="width:105px;padding:6px;"></td>
+    <td><input type="text" class="r-mac" value="00:00:00:00:00:0${id}" style="width:125px;font-family:monospace;padding:6px;"></td>
+    <td><select class="r-role" style="width:130px;padding:6px;">${optHtml}</select></td>
+    <td><select class="r-rounding" style="width:140px;padding:6px;">${rndHtml}</select></td>
     <td>
       <div style="display:flex;gap:4px;">
         <input type="number" step="0.000001" class="r-lat" value="0.000000" style="width:85px;padding:6px;">
@@ -1565,9 +1946,11 @@ function saveRovers() {
     const name = nameInput.value;
     const mac = r.querySelector('.r-mac').value;
     const role = r.querySelector('.r-role').value;
+    const roundingEl = r.querySelector('.r-rounding');
+    const rounding = roundingEl ? roundingEl.value : 'none';
     const lat = parseFloat(r.querySelector('.r-lat').value) || 0.0;
     const lng = parseFloat(r.querySelector('.r-lng').value) || 0.0;
-    rovers.push({ id: idx + 1, name: name, mac_address: mac, role: role, lat: lat, lng: lng });
+    rovers.push({ id: idx + 1, name: name, mac_address: mac, role: role, rounding: rounding, rounding_side: rounding, lat: lat, lng: lng });
   });
 
   fetch('/api/mission/rovers', {
@@ -1798,11 +2181,38 @@ function loadAllData(forceMapCenter = false) {
 
       // Marcadores do Mapa
       if (!isDragging && map) {
+        if (Array.isArray(data.circuit_buoys)) {
+          renderCircuitOnMap(data.circuit_buoys);
+        }
+
+        const activeRoverIds = new Set(currentRoversData.map(r => String(r.id)));
+        Object.keys(roverMarkers).forEach(k => {
+          if (!activeRoverIds.has(String(k))) {
+            map.removeLayer(roverMarkers[k]);
+            delete roverMarkers[k];
+          }
+        });
+        Object.keys(targetMarkers).forEach(k => {
+          if (!activeRoverIds.has(String(k))) {
+            map.removeLayer(targetMarkers[k]);
+            delete targetMarkers[k];
+          }
+        });
+        Object.keys(targetLines).forEach(k => {
+          if (!activeRoverIds.has(String(k))) {
+            map.removeLayer(targetLines[k]);
+            delete targetLines[k];
+          }
+        });
+
         let validCoords = [];
         currentRoversData.forEach(r => {
           const isSel = (r.id === selectedRoverId);
           const hasFix = (r.lat !== 0 || r.lng !== 0);
-          if (!hasFix) return;
+          if (!hasFix) {
+            updateRoverTargetDisplay(r);
+            return;
+          }
 
           const latLng = [r.lat, r.lng];
           validCoords.push(latLng);
@@ -1850,7 +2260,8 @@ function loadAllData(forceMapCenter = false) {
           updateRoverTargetDisplay(r);
         });
 
-        if ((!hasCenteredInitial && validCoords.length > 0) || forceMapCenter) {
+        const hasCircuitCoords = (currentCircuitBuoys || []).some(b => b.lat || b.lng);
+        if ((!hasCenteredInitial && (validCoords.length > 0 || hasCircuitCoords)) || forceMapCenter) {
           centerMapOnRovers();
           hasCenteredInitial = true;
         }
@@ -1883,6 +2294,9 @@ function loadAllData(forceMapCenter = false) {
       }
       if (mdata.rovers && Array.isArray(mdata.rovers)) {
         renderRoversTable(mdata.rovers);
+      }
+      if (!isDragging && map && Array.isArray(mdata.circuit_buoys)) {
+        renderCircuitOnMap(mdata.circuit_buoys);
       }
     })
     .catch(() => {});

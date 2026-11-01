@@ -10,6 +10,7 @@
 #include "network_config.h"
 #include "fleet_manager.h"
 #include "lora_protocol.h"
+#include "web_console.h"
 #include "wifi_config_manager.h"
 
 class BaseNetwork {
@@ -53,106 +54,147 @@ private:
     FleetManager &fleetManager;
     WiFiConfigManager &wifiConfig;
     void syncTelemetryToCloud() {
-        WiFiClientSecure client;
-        client.setInsecure(); // Skip certificate verification for flexible operation
-        client.setTimeout(1500);
-
-        HTTPClient https;
-        https.setTimeout(1500);
-        https.setConnectTimeout(1500);
-        if (!https.begin(client, WINDDRAGONS_API_URL)) {
-            Serial.println("[HTTP] Failed to connect to WindDragons endpoint");
-            syncSuccess = false;
-            failCount++;
-            consecutiveFails++;
-            return;
-        }
-
-        https.addHeader("Content-Type", "application/json");
-
         // Obter MAC Address único de hardware
-        String mac = WiFi.macAddress();
-        if (mac.isEmpty() || mac == "00:00:00:00:00:00") {
+        char macStr[18] = {0};
+        String wifiMac = WiFi.macAddress();
+        if (wifiMac.isEmpty() || wifiMac == "00:00:00:00:00:00") {
             uint8_t baseMac[6];
             esp_read_mac(baseMac, ESP_MAC_WIFI_STA);
-            char macStr[18];
             snprintf(macStr, sizeof(macStr), "%02X:%02X:%02X:%02X:%02X:%02X",
                      baseMac[0], baseMac[1], baseMac[2], baseMac[3], baseMac[4], baseMac[5]);
-            mac = String(macStr);
+        } else {
+            strncpy(macStr, wifiMac.c_str(), sizeof(macStr) - 1);
         }
+        wifiMac = String(); // Libertar String temporária antes do SSL
 
-        // Construct JSON document
-        JsonDocument doc;
-        doc["station_id"] = mac;
-        doc["mac_address"] = mac;
-        doc["station_name"] = fleetManager.getStationName();
-        doc["operation_state"] = fleetManager.getOperationStateStr();
-        doc["operation_state_id"] = static_cast<uint8_t>(fleetManager.getOperationState());
-        doc["circuit_id"] = fleetManager.getCircuitId();
-        doc["circuit_name"] = fleetManager.getMissionName();
-        doc["race_id"] = fleetManager.getRaceId();
-        doc["mission_name"] = fleetManager.getMissionName();
-
-        JsonArray roversArray = doc["rovers"].to<JsonArray>();
-
-        // Only send active/online rovers
-        for (const auto &r : fleetManager.getRovers()) {
-            if (!r.is_online) continue;
-
-            JsonObject rObj = roversArray.add<JsonObject>();
-            rObj["rover_id"] = r.id;
-            rObj["rover_code"] = r.code;
-            rObj["name"] = r.name;
-            rObj["mac_address"] = r.mac;
-            rObj["role"] = r.role;
-            if (r.target_lat != 0.0 || r.target_lng != 0.0) {
-                rObj["target_lat"] = serialized(String(r.target_lat, 6));
-                rObj["target_lng"] = serialized(String(r.target_lng, 6));
-            }
-            rObj["lat"] = serialized(String(r.lat, 6));
-            rObj["lng"] = serialized(String(r.lng, 6));
-            rObj["speed"] = serialized(String(r.speed_knots, 2));
-            rObj["heading"] = serialized(String(r.heading_deg, 1));
-            rObj["compass_active"] = r.compass_active;
-            rObj["heading_source"] = r.compass_active ? "BNO055" : "GPS_COG";
-            rObj["roll"] = serialized(String(r.roll_deg, 1));
-            rObj["pitch"] = serialized(String(r.pitch_deg, 1));
-            rObj["compass_cal_sys"] = r.compass_cal_sys;
-            rObj["compass_cal_mag"] = r.compass_cal_mag;
-            rObj["battery_pct"] = r.battery_pct;
-            rObj["battery_voltage"] = serialized(String(r.battery_voltage, 2));
-            rObj["motor_status"] = get_motor_status_str(r.motor_status);
-            rObj["anchor_status"] = get_anchor_status_str(r.anchor_status);
-            rObj["anchor_depth_m"] = serialized(String(r.anchor_depth_m, 2));
-            rObj["rssi"] = r.rssi;
-        }
-
+        // 1. Construir requestBody num bloco isolado para libertar o JsonDocument antes do handshake TLS
         String requestBody;
-        serializeJson(doc, requestBody);
+        requestBody.reserve(512);
+        {
+            JsonDocument doc;
+            doc["station_id"] = macStr;
+            doc["mac_address"] = macStr;
+            doc["station_name"] = fleetManager.getStationName();
+            doc["operation_state"] = fleetManager.getOperationStateStr();
+            doc["operation_state_id"] = static_cast<uint8_t>(fleetManager.getOperationState());
+            doc["circuit_id"] = fleetManager.getCircuitId();
+            doc["circuit_name"] = fleetManager.getMissionName();
+            doc["race_id"] = fleetManager.getRaceId();
+            doc["mission_name"] = fleetManager.getMissionName();
 
-        int httpResponseCode = https.POST(requestBody);
-        lastHttpStatus = httpResponseCode;
+            JsonArray roversArray = doc["rovers"].to<JsonArray>();
 
+            // Only send active/online rovers
+            for (const auto &r : fleetManager.getRovers()) {
+                if (!r.is_online) continue;
+
+                JsonObject rObj = roversArray.add<JsonObject>();
+                rObj["rover_id"] = r.id;
+                rObj["rover_code"] = r.code;
+                rObj["name"] = r.name;
+                rObj["mac_address"] = r.mac;
+                rObj["role"] = r.role;
+                if (r.target_lat != 0.0 || r.target_lng != 0.0) {
+                    rObj["target_lat"] = serialized(String(r.target_lat, 6));
+                    rObj["target_lng"] = serialized(String(r.target_lng, 6));
+                }
+                rObj["lat"] = serialized(String(r.lat, 6));
+                rObj["lng"] = serialized(String(r.lng, 6));
+                rObj["speed"] = serialized(String(r.speed_knots, 2));
+                rObj["heading"] = serialized(String(r.heading_deg, 1));
+                rObj["compass_active"] = r.compass_active;
+                rObj["heading_source"] = r.compass_active ? "BNO055" : "GPS_COG";
+                rObj["roll"] = serialized(String(r.roll_deg, 1));
+                rObj["pitch"] = serialized(String(r.pitch_deg, 1));
+                rObj["compass_cal_sys"] = r.compass_cal_sys;
+                rObj["compass_cal_mag"] = r.compass_cal_mag;
+                rObj["battery_pct"] = r.battery_pct;
+                rObj["battery_voltage"] = serialized(String(r.battery_voltage, 2));
+                rObj["motor_status"] = get_motor_status_str(r.motor_status);
+                rObj["anchor_status"] = get_anchor_status_str(r.anchor_status);
+                rObj["anchor_depth_m"] = serialized(String(r.anchor_depth_m, 2));
+                rObj["rssi"] = r.rssi;
+            }
+
+            serializeJson(doc, requestBody);
+        }
+
+        // 2. Executar pedido HTTPS num escopo dedicado para que os ~42KB de buffers mbedTLS
+        // sejam totalmente libertados ANTES de processar a resposta e gravar no MicroSD/NVS!
+        String responsePayload;
+        int httpResponseCode = -1;
+        {
+            WiFiClientSecure client;
+            client.setInsecure(); // Skip certificate verification for flexible operation
+            client.setTimeout(3000);
+
+            HTTPClient https;
+            https.setTimeout(3000);
+            https.setConnectTimeout(2500);
+            https.useHTTP10(true); // Evita chunked encoding e reduz alocações intermédias
+            if (!https.begin(client, WINDDRAGONS_API_URL)) {
+                Serial.println("[HTTP] Failed to connect to WindDragons endpoint");
+                syncSuccess = false;
+                failCount++;
+                consecutiveFails++;
+                return;
+            }
+
+            https.addHeader("Content-Type", "application/json");
+            https.addHeader("Connection", "close");
+
+            httpResponseCode = https.POST(requestBody);
+            requestBody = String(); // Libertar imediatamente o body de envio
+            lastHttpStatus = httpResponseCode;
+
+            if (httpResponseCode == HTTP_CODE_OK || httpResponseCode == 201) {
+                responsePayload = https.getString();
+            } else {
+                Serial.printf("[HTTP] POST failed, error: %d - %s (falhas: %u | FreeHeap: %u | MaxAlloc: %u)\n", 
+                              httpResponseCode, https.errorToString(httpResponseCode).c_str(), failCount + 1,
+                              (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
+            }
+
+            https.end();
+            client.stop();
+        } // <-- Destrói WiFiClientSecure e liberta todos os buffers SSL aqui!
+
+        // 3. Processar resposta já com os ~42KB de SSL livres na heap
         if (httpResponseCode == HTTP_CODE_OK || httpResponseCode == 201) {
             syncSuccess = true;
             successCount++;
             consecutiveFails = 0;
-            String responsePayload = https.getString();
-            Serial.printf("[CLOUD] Resposta Portal: %s\n", responsePayload.c_str());
+            printFullJsonToSerial("[CLOUD] Resposta Portal: ", responsePayload);
             parseCloudResponse(responsePayload);
             if (successCount % 5 == 1) {
-                Serial.printf("[CLOUD] Sync #%u OK (HTTP %d | Station: %s | State: %s)\n", 
-                              successCount, httpResponseCode, mac.c_str(), fleetManager.getOperationStateStr());
+                Serial.printf("[CLOUD] Sync #%u OK (HTTP %d | Station: %s | State: %s | FreeHeap: %u)\n", 
+                              successCount, httpResponseCode, macStr, fleetManager.getOperationStateStr(),
+                              (unsigned)ESP.getFreeHeap());
             }
         } else {
             syncSuccess = false;
             failCount++;
             consecutiveFails++;
-            Serial.printf("[HTTP] POST failed, error: %d - %s (falhas: %u)\n", 
-                          httpResponseCode, https.errorToString(httpResponseCode).c_str(), failCount);
         }
+    }
 
-        https.end();
+    static void printFullJsonToSerial(const char *prefix, const String &payload) {
+        if (prefix) {
+            Serial.print(prefix);
+        }
+        const char *str = payload.c_str();
+        size_t len = payload.length();
+        size_t offset = 0;
+        const size_t chunkSize = 128; // Evita truncagem de 256 bytes do buffer USB CDC não-bloqueante
+        while (offset < len) {
+            size_t toWrite = (len - offset > chunkSize) ? chunkSize : (len - offset);
+            Serial.write(reinterpret_cast<const uint8_t *>(str + offset), toWrite);
+            offset += toWrite;
+            if (offset < len) {
+                delay(2);
+            }
+        }
+        Serial.print("\n");
     }
 
     void parseCloudResponse(const String &payload) {

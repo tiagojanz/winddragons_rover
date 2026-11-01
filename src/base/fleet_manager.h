@@ -4,6 +4,7 @@
 #include "lora_protocol.h"
 #include "network_config.h"
 #include "sd_card_manager.h"
+#include "web_console.h"
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include <Preferences.h>
@@ -133,6 +134,23 @@ inline BaseOperationState parse_base_op_state(const char *str) {
 }
 
 // ==========================================
+// ESTRUTURA DE BÓIA DE PERCURSO DO CIRCUITO (COM OU SEM ROVER)
+// ==========================================
+#define MAX_CIRCUIT_BUOYS 16
+
+struct CircuitBuoy {
+  uint8_t id;
+  char name[32];
+  char mac[18];
+  char role[24];     // "start", "mark", "finish", "gate"
+  char rounding[16]; // "port", "starboard", "gate", "none"
+  uint8_t buoy_light_role;
+  double lat;
+  double lng;
+  bool has_rover;
+};
+
+// ==========================================
 // ESTRUTURA DO ROVER NA FROTA DE REGATA / MISSÃO
 // ==========================================
 struct FleetRover {
@@ -140,8 +158,9 @@ struct FleetRover {
   char code[16];
   char name[32];
   char mac[18];
-  char role[24]; // "largada CR", "largada", "boia 1", "boia 2", "chegada CR",
-                 // "chegada"
+  char role[24];     // "start", "mark", "finish", "gate"
+  char rounding[16]; // "port", "starboard", "gate", "none"
+  uint8_t buoy_light_role;
   double target_lat;
   double target_lng;
 
@@ -190,7 +209,25 @@ public:
     strncpy(_raceId, "REGATA-DEFAULT", sizeof(_raceId) - 1);
     strncpy(_missionName, "Percurso de Regata", sizeof(_missionName) - 1);
     resetC6ModeColorsDefault();
+    rovers.reserve(MAX_FLEET_ROVERS);
+    circuitBuoys.reserve(MAX_CIRCUIT_BUOYS);
+    _removedRoverIds.reserve(MAX_FLEET_ROVERS);
+    commandQueue.reserve(8);
     rovers.clear();
+    circuitBuoys.clear();
+  }
+
+  // Verifica se um endereço MAC corresponde a um Rover físico atribuído
+  // (contém ':' e não é vazio, 'null', 'BOY-XX' ou '00:00:00:00:00:00')
+  static bool isAssignedRoverMac(const char *mac) {
+    if (!mac || strlen(mac) < 8)
+      return false;
+    if (strchr(mac, ':') == nullptr)
+      return false;
+    if (strcasecmp(mac, "00:00:00:00:00:00") == 0 ||
+        strcasecmp(mac, "null") == 0 || strcasecmp(mac, "none") == 0)
+      return false;
+    return true;
   }
 
   // --- Configuração do LED RGB do Coprocessador C6 (GPIO 8) ---
@@ -335,6 +372,7 @@ public:
 
   void clearRovers() {
     rovers.clear();
+    circuitBuoys.clear();
     _removedRoverIds.clear();
     selectedRoverIndex = -1;
     _roversFromPortal = false;
@@ -565,6 +603,10 @@ public:
 
   std::vector<FleetRover> &getRoversMutable() { return rovers; }
 
+  const std::vector<CircuitBuoy> &getCircuitBuoys() const {
+    return circuitBuoys;
+  }
+
   bool hasSelectedRover() const {
     return (selectedRoverIndex >= 0 &&
             selectedRoverIndex < (int16_t)rovers.size());
@@ -693,9 +735,31 @@ public:
         return true;
       if (strcmp(newList[i].role, rovers[i].role) != 0)
         return true;
+      if (strcmp(newList[i].rounding, rovers[i].rounding) != 0)
+        return true;
       if (fabs(newList[i].target_lat - rovers[i].target_lat) > 0.000001)
         return true;
       if (fabs(newList[i].target_lng - rovers[i].target_lng) > 0.000001)
+        return true;
+    }
+    return false;
+  }
+
+  bool isCircuitBuoysDifferent(const std::vector<CircuitBuoy> &newBuoys) const {
+    if (newBuoys.size() != circuitBuoys.size())
+      return true;
+    for (size_t i = 0; i < newBuoys.size(); ++i) {
+      if (newBuoys[i].id != circuitBuoys[i].id)
+        return true;
+      if (strcmp(newBuoys[i].name, circuitBuoys[i].name) != 0)
+        return true;
+      if (strcmp(newBuoys[i].role, circuitBuoys[i].role) != 0)
+        return true;
+      if (strcmp(newBuoys[i].rounding, circuitBuoys[i].rounding) != 0)
+        return true;
+      if (fabs(newBuoys[i].lat - circuitBuoys[i].lat) > 0.000001)
+        return true;
+      if (fabs(newBuoys[i].lng - circuitBuoys[i].lng) > 0.000001)
         return true;
     }
     return false;
@@ -752,6 +816,26 @@ public:
     bool updateList = mObj["update_rover_list"] | false;
     JsonArray roversArray = mObj["rovers"].as<JsonArray>();
 
+    if (!roversArray.isNull()) {
+      String rArrStr;
+      serializeJson(roversArray, rArrStr);
+      Serial.printf("[MISSION] Portal enviou array 'rovers' com %u elementos:\n",
+                    (unsigned)roversArray.size());
+      size_t off = 0;
+      while (off < rArrStr.length()) {
+        size_t n =
+            (rArrStr.length() - off > 128) ? 128 : (rArrStr.length() - off);
+        Serial.write(reinterpret_cast<const uint8_t *>(rArrStr.c_str() + off),
+                     n);
+        off += n;
+        if (off < rArrStr.length())
+          delay(2);
+      }
+      Serial.print("\n");
+      webConsole.logf("[PORTAL] Array 'rovers' recebido: %u item(ns)",
+                      (unsigned)roversArray.size());
+    }
+
     if (metaChanged || updateList || _opState == BASE_OP_WAITING_ROVERS) {
       _removedRoverIds.clear();
     }
@@ -759,42 +843,93 @@ public:
     bool listChanged = false;
     if ((updateList || !roversArray.isNull()) && roversArray.size() > 0) {
       std::vector<FleetRover> newList;
+      newList.reserve(MAX_FLEET_ROVERS);
+      std::vector<CircuitBuoy> newBuoys;
+      newBuoys.reserve(MAX_CIRCUIT_BUOYS);
 
+      uint8_t itemIdx = 0;
       for (JsonObject rJson : roversArray) {
-        FleetRover r;
-        memset(&r, 0, sizeof(r));
-        r.id = rJson["id"] | (newList.size() + 1);
-        if (isRoverRemovedLocally(r.id)) {
-          continue;
-        }
-        snprintf(r.code, sizeof(r.code), "ROVER-%02d", r.id);
+        itemIdx++;
+        uint8_t itemId = rJson["id"] | itemIdx;
 
         const char *name = rJson["name"] | "";
+        const char *mac = rJson["mac_address"] | (rJson["mac"] | "");
+        const char *role = rJson["role"] | "mark";
+        const char *rounding =
+            rJson["rounding"] | (rJson["rounding_side"] | "none");
+        double tLat = 0.0, tLng = 0.0;
+        if (rJson["coordinates"].is<JsonObject>()) {
+          JsonObject coord = rJson["coordinates"].as<JsonObject>();
+          tLat = coord["lat"] | 0.0;
+          tLng = coord["lng"] | 0.0;
+        }
+        if (tLat == 0.0 && tLng == 0.0) {
+          tLat = rJson["target_lat"] | (rJson["lat"] | 0.0);
+          tLng = rJson["target_lng"] | (rJson["lng"] | 0.0);
+        }
+
+        bool isRealRover = isAssignedRoverMac(mac);
+        uint8_t lightRole = resolve_buoy_light_role(role, rounding);
+
+        // Guardar no percurso completo do circuito (para plotar no mapa)
+        if (newBuoys.size() < MAX_CIRCUIT_BUOYS) {
+          CircuitBuoy b;
+          memset(&b, 0, sizeof(b));
+          b.id = itemId;
+          if (strlen(name) > 0) {
+            strncpy(b.name, name, sizeof(b.name) - 1);
+          } else {
+            snprintf(b.name, sizeof(b.name), "Boia %u", itemId);
+          }
+          if (strlen(mac) > 0) {
+            strncpy(b.mac, mac, sizeof(b.mac) - 1);
+          }
+          strncpy(b.role, strlen(role) > 0 ? role : "mark", sizeof(b.role) - 1);
+          strncpy(b.rounding, strlen(rounding) > 0 ? rounding : "none",
+                  sizeof(b.rounding) - 1);
+          b.buoy_light_role = lightRole;
+          b.lat = tLat;
+          b.lng = tLng;
+          b.has_rover = isRealRover;
+          newBuoys.push_back(b);
+        }
+
+        Serial.printf(
+            "[MISSION]   -> Item #%u: id=%u | name='%s' | mac='%s' | role='%s' "
+            "| rounding='%s' (LED:%s) | lat=%.6f lng=%.6f [%s]\n",
+            itemIdx, itemId, name, mac, role, rounding,
+            get_buoy_light_role_str(lightRole), tLat, tLng,
+            isRealRover ? "ROVER ATRIBUIDO" : "BOIA PERCURSO");
+        webConsole.logf("[PORTAL] #%u: %s (%s/%s) -> %s", itemId, name, role,
+                        rounding, isRealRover ? "ROVER" : "BOIA");
+
+        // Na lista de Rovers só entram os que têm um Rover físico atribuído (MAC válido)
+        if (!isRealRover) {
+          continue;
+        }
+        if (newList.size() >= MAX_FLEET_ROVERS) {
+          continue;
+        }
+        if (isRoverRemovedLocally(itemId)) {
+          continue;
+        }
+
+        FleetRover r;
+        memset(&r, 0, sizeof(r));
+        r.id = itemId;
+        snprintf(r.code, sizeof(r.code), "ROVER-%02d", r.id);
         if (strlen(name) > 0) {
           strncpy(r.name, name, sizeof(r.name) - 1);
         } else {
           snprintf(r.name, sizeof(r.name), "Rover %02d", r.id);
         }
-
-        const char *mac = rJson["mac_address"] | (rJson["mac"] | "");
-        if (strlen(mac) > 0) {
-          strncpy(r.mac, mac, sizeof(r.mac) - 1);
-        }
-
-        const char *role = rJson["role"] | "";
-        if (strlen(role) > 0) {
-          strncpy(r.role, role, sizeof(r.role) - 1);
-        }
-
-        if (rJson["coordinates"].is<JsonObject>()) {
-          JsonObject coord = rJson["coordinates"].as<JsonObject>();
-          r.target_lat = coord["lat"] | 0.0;
-          r.target_lng = coord["lng"] | 0.0;
-        } else {
-          r.target_lat = rJson["lat"] | 0.0;
-          r.target_lng = rJson["lng"] | 0.0;
-        }
-
+        strncpy(r.mac, mac, sizeof(r.mac) - 1);
+        strncpy(r.role, strlen(role) > 0 ? role : "mark", sizeof(r.role) - 1);
+        strncpy(r.rounding, strlen(rounding) > 0 ? rounding : "none",
+                sizeof(r.rounding) - 1);
+        r.buoy_light_role = lightRole;
+        r.target_lat = tLat;
+        r.target_lng = tLng;
         r.battery_voltage = 12.0f;
         r.is_online = false;
 
@@ -824,24 +959,39 @@ public:
         newList.push_back(r);
       }
 
-      if (!newList.empty()) {
-        _roversFromPortal = true;
-        if (isRoverListDifferent(newList)) {
-          rovers = newList;
-          if (!hasSelectedRover() && !rovers.empty()) {
-            selectedRoverIndex = 0;
-          }
-          listChanged = true;
-          Serial.printf(
-              "[MISSION] Lista de rovers atualizada pelo Portal (%u rovers)\n",
-              rovers.size());
+      if (isCircuitBuoysDifferent(newBuoys)) {
+        listChanged = true;
+      }
+      circuitBuoys.clear();
+      for (const auto &b : newBuoys) {
+        circuitBuoys.push_back(b);
+      }
 
-          // Transição automática para IDLE se estava à espera de lista
-          if (_opState == BASE_OP_WAITING_ROVERS) {
-            setOperationState(BASE_OP_IDLE, false);
-            Serial.println("[MISSION] Transição automatica: WAITING_ROVERS -> "
-                           "IDLE (Lista pronta)");
-          }
+      _roversFromPortal = true;
+      if (isRoverListDifferent(newList)) {
+        // Copiar mantendo a capacidade pré-alocada no arranque para evitar fragmentação da heap
+        rovers.clear();
+        for (const auto &item : newList) {
+          rovers.push_back(item);
+          // Enviar comando LoRa ao Rover para atualizar a cor/modo dos LEDs da bóia
+          queueCommand(item.id, 900 + item.id, ACTION_SET_BUOY_ROLE,
+                       item.buoy_light_role, item.buoy_light_role);
+        }
+        if (rovers.empty()) {
+          selectedRoverIndex = -1;
+        } else if (!hasSelectedRover()) {
+          selectedRoverIndex = 0;
+        }
+        listChanged = true;
+        Serial.printf(
+            "[MISSION] Lista atualizada pelo Portal: %u rover(s) atribuido(s) | %u boia(s) no percurso\n",
+            (unsigned)rovers.size(), (unsigned)circuitBuoys.size());
+
+        // Transição automática para IDLE se estava à espera de lista
+        if (_opState == BASE_OP_WAITING_ROVERS && !rovers.empty()) {
+          setOperationState(BASE_OP_IDLE, false);
+          Serial.println("[MISSION] Transição automatica: WAITING_ROVERS -> "
+                         "IDLE (Lista pronta)");
         }
       }
     }
@@ -950,20 +1100,83 @@ public:
               }
             }
 
+            bool hasExplicitBuoys = false;
+            circuitBuoys.clear();
+            if (doc["circuit_buoys"].is<JsonArray>()) {
+              hasExplicitBuoys = true;
+              JsonArray bArr = doc["circuit_buoys"].as<JsonArray>();
+              for (JsonObject bObj : bArr) {
+                if (circuitBuoys.size() >= MAX_CIRCUIT_BUOYS)
+                  break;
+                CircuitBuoy b;
+                memset(&b, 0, sizeof(b));
+                b.id = bObj["id"] | (circuitBuoys.size() + 1);
+                strncpy(b.name, bObj["name"] | "", sizeof(b.name) - 1);
+                strncpy(b.mac, bObj["mac_address"] | (bObj["mac"] | ""),
+                        sizeof(b.mac) - 1);
+                strncpy(b.role, bObj["role"] | "mark", sizeof(b.role) - 1);
+                strncpy(b.rounding,
+                        bObj["rounding"] | (bObj["rounding_side"] | "none"),
+                        sizeof(b.rounding) - 1);
+                b.buoy_light_role = resolve_buoy_light_role(b.role, b.rounding);
+                b.lat = bObj["lat"] | (bObj["target_lat"] | 0.0);
+                b.lng = bObj["lng"] | (bObj["target_lng"] | 0.0);
+                b.has_rover = bObj["has_rover"] | isAssignedRoverMac(b.mac);
+                circuitBuoys.push_back(b);
+              }
+            }
+
+            bool filteredLegacyBuoys = false;
             if (doc["rovers"].is<JsonArray>()) {
               JsonArray arr = doc["rovers"].as<JsonArray>();
               rovers.clear();
+              uint8_t idx = 0;
               for (JsonObject rObj : arr) {
+                idx++;
+                const char *macStr = rObj["mac_address"] | (rObj["mac"] | "");
+                bool validMac = isAssignedRoverMac(macStr);
+                const char *roleStr = rObj["role"] | "mark";
+                const char *rndStr =
+                    rObj["rounding"] | (rObj["rounding_side"] | "none");
+                uint8_t lightRole = resolve_buoy_light_role(roleStr, rndStr);
+                double rLat = rObj["target_lat"] | (rObj["lat"] | 0.0);
+                double rLng = rObj["target_lng"] | (rObj["lng"] | 0.0);
+
+                if (!hasExplicitBuoys &&
+                    circuitBuoys.size() < MAX_CIRCUIT_BUOYS) {
+                  CircuitBuoy b;
+                  memset(&b, 0, sizeof(b));
+                  b.id = rObj["id"] | idx;
+                  strncpy(b.name, rObj["name"] | "", sizeof(b.name) - 1);
+                  strncpy(b.mac, macStr, sizeof(b.mac) - 1);
+                  strncpy(b.role, roleStr, sizeof(b.role) - 1);
+                  strncpy(b.rounding, rndStr, sizeof(b.rounding) - 1);
+                  b.buoy_light_role = lightRole;
+                  b.lat = rLat;
+                  b.lng = rLng;
+                  b.has_rover = validMac;
+                  circuitBuoys.push_back(b);
+                }
+
+                if (!validMac) {
+                  filteredLegacyBuoys = true;
+                  continue;
+                }
+
+                if (rovers.size() >= MAX_FLEET_ROVERS)
+                  continue;
+
                 FleetRover r;
                 memset(&r, 0, sizeof(r));
                 r.id = rObj["id"] | (rovers.size() + 1);
                 snprintf(r.code, sizeof(r.code), "ROVER-%02d", r.id);
                 strncpy(r.name, rObj["name"] | "", sizeof(r.name) - 1);
-                strncpy(r.mac, rObj["mac_address"] | (rObj["mac"] | ""),
-                        sizeof(r.mac) - 1);
-                strncpy(r.role, rObj["role"] | "", sizeof(r.role) - 1);
-                r.target_lat = rObj["lat"] | 0.0;
-                r.target_lng = rObj["lng"] | 0.0;
+                strncpy(r.mac, macStr, sizeof(r.mac) - 1);
+                strncpy(r.role, roleStr, sizeof(r.role) - 1);
+                strncpy(r.rounding, rndStr, sizeof(r.rounding) - 1);
+                r.buoy_light_role = lightRole;
+                r.target_lat = rLat;
+                r.target_lng = rLng;
                 r.battery_voltage = 12.0f;
                 r.is_online = false;
                 rovers.push_back(r);
@@ -971,8 +1184,12 @@ public:
             }
             loaded = true;
             Serial.printf(
-                "[MISSION] Carregado de %s (SD): %u rovers | Estado: %s\n",
-                path, rovers.size(), get_base_op_state_str(_opState));
+                "[MISSION] Carregado de %s (SD): %u rovers | %u boias de circuito | Estado: %s\n",
+                path, rovers.size(), circuitBuoys.size(),
+                get_base_op_state_str(_opState));
+            if (filteredLegacyBuoys) {
+              saveMissionConfig();
+            }
           }
         }
       }
@@ -1016,11 +1233,18 @@ public:
                 sizeof(r.mac) - 1);
             strncpy(
                 r.role,
-                prefs.getString((String(prefix) + "role").c_str(), "").c_str(),
+                prefs.getString((String(prefix) + "role").c_str(), "mark").c_str(),
                 sizeof(r.role) - 1);
+            strncpy(
+                r.rounding,
+                prefs.getString((String(prefix) + "rnd").c_str(), "none").c_str(),
+                sizeof(r.rounding) - 1);
+            r.buoy_light_role = resolve_buoy_light_role(r.role, r.rounding);
             r.battery_voltage = 12.0f;
             r.is_online = false;
-            rovers.push_back(r);
+            if (isAssignedRoverMac(r.mac)) {
+              rovers.push_back(r);
+            }
           }
           loaded = true;
           _roversFromPortal = prefs.getBool("from_portal", false);
@@ -1072,6 +1296,7 @@ public:
         prefs.putString((String(prefix) + "name").c_str(), rovers[i].name);
         prefs.putString((String(prefix) + "mac").c_str(), rovers[i].mac);
         prefs.putString((String(prefix) + "role").c_str(), rovers[i].role);
+        prefs.putString((String(prefix) + "rnd").c_str(), rovers[i].rounding);
       }
       prefs.end();
     }
@@ -1105,8 +1330,26 @@ public:
         rObj["name"] = r.name;
         rObj["mac_address"] = r.mac;
         rObj["role"] = r.role;
+        rObj["rounding"] = r.rounding;
+        rObj["rounding_side"] = r.rounding;
+        rObj["target_lat"] = r.target_lat;
+        rObj["target_lng"] = r.target_lng;
         rObj["lat"] = r.target_lat;
         rObj["lng"] = r.target_lng;
+      }
+
+      JsonArray bArr = doc["circuit_buoys"].to<JsonArray>();
+      for (const auto &b : circuitBuoys) {
+        JsonObject bObj = bArr.add<JsonObject>();
+        bObj["id"] = b.id;
+        bObj["name"] = b.name;
+        bObj["mac_address"] = b.mac;
+        bObj["role"] = b.role;
+        bObj["rounding"] = b.rounding;
+        bObj["rounding_side"] = b.rounding;
+        bObj["lat"] = b.lat;
+        bObj["lng"] = b.lng;
+        bObj["has_rover"] = b.has_rover;
       }
 
       String jsonStr;
@@ -1140,6 +1383,7 @@ private:
   char _missionName[64];
 
   std::vector<FleetRover> rovers;
+  std::vector<CircuitBuoy> circuitBuoys;
   std::vector<uint8_t> _removedRoverIds;
   std::vector<QueuedCommand> commandQueue;
   int16_t selectedRoverIndex;

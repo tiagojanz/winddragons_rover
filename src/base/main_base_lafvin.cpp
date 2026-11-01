@@ -373,11 +373,12 @@ void handleUartFromC6() {
           webServer.setC6OtaStatus(rxBuf + 9);
         } else if (strncmp(rxBuf, "PONG:VER:", 9) == 0) {
           bool firstHandshake = (webServer.getC6Version().isEmpty() ||
-                                 webServer.getC6Version() == "Desconhecido");
-          printLog("[BASE LAFVIN] ★ Versao Coprocessador C6: %s\n", rxBuf + 9);
-          webServer.setC6Version(rxBuf + 9);
-          display.setC6Version(rxBuf + 9);
+                                 webServer.getC6Version() == "Desconhecido" ||
+                                 webServer.getC6Version() != (rxBuf + 9));
           if (firstHandshake) {
+            printLog("[BASE LAFVIN] ★ Versao Coprocessador C6: %s\n", rxBuf + 9);
+            webServer.setC6Version(rxBuf + 9);
+            display.setC6Version(rxBuf + 9);
             String ledCfgCmd = fleet.buildC6LedCfgCommand();
             interSerial.println(ledCfgCmd);
             interSerial.flush();
