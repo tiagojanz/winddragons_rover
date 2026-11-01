@@ -88,6 +88,8 @@ private:
         doc["station_name"] = fleetManager.getStationName();
         doc["operation_state"] = fleetManager.getOperationStateStr();
         doc["operation_state_id"] = static_cast<uint8_t>(fleetManager.getOperationState());
+        doc["circuit_id"] = fleetManager.getCircuitId();
+        doc["circuit_name"] = fleetManager.getMissionName();
         doc["race_id"] = fleetManager.getRaceId();
         doc["mission_name"] = fleetManager.getMissionName();
 
@@ -161,12 +163,29 @@ private:
             return;
         }
 
-        // 1. Processar Estado de Operação da Estação se fornecido
+        // 1. Processar Estado de Operação e Dados da Estação / Circuito se fornecidos
         const char *opState = nullptr;
+        int circuitId = respDoc["circuit_id"] | 0;
+        const char *circuitName = nullptr;
+        if (respDoc["circuit_name"].is<const char*>()) {
+            circuitName = respDoc["circuit_name"].as<const char*>();
+        }
 
         // Verificar respDoc["station"]
         if (respDoc["station"].is<JsonObject>()) {
             JsonObject st = respDoc["station"].as<JsonObject>();
+            if (st["station_name"].is<const char*>()) {
+                const char *stName = st["station_name"].as<const char*>();
+                if (stName && strlen(stName) > 0 && strcmp(fleetManager.getStationName(), stName) != 0) {
+                    fleetManager.setStationName(stName);
+                }
+            }
+            if (circuitId <= 0 && st["circuit_id"].is<int>()) {
+                circuitId = st["circuit_id"].as<int>();
+            }
+            if ((!circuitName || strlen(circuitName) == 0) && st["circuit_name"].is<const char*>()) {
+                circuitName = st["circuit_name"].as<const char*>();
+            }
             if (st["operation_state"].is<const char*>()) opState = st["operation_state"].as<const char*>();
             else if (st["state"].is<const char*>()) opState = st["state"].as<const char*>();
             else if (st["op_state"].is<const char*>()) opState = st["op_state"].as<const char*>();
@@ -175,12 +194,26 @@ private:
             }
         }
 
-        // Verificar respDoc["mission"]
-        if (!opState && respDoc["mission"].is<JsonObject>()) {
+        // Verificar respDoc["mission"] para circuit_id / circuit_name / opState
+        if (respDoc["mission"].is<JsonObject>()) {
             JsonObject ms = respDoc["mission"].as<JsonObject>();
-            if (ms["operation_state"].is<const char*>()) opState = ms["operation_state"].as<const char*>();
-            else if (ms["state"].is<const char*>()) opState = ms["state"].as<const char*>();
-            else if (ms["op_state"].is<const char*>()) opState = ms["op_state"].as<const char*>();
+            if (circuitId <= 0 && ms["circuit_id"].is<int>()) {
+                circuitId = ms["circuit_id"].as<int>();
+            }
+            if ((!circuitName || strlen(circuitName) == 0)) {
+                if (ms["circuit_name"].is<const char*>()) circuitName = ms["circuit_name"].as<const char*>();
+                else if (ms["mission_name"].is<const char*>()) circuitName = ms["mission_name"].as<const char*>();
+            }
+            if (!opState) {
+                if (ms["operation_state"].is<const char*>()) opState = ms["operation_state"].as<const char*>();
+                else if (ms["state"].is<const char*>()) opState = ms["state"].as<const char*>();
+                else if (ms["op_state"].is<const char*>()) opState = ms["op_state"].as<const char*>();
+            }
+        }
+
+        // Atualizar ID e Nome do Circuito no FleetManager mesmo quando "mission": null
+        if (circuitId > 0 || (circuitName && strlen(circuitName) > 0)) {
+            fleetManager.setCircuitInfo(circuitId, circuitName);
         }
 
         // Verificar raiz respDoc
@@ -216,6 +249,8 @@ private:
         if (respDoc["mission"].is<JsonObject>()) {
             JsonObject mObj = respDoc["mission"].as<JsonObject>();
             fleetManager.updateFromPortalMission(mObj, opState);
+        } else if (respDoc["rovers"].is<JsonArray>()) {
+            fleetManager.updateFromPortalMission(respDoc.as<JsonObject>(), opState);
         } else if (opState) {
             fleetManager.setOperationStateFromStr(opState);
         }

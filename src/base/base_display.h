@@ -973,13 +973,57 @@ private:
 
     canvas->setTextSize(1);
     canvas->setTextColor(UI_LIGHTGREY);
-    canvas->setCursor(14, 32);
-    canvas->print("CIRCUITO:");
+    canvas->setCursor(14, 30);
+    if (fleet.getCircuitId() > 0) {
+      canvas->printf("CIRCUITO #%d:", (int)fleet.getCircuitId());
+    } else {
+      canvas->print("CIRCUITO:");
+    }
 
-    canvas->setTextSize(2);
-    canvas->setTextColor(UI_YELLOW);
-    canvas->setCursor(14, 46);
-    canvas->printf("%.24s", fleet.getMissionName());
+    const char *cName = fleet.getMissionName();
+    size_t cLen = strlen(cName);
+    if (cLen <= 24) {
+      canvas->setTextSize(2);
+      canvas->setTextColor(UI_YELLOW);
+      canvas->setCursor(14, 46);
+      canvas->printf("%.24s", cName);
+    } else {
+      // Dividir de forma inteligente (ex: "Circuito Slalom 4 Boias - Alcochete")
+      int splitIdx = -1;
+      const char *dash = strstr(cName, " - ");
+      if (dash && (dash - cName) > 0 && (dash - cName) <= 24) {
+        splitIdx = (int)(dash - cName);
+      } else {
+        for (int i = 24; i >= 8; --i) {
+          if (cName[i] == ' ' || cName[i] == '-') {
+            splitIdx = i;
+            break;
+          }
+        }
+      }
+      if (splitIdx <= 0)
+        splitIdx = 24;
+
+      char line1[26];
+      memcpy(line1, cName, splitIdx);
+      line1[splitIdx] = '\0';
+
+      const char *line2 = cName + splitIdx;
+      while (*line2 == ' ' || *line2 == '-')
+        line2++;
+
+      canvas->setTextSize(2);
+      canvas->setTextColor(UI_YELLOW);
+      canvas->setCursor(14, 41);
+      canvas->print(line1);
+
+      if (*line2 != '\0') {
+        canvas->setTextSize(1);
+        canvas->setTextColor(UI_CYAN);
+        canvas->setCursor(14, 60);
+        canvas->printf("%.48s", line2);
+      }
+    }
 
     // --- Lista de itens de 1 linha (Estado, Rovers) ---
     // Item 0: Estado
@@ -2361,10 +2405,15 @@ private:
     // Linha 2: Missão / Circuito sincronizado
     canvas->setTextColor(UI_LIGHTGREY);
     canvas->setCursor(12, cardY + 40);
-    canvas->print("MISSAO:");
+    canvas->print("CIRCUITO:");
     canvas->setTextColor(UI_CYAN);
-    canvas->setCursor(65, cardY + 40);
-    canvas->printf("%.38s", fleet.getMissionName());
+    canvas->setCursor(70, cardY + 40);
+    if (fleet.getCircuitId() > 0) {
+      canvas->printf("#%d %.35s", (int)fleet.getCircuitId(),
+                     fleet.getMissionName());
+    } else {
+      canvas->printf("%.39s", fleet.getMissionName());
+    }
 
     // Linha 3: Estatísticas de Sincronização (3 Caixas)
     int boxY = cardY + 56;

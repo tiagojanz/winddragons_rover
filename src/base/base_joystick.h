@@ -185,6 +185,14 @@ public:
     lastNavXMs = millis();
   }
 
+  void disarmNav() {
+    navXArmed = false;
+    navYArmed = false;
+    leftHoldFired = true;
+    lastNavXMs = millis();
+    lastNavYMs = millis();
+  }
+
   void update() {
     // 1. Read Joystick ADC (PIN_JOYSTICK_Y = IO0 = Eixo Vertical/Propulsão,
     // PIN_JOYSTICK_X = IO3 = Eixo Horizontal/Leme)

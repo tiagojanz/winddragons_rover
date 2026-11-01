@@ -569,10 +569,10 @@
       <i class="fa-solid fa-sailboat"></i> R1 <span class="dot online"></span> <b>--%</b>
     </span>
   </div>
-  <div style="display:flex;align-items:center;gap:6px;">
-    <button type="button" class="btn btn-danger" id="btnRemoveSelectedTop" onclick="removeSelectedRover()" title="Remover o Rover selecionado da lista" style="padding:6px 12px;border-radius:999px;font-size:0.75rem;min-height:36px;white-space:nowrap;">
-      <i class="fa-solid fa-trash-can"></i> Remover Selecionado
-    </button>
+  <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+    <span class="badge" id="topCircuitBadge" style="background:rgba(6,182,212,0.12);border:1px solid rgba(6,182,212,0.35);color:var(--primary);font-size:0.75rem;text-transform:none;">
+      <i class="fa-solid fa-route"></i> <span id="topCircuitText">Percurso de Regata</span>
+    </span>
     <button type="button" class="state-pill-btn" id="stateBadgePill" onclick="toggleStateModal()" title="Toque para mudar o Estado da Base">
       <i class="fa-solid fa-flag"></i> <span id="topStateText">STORAGE</span> <i class="fa-solid fa-chevron-down" style="font-size:0.7rem;margin-left:2px;"></i>
     </button>
@@ -692,9 +692,6 @@
         <select id="targetRoverSelect" onchange="changeRover(this.value)" class="hud-select">
           <option value="1">Rover-1</option>
         </select>
-        <button type="button" onclick="removeSelectedRover()" class="btn btn-danger" style="padding:4px 10px;font-size:0.75rem;" title="Remover Rover selecionado">
-          <i class="fa-solid fa-trash-can"></i> Remover
-        </button>
       </div>
     </div>
 
@@ -991,16 +988,17 @@
   <!-- Dados da Regata -->
   <div class="card">
     <div class="card-title">
-      <span><i class="fa-solid fa-sailboat"></i> Dados do Percurso / Regata</span>
+      <span><i class="fa-solid fa-sailboat"></i> Dados do Circuito / Regata</span>
+      <span id="circuitIdBadge" class="badge" style="background:rgba(6,182,212,0.15);color:var(--primary);font-size:0.75rem;">Circuito Local</span>
     </div>
     <div class="grid-2">
       <div class="form-group">
-        <label class="stat-label">ID da Regata / Prova</label>
-        <input type="text" id="raceIdInput" placeholder="ex: REGATA-TEJO-2026-R1">
+        <label class="stat-label">ID da Regata / Circuito</label>
+        <input type="text" id="raceIdInput" placeholder="ex: CIRCUITO-1">
       </div>
       <div class="form-group">
-        <label class="stat-label">Nome da Missão / Prova</label>
-        <input type="text" id="missionNameInput" placeholder="ex: Troféu de Outono - Prova 1">
+        <label class="stat-label">Nome do Circuito / Missão</label>
+        <input type="text" id="missionNameInput" placeholder="ex: Circuito Slalom 4 Boias - Alcochete">
       </div>
     </div>
   </div>
@@ -1644,6 +1642,13 @@ function loadAllData(forceMapCenter = false) {
       if (sel) selectedRoverId = sel.id;
       else selectedRoverId = 0;
 
+      const cName = data.circuit_name || data.mission_name;
+      const cId = data.circuit_id || 0;
+      const topCircuitEl = document.getElementById('topCircuitText');
+      if (topCircuitEl && cName) {
+        topCircuitEl.innerText = (cId > 0 ? ('#' + cId + ' • ') : '') + cName;
+      }
+
       // Dropdowns e Chips
       let chipHtml = '';
       let optHtml = '';
@@ -1864,8 +1869,17 @@ function loadAllData(forceMapCenter = false) {
       if (mdata.race_id && document.activeElement !== document.getElementById('raceIdInput')) {
         document.getElementById('raceIdInput').value = mdata.race_id;
       }
-      if (mdata.mission_name && document.activeElement !== document.getElementById('missionNameInput')) {
-        document.getElementById('missionNameInput').value = mdata.mission_name;
+      const cName = mdata.circuit_name || mdata.mission_name;
+      if (cName && document.activeElement !== document.getElementById('missionNameInput')) {
+        document.getElementById('missionNameInput').value = cName;
+      }
+      const cIdBadge = document.getElementById('circuitIdBadge');
+      if (cIdBadge) {
+        if (mdata.circuit_id && mdata.circuit_id > 0) {
+          cIdBadge.innerText = 'Circuito #' + mdata.circuit_id + ' (Portal)';
+        } else {
+          cIdBadge.innerText = 'Circuito Local';
+        }
       }
       if (mdata.rovers && Array.isArray(mdata.rovers)) {
         renderRoversTable(mdata.rovers);

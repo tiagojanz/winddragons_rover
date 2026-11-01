@@ -1478,6 +1478,15 @@ private:
             "Base</div><div class='stat-value' style='color:var(--yellow);'>" +
             String(_fleet.getStationName()) + "</div></div>";
     html += "</div>";
+    String circuitLabel =
+        (_fleet.getCircuitId() > 0)
+            ? ("#" + String(_fleet.getCircuitId()) + " — " +
+               String(_fleet.getMissionName()))
+            : String(_fleet.getMissionName());
+    html += "<div style='margin-top:12px;' class='stat-box'><div "
+            "class='stat-label'>Circuito Atribuído pelo Portal</div><div "
+            "class='stat-value' style='font-size:1.15rem;color:var(--green);'>" +
+            circuitLabel + "</div></div>";
     html +=
         "<div style='margin-top:12px;' class='stat-box'><div "
         "class='stat-label'>Endpoint Cloud API</div><div class='stat-value' "
@@ -1866,6 +1875,8 @@ private:
     doc["operation_state_id"] =
         static_cast<uint8_t>(_fleet.getOperationState());
     doc["operation_state_desc"] = _fleet.getOperationStateDesc();
+    doc["circuit_id"] = _fleet.getCircuitId();
+    doc["circuit_name"] = _fleet.getMissionName();
     doc["race_id"] = _fleet.getRaceId();
     doc["mission_name"] = _fleet.getMissionName();
 
@@ -1922,6 +1933,8 @@ private:
       cObj["fail_count"] = _network->getFailCount();
       cObj["last_sync_ms"] = _network->getLastSyncTime();
       cObj["endpoint"] = WINDDRAGONS_API_URL;
+      cObj["circuit_id"] = _fleet.getCircuitId();
+      cObj["circuit_name"] = _fleet.getMissionName();
     }
 
     FleetRover *sel = _fleet.getSelectedRover();
@@ -2000,6 +2013,8 @@ private:
     doc["operation_state_id"] =
         static_cast<uint8_t>(_fleet.getOperationState());
     doc["operation_state_desc"] = _fleet.getOperationStateDesc();
+    doc["circuit_id"] = _fleet.getCircuitId();
+    doc["circuit_name"] = _fleet.getMissionName();
     doc["race_id"] = _fleet.getRaceId();
     doc["mission_name"] = _fleet.getMissionName();
     doc["selected_rover_id"] = _fleet.getSelectedRoverId();
@@ -2081,8 +2096,13 @@ private:
       return;
     }
 
+    int cId = doc["circuit_id"] | 0;
     const char *raceId = doc["race_id"] | "";
-    const char *missionName = doc["mission_name"] | "";
+    const char *missionName =
+        doc["circuit_name"] | (doc["mission_name"] | "");
+    if (cId > 0) {
+      _fleet.setCircuitInfo(cId, missionName, false);
+    }
     if (strlen(raceId) > 0 || strlen(missionName) > 0) {
       _fleet.setMissionInfo(raceId, missionName, false);
     }

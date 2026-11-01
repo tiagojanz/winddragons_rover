@@ -6841,7 +6841,10 @@ BASE_MISSION_CONTENT = """
       <i class="fa-solid fa-sailboat"></i> R1 <span class="dot online"></span> <b>--%</b>
     </span>
   </div>
-  <div>
+  <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+    <span class="badge" id="topCircuitBadge" style="background:rgba(6,182,212,0.12);border:1px solid rgba(6,182,212,0.35);color:var(--primary);font-size:0.75rem;text-transform:none;">
+      <i class="fa-solid fa-route"></i> <span id="topCircuitText">Percurso de Regata</span>
+    </span>
     <button type="button" class="state-pill-btn" id="stateBadgePill" onclick="toggleStateModal()" title="Toque para mudar o Estado da Base">
       <i class="fa-solid fa-flag"></i> <span id="topStateText">STORAGE</span> <i class="fa-solid fa-chevron-down" style="font-size:0.7rem;margin-left:2px;"></i>
     </button>
@@ -7257,16 +7260,17 @@ BASE_MISSION_CONTENT = """
   <!-- Dados da Regata -->
   <div class="card">
     <div class="card-title">
-      <span><i class="fa-solid fa-sailboat"></i> Dados do Percurso / Regata</span>
+      <span><i class="fa-solid fa-sailboat"></i> Dados do Circuito / Regata</span>
+      <span id="circuitIdBadge" class="badge" style="background:rgba(6,182,212,0.15);color:var(--primary);font-size:0.75rem;">Circuito Local</span>
     </div>
     <div class="grid-2">
       <div class="form-group">
-        <label class="stat-label">ID da Regata / Prova</label>
-        <input type="text" id="raceIdInput" placeholder="ex: REGATA-TEJO-2026-R1">
+        <label class="stat-label">ID da Regata / Circuito</label>
+        <input type="text" id="raceIdInput" placeholder="ex: CIRCUITO-1">
       </div>
       <div class="form-group">
-        <label class="stat-label">Nome da Missão / Prova</label>
-        <input type="text" id="missionNameInput" placeholder="ex: Troféu de Outono - Prova 1">
+        <label class="stat-label">Nome do Circuito / Missão</label>
+        <input type="text" id="missionNameInput" placeholder="ex: Circuito Slalom 4 Boias - Alcochete">
       </div>
     </div>
   </div>
@@ -7300,7 +7304,8 @@ BASE_MISSION_CONTENT = """
     <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;">
       <button type="button" onclick="addRow()" class="btn btn-secondary"><i class="fa-solid fa-plus"></i> Adicionar Bóia</button>
       <button type="button" onclick="saveRovers()" class="btn btn-primary" style="padding:10px 20px;"><i class="fa-solid fa-floppy-disk"></i> Guardar Lista no MicroSD</button>
-      <button type="button" onclick="clearRovers()" class="btn btn-danger" style="background:#78350f;"><i class="fa-solid fa-rotate-left"></i> Repor Pré-definições</button>
+      <button type="button" onclick="removeSelectedRover()" class="btn btn-danger"><i class="fa-solid fa-trash-can"></i> Remover Rover Selecionado</button>
+      <button type="button" onclick="clearRovers()" class="btn btn-danger" style="background:#78350f;"><i class="fa-solid fa-rotate-left"></i> Limpar Lista</button>
     </div>
   </div>
 </div>
@@ -7735,6 +7740,11 @@ function renderRoversTable(rovers) {
   const tbody = document.getElementById('roversTbody');
   if (!tbody || tbody.contains(document.activeElement)) return;
 
+  if (!rovers || rovers.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:16px;">Nenhum rover na frota.</td></tr>';
+    return;
+  }
+
   let html = '';
   rovers.forEach(r => {
     const isOnline = r.is_online;
@@ -7845,11 +7855,51 @@ function saveRovers() {
   .catch(err => alert('Erro ao gravar: ' + err));
 }
 
+function removeSelectedRover() {
+  if (!currentRoversData || currentRoversData.length === 0) {
+    showToast('Não existem rovers na lista para remover.', true);
+    return;
+  }
+  const sel = currentRoversData.find(r => r.id === selectedRoverId) || currentRoversData[0];
+  const label = sel ? (sel.code || ('ROVER-' + sel.id)) : ('Rover #' + selectedRoverId);
+  if (!confirm('Tem a certeza que deseja remover o ' + label + ' da lista?')) return;
+
+  fetch('/api/mission/rover/remove', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rover_id: sel ? sel.id : selectedRoverId })
+  })
+  .then(r => r.json())
+  .then(res => {
+    if (res.status === 'ok') {
+      const remId = res.removed_id;
+      if (map) {
+        if (roverMarkers[remId]) { map.removeLayer(roverMarkers[remId]); delete roverMarkers[remId]; }
+        if (targetMarkers[remId]) { map.removeLayer(targetMarkers[remId]); delete targetMarkers[remId]; }
+        if (targetLines[remId]) { map.removeLayer(targetLines[remId]); delete targetLines[remId]; }
+      }
+      selectedRoverId = res.selected_rover_id || 0;
+      showToast('🗑️ ' + label + ' removido com sucesso!');
+      loadAllData();
+    } else {
+      showToast(res.message || 'Erro ao remover rover', true);
+    }
+  })
+  .catch(() => showToast('Erro de comunicação ao remover rover', true));
+}
+
 function clearRovers() {
-  if (confirm('Tem a certeza que deseja repor a lista de bóias para os valores padrão?')) {
+  if (confirm('Tem a certeza que deseja limpar toda a lista de bóias?')) {
     fetch('/api/mission/clear', { method: 'POST' })
       .then(r => r.json())
-      .then(() => loadAllData());
+      .then(() => {
+        if (map) {
+          Object.keys(roverMarkers).forEach(k => { map.removeLayer(roverMarkers[k]); delete roverMarkers[k]; });
+          Object.keys(targetMarkers).forEach(k => { map.removeLayer(targetMarkers[k]); delete targetMarkers[k]; });
+          Object.keys(targetLines).forEach(k => { map.removeLayer(targetLines[k]); delete targetLines[k]; });
+        }
+        loadAllData();
+      });
   }
 }
 
@@ -7862,6 +7912,14 @@ function loadAllData(forceMapCenter = false) {
       currentRoversData = data.rovers || [];
       const sel = data.selected || (currentRoversData.length ? currentRoversData.find(r => r.id === selectedRoverId) || currentRoversData[0] : null);
       if (sel) selectedRoverId = sel.id;
+      else selectedRoverId = 0;
+
+      const cName = data.circuit_name || data.mission_name;
+      const cId = data.circuit_id || 0;
+      const topCircuitEl = document.getElementById('topCircuitText');
+      if (topCircuitEl && cName) {
+        topCircuitEl.innerText = (cId > 0 ? ('#' + cId + ' • ') : '') + cName;
+      }
 
       // Dropdowns e Chips
       let chipHtml = '';
@@ -7879,10 +7937,13 @@ function loadAllData(forceMapCenter = false) {
         optHtml += `<option value=\"${r.id}\" ${isSel ? 'selected' : ''}>${code} (${p}%)</option>`;
       });
 
-      if (chipHtml) document.getElementById('fleetChipsBar').innerHTML = chipHtml;
+      const chipsEl = document.getElementById('fleetChipsBar');
+      if (chipsEl) {
+        chipsEl.innerHTML = chipHtml || '<span style="color:var(--muted);font-size:0.8rem;padding:4px 8px;">Sem rovers na frota</span>';
+      }
       ['mapRoverSelect', 'targetRoverSelect', 'batRoverSelect'].forEach(selId => {
         const el = document.getElementById(selId);
-        if (el && optHtml) el.innerHTML = optHtml;
+        if (el) el.innerHTML = optHtml || '<option value="0">Sem Rovers</option>';
       });
 
       // Atualiza HUD do Mapa
@@ -8080,8 +8141,17 @@ function loadAllData(forceMapCenter = false) {
       if (mdata.race_id && document.activeElement !== document.getElementById('raceIdInput')) {
         document.getElementById('raceIdInput').value = mdata.race_id;
       }
-      if (mdata.mission_name && document.activeElement !== document.getElementById('missionNameInput')) {
-        document.getElementById('missionNameInput').value = mdata.mission_name;
+      const cName = mdata.circuit_name || mdata.mission_name;
+      if (cName && document.activeElement !== document.getElementById('missionNameInput')) {
+        document.getElementById('missionNameInput').value = cName;
+      }
+      const cIdBadge = document.getElementById('circuitIdBadge');
+      if (cIdBadge) {
+        if (mdata.circuit_id && mdata.circuit_id > 0) {
+          cIdBadge.innerText = 'Circuito #' + mdata.circuit_id + ' (Portal)';
+        } else {
+          cIdBadge.innerText = 'Circuito Local';
+        }
       }
       if (mdata.rovers && Array.isArray(mdata.rovers)) {
         renderRoversTable(mdata.rovers);
@@ -8162,6 +8232,16 @@ BASE_PORTAL_CONTENT = """
   </div>
 
   <div style="margin-top:16px;" class="stat-box">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+      <div class="stat-label"><i class="fa-solid fa-route" style="color:var(--primary);margin-right:4px;"></i> Circuito Atribuído pelo Portal</div>
+      <span id="portalCircuitIdBadge" class="badge" style="background:rgba(6,182,212,0.15);color:var(--primary);font-size:0.75rem;">ID: --</span>
+    </div>
+    <div class="stat-value" id="portalCircuitName" style="font-size:1.25rem;color:var(--green);margin-top:6px;">
+      Percurso de Regata
+    </div>
+  </div>
+
+  <div style="margin-top:16px;" class="stat-box">
     <div class="stat-label">Endpoint de Telemetria & Comandos</div>
     <div class="stat-value" style="font-size:0.95rem;font-family:monospace;color:var(--text);word-break:break-all;">
       https://winddragons.app/api/circuits/station/telemetry
@@ -8222,12 +8302,22 @@ function refreshData() {
   fetch('/api/status')
     .then(r => r.json())
     .then(data => {
-      // 1. MAC & Nome
+      // 1. MAC, Nome da Estação & Circuito
       if (data.station_id || data.mac_address) {
         document.getElementById('portalMacVal').innerText = data.mac_address || data.station_id;
       }
       if (data.station_name) {
         document.getElementById('portalStationName').innerText = data.station_name;
+      }
+      const cName = data.circuit_name || data.mission_name || (data.cloud && data.cloud.circuit_name);
+      const cId = data.circuit_id || (data.cloud && data.cloud.circuit_id) || 0;
+      const cNameEl = document.getElementById('portalCircuitName');
+      if (cNameEl && cName) {
+        cNameEl.innerText = cName;
+      }
+      const cIdEl = document.getElementById('portalCircuitIdBadge');
+      if (cIdEl) {
+        cIdEl.innerText = cId > 0 ? ('CIRCUITO #' + cId) : 'SEM ID';
       }
 
       // 2. Cloud status

@@ -94,6 +94,16 @@
   </div>
 
   <div style="margin-top:16px;" class="stat-box">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+      <div class="stat-label"><i class="fa-solid fa-route" style="color:var(--primary);margin-right:4px;"></i> Circuito Atribuído pelo Portal</div>
+      <span id="portalCircuitIdBadge" class="badge" style="background:rgba(6,182,212,0.15);color:var(--primary);font-size:0.75rem;">ID: --</span>
+    </div>
+    <div class="stat-value" id="portalCircuitName" style="font-size:1.25rem;color:var(--green);margin-top:6px;">
+      Percurso de Regata
+    </div>
+  </div>
+
+  <div style="margin-top:16px;" class="stat-box">
     <div class="stat-label">Endpoint de Telemetria & Comandos</div>
     <div class="stat-value" style="font-size:0.95rem;font-family:monospace;color:var(--text);word-break:break-all;">
       https://winddragons.app/api/circuits/station/telemetry
@@ -154,12 +164,22 @@ function refreshData() {
   fetch('/api/status')
     .then(r => r.json())
     .then(data => {
-      // 1. MAC & Nome
+      // 1. MAC, Nome da Estação & Circuito
       if (data.station_id || data.mac_address) {
         document.getElementById('portalMacVal').innerText = data.mac_address || data.station_id;
       }
       if (data.station_name) {
         document.getElementById('portalStationName').innerText = data.station_name;
+      }
+      const cName = data.circuit_name || data.mission_name || (data.cloud && data.cloud.circuit_name);
+      const cId = data.circuit_id || (data.cloud && data.cloud.circuit_id) || 0;
+      const cNameEl = document.getElementById('portalCircuitName');
+      if (cNameEl && cName) {
+        cNameEl.innerText = cName;
+      }
+      const cIdEl = document.getElementById('portalCircuitIdBadge');
+      if (cIdEl) {
+        cIdEl.innerText = cId > 0 ? ('CIRCUITO #' + cId) : 'SEM ID';
       }
 
       // 2. Cloud status

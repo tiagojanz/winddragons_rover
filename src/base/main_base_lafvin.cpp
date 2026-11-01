@@ -450,27 +450,28 @@ void handleInputsAndMenu(uint32_t now, bool &forceDisplay) {
       // Y ou X alterna entre SAIR (0) e CONTINUAR (1); Clique BOOT confirma
       int8_t navY = joystick.getNavY();
       int8_t navX = joystick.getNavX();
-      bool bootClick = joystick.wasShortClicked();
-      joystick.wasLongClicked();
+      bool bootClick = joystick.wasShortClicked() || joystick.wasLongClicked();
       joystick.wasBootHeld3s();
 
-      if (navY != 0 || navX != 0) {
-        display.setControlExitCursorIdx(
-            (display.getControlExitCursorIdx() + 1) % 2);
-        forceDisplay = true;
-      } else if (bootClick) {
+      if (bootClick) {
         if (display.getControlExitCursorIdx() == 0) {
           // SAIR selecionado -> Volta para o menu pai
           display.setControlExitPromptActive(false);
+          joystick.disarmNav();
           display.setPage(parentPage);
           forceDisplay = true;
           printLog("[UI] Confirmou SAIR -> Menu Pai\n");
         } else {
           // CONTINUAR selecionado -> Fecha o popup e permanece na página
           display.setControlExitPromptActive(false);
+          joystick.disarmNav();
           forceDisplay = true;
           printLog("[UI] Confirmou CONTINUAR\n");
         }
+      } else if (navY != 0 || navX != 0) {
+        display.setControlExitCursorIdx(
+            (display.getControlExitCursorIdx() + 1) % 2);
+        forceDisplay = true;
       }
     }
     return;
@@ -557,8 +558,10 @@ void handleInputsAndMenu(uint32_t now, bool &forceDisplay) {
   // Eixo X Direita (+1): entra na página ou confirma seleção
   int8_t navY = joystick.getNavY();
   int8_t navX = joystick.getNavX();
-  bool clickEnter = joystick.wasShortClicked();
-  bool clickBack = btnModeEdge || joystick.wasLongClicked();
+  bool bootShort = joystick.wasShortClicked();
+  bool bootLong = joystick.wasLongClicked();
+  bool clickEnter = bootShort;
+  bool clickBack = btnModeEdge || bootLong;
 
   switch (page) {
   case BASE_PAGE_HOME:
@@ -678,6 +681,9 @@ void handleInputsAndMenu(uint32_t now, bool &forceDisplay) {
         display.setPage(BASE_PAGE_ROVER_CONTROL);
         printLog("[UI] Rover Menu -> Comando\n");
       } else {
+        joystick.disarmNav();
+        joystick.wasShortClicked();
+        joystick.wasLongClicked();
         display.setRoverRemoveIdx(0);
         display.setPage(BASE_PAGE_ROVER_REMOVE);
         printLog("[UI] Rover Menu -> Confirmar Remocao\n");
@@ -687,27 +693,43 @@ void handleInputsAndMenu(uint32_t now, bool &forceDisplay) {
     break;
 
   case BASE_PAGE_ROVER_REMOVE:
-    if (navY != 0 || navX != 0) {
-      display.setRoverRemoveIdx((display.getRoverRemoveIdx() + 1) % 2);
-      forceDisplay = true;
-    } else if (clickBack) {
-      display.setPage(BASE_PAGE_ROVER_MENU);
-      forceDisplay = true;
-      printLog("[UI] Remover Rover cancelado -> Rover Menu\n");
-    } else if (clickEnter) {
+    if (bootShort || bootLong) {
       if (display.getRoverRemoveIdx() == 0) {
         uint8_t rId = fleet.getSelectedRoverId();
-        if (fleet.removeSelectedRover(true)) {
-          display.setRoverListIdx(0, fleet.getRovers().size());
-          display.showFeedback("ROVER REMOVIDO!", 2000);
-          printLog("[UI] Rover #%u removido da frota!\n", rId);
+        if (rId == 0 && !fleet.getRovers().empty()) {
+          uint8_t idx = display.getRoverListIdx();
+          rId = (idx < fleet.getRovers().size()) ? fleet.getRovers()[idx].id
+                                                 : fleet.getRovers()[0].id;
         }
+        if (rId != 0 && fleet.removeRoverById(rId, true)) {
+          size_t remTotal = fleet.getRovers().size();
+          uint8_t nextIdx = display.getRoverListIdx();
+          if (nextIdx >= remTotal && remTotal > 0) {
+            nextIdx = (uint8_t)(remTotal - 1);
+          }
+          display.setRoverListIdx(nextIdx, remTotal);
+          if (remTotal > 0) {
+            fleet.selectRoverById(fleet.getRovers()[nextIdx].id);
+          }
+          display.showFeedback("ROVER REMOVIDO!", 2000);
+          printLog("[UI] Rover #%u removido da frota -> Lista de Rovers\n", rId);
+        }
+        joystick.disarmNav();
         display.setPage(BASE_PAGE_ROVER_LIST);
       } else {
+        joystick.disarmNav();
         display.setPage(BASE_PAGE_ROVER_MENU);
         printLog("[UI] Remover Rover: Cancelar -> Rover Menu\n");
       }
       forceDisplay = true;
+    } else if (navY != 0 || navX != 0) {
+      display.setRoverRemoveIdx((display.getRoverRemoveIdx() + 1) % 2);
+      forceDisplay = true;
+    } else if (btnModeEdge) {
+      joystick.disarmNav();
+      display.setPage(BASE_PAGE_ROVER_MENU);
+      forceDisplay = true;
+      printLog("[UI] Remover Rover cancelado -> Rover Menu\n");
     }
     break;
 

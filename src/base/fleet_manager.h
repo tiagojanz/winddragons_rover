@@ -180,8 +180,9 @@ struct QueuedCommand {
 class FleetManager {
 public:
   FleetManager()
-      : _sd(nullptr), _opState(BASE_OP_STORAGE), selectedRoverIndex(-1),
-        _roversFromPortal(false), _c6LedBrightness(80) {
+      : _sd(nullptr), _opState(BASE_OP_STORAGE), _circuitId(0),
+        selectedRoverIndex(-1), _roversFromPortal(false),
+        _c6LedBrightness(80) {
     memset(_stationName, 0, sizeof(_stationName));
     memset(_raceId, 0, sizeof(_raceId));
     memset(_missionName, 0, sizeof(_missionName));
@@ -334,14 +335,26 @@ public:
 
   void clearRovers() {
     rovers.clear();
+    _removedRoverIds.clear();
     selectedRoverIndex = -1;
     _roversFromPortal = false;
     saveMissionConfig();
   }
 
+  bool isRoverRemovedLocally(uint8_t id) const {
+    for (uint8_t remId : _removedRoverIds) {
+      if (remId == id)
+        return true;
+    }
+    return false;
+  }
+
   bool removeRoverById(uint8_t id, bool save = true) {
     for (size_t i = 0; i < rovers.size(); ++i) {
       if (rovers[i].id == id) {
+        if (!isRoverRemovedLocally(id)) {
+          _removedRoverIds.push_back(id);
+        }
         rovers.erase(rovers.begin() + i);
         if (rovers.empty()) {
           selectedRoverIndex = -1;
@@ -425,6 +438,34 @@ public:
 
   const char *getRaceId() const { return _raceId; }
   const char *getMissionName() const { return _missionName; }
+  int32_t getCircuitId() const { return _circuitId; }
+  const char *getCircuitName() const { return _missionName; }
+
+  bool setCircuitInfo(int32_t circuitId, const char *circuitName,
+                      bool save = true) {
+    bool changed = false;
+    if (circuitId > 0 && _circuitId != circuitId) {
+      _circuitId = circuitId;
+      if (strcmp(_raceId, "REGATA-DEFAULT") == 0 || strlen(_raceId) == 0) {
+        snprintf(_raceId, sizeof(_raceId), "CIRCUITO-%d", (int)circuitId);
+      }
+      changed = true;
+    }
+    if (circuitName && strlen(circuitName) > 0 &&
+        strcmp(_missionName, circuitName) != 0) {
+      strncpy(_missionName, circuitName, sizeof(_missionName) - 1);
+      _missionName[sizeof(_missionName) - 1] = '\0';
+      changed = true;
+    }
+    if (changed) {
+      Serial.printf("[MISSION] Circuito sincronizado do Portal: #%d - %s\n",
+                    (int)_circuitId, _missionName);
+      if (save) {
+        saveMissionConfig();
+      }
+    }
+    return changed;
+  }
 
   void setMissionInfo(const char *raceId, const char *missionName,
                       bool save = true) {
@@ -664,21 +705,36 @@ public:
   void updateFromPortalMission(JsonObject mObj,
                                const char *opStateStr = nullptr) {
     bool metaChanged = false;
+    if (mObj["circuit_id"].is<int>()) {
+      int cId = mObj["circuit_id"].as<int>();
+      if (cId > 0 && _circuitId != cId) {
+        _circuitId = cId;
+        if (strcmp(_raceId, "REGATA-DEFAULT") == 0 || strlen(_raceId) == 0) {
+          snprintf(_raceId, sizeof(_raceId), "CIRCUITO-%d", cId);
+        }
+        metaChanged = true;
+      }
+    }
     if (mObj["race_id"].is<const char *>()) {
       const char *rId = mObj["race_id"].as<const char *>();
-      if (strcmp(_raceId, rId) != 0) {
+      if (strlen(rId) > 0 && strcmp(_raceId, rId) != 0) {
         strncpy(_raceId, rId, sizeof(_raceId) - 1);
         _raceId[sizeof(_raceId) - 1] = '\0';
         metaChanged = true;
       }
     }
-    if (mObj["mission_name"].is<const char *>()) {
-      const char *mName = mObj["mission_name"].as<const char *>();
-      if (strcmp(_missionName, mName) != 0) {
-        strncpy(_missionName, mName, sizeof(_missionName) - 1);
-        _missionName[sizeof(_missionName) - 1] = '\0';
-        metaChanged = true;
-      }
+    const char *mName = nullptr;
+    if (mObj["circuit_name"].is<const char *>()) {
+      mName = mObj["circuit_name"].as<const char *>();
+    } else if (mObj["mission_name"].is<const char *>()) {
+      mName = mObj["mission_name"].as<const char *>();
+    } else if (mObj["name"].is<const char *>()) {
+      mName = mObj["name"].as<const char *>();
+    }
+    if (mName && strlen(mName) > 0 && strcmp(_missionName, mName) != 0) {
+      strncpy(_missionName, mName, sizeof(_missionName) - 1);
+      _missionName[sizeof(_missionName) - 1] = '\0';
+      metaChanged = true;
     }
 
     // Se opStateStr não veio na raiz, tenta extrair de mObj
@@ -696,6 +752,10 @@ public:
     bool updateList = mObj["update_rover_list"] | false;
     JsonArray roversArray = mObj["rovers"].as<JsonArray>();
 
+    if (metaChanged || updateList || _opState == BASE_OP_WAITING_ROVERS) {
+      _removedRoverIds.clear();
+    }
+
     bool listChanged = false;
     if ((updateList || !roversArray.isNull()) && roversArray.size() > 0) {
       std::vector<FleetRover> newList;
@@ -704,6 +764,9 @@ public:
         FleetRover r;
         memset(&r, 0, sizeof(r));
         r.id = rJson["id"] | (newList.size() + 1);
+        if (isRoverRemovedLocally(r.id)) {
+          continue;
+        }
         snprintf(r.code, sizeof(r.code), "ROVER-%02d", r.id);
 
         const char *name = rJson["name"] | "";
@@ -840,13 +903,26 @@ public:
                 _stationName[sizeof(_stationName) - 1] = '\0';
               }
             }
+            if (doc["circuit_id"].is<int>()) {
+              _circuitId = doc["circuit_id"].as<int>();
+            }
             if (doc["race_id"].is<const char *>()) {
               strncpy(_raceId, doc["race_id"].as<const char *>(),
                       sizeof(_raceId) - 1);
+              _raceId[sizeof(_raceId) - 1] = '\0';
             }
-            if (doc["mission_name"].is<const char *>()) {
-              strncpy(_missionName, doc["mission_name"].as<const char *>(),
-                      sizeof(_missionName) - 1);
+            if (doc["circuit_name"].is<const char *>()) {
+              const char *cn = doc["circuit_name"].as<const char *>();
+              if (strlen(cn) > 0) {
+                strncpy(_missionName, cn, sizeof(_missionName) - 1);
+                _missionName[sizeof(_missionName) - 1] = '\0';
+              }
+            } else if (doc["mission_name"].is<const char *>()) {
+              const char *mn = doc["mission_name"].as<const char *>();
+              if (strlen(mn) > 0) {
+                strncpy(_missionName, mn, sizeof(_missionName) - 1);
+                _missionName[sizeof(_missionName) - 1] = '\0';
+              }
             }
             if (doc["source"].is<const char *>() &&
                 strcmp(doc["source"].as<const char *>(), "portal") == 0) {
@@ -908,6 +984,7 @@ public:
       if (prefs.begin("base_mission", true)) {
         _opState = static_cast<BaseOperationState>(
             prefs.getUChar("op_state", BASE_OP_STORAGE));
+        _circuitId = prefs.getInt("circuit_id", 0);
         String stName = prefs.getString("st_name", BASE_STATION_ID);
         String rId = prefs.getString("race_id", "REGATA-DEFAULT");
         String mName = prefs.getString("m_name", "Percurso de Regata");
@@ -916,7 +993,9 @@ public:
           _stationName[sizeof(_stationName) - 1] = '\0';
         }
         strncpy(_raceId, rId.c_str(), sizeof(_raceId) - 1);
+        _raceId[sizeof(_raceId) - 1] = '\0';
         strncpy(_missionName, mName.c_str(), sizeof(_missionName) - 1);
+        _missionName[sizeof(_missionName) - 1] = '\0';
         uint8_t count = prefs.getUChar("r_count", 0);
         if (count <= MAX_FLEET_ROVERS) {
           rovers.clear();
@@ -974,6 +1053,7 @@ public:
     Preferences prefs;
     if (prefs.begin("base_mission", false)) {
       prefs.putUChar("op_state", static_cast<uint8_t>(_opState));
+      prefs.putInt("circuit_id", _circuitId);
       prefs.putString("st_name", _stationName);
       prefs.putString("race_id", _raceId);
       prefs.putString("m_name", _missionName);
@@ -1006,6 +1086,8 @@ public:
       JsonDocument doc;
       doc["station_name"] = _stationName;
       doc["operation_state"] = get_base_op_state_str(_opState);
+      doc["circuit_id"] = _circuitId;
+      doc["circuit_name"] = _missionName;
       doc["race_id"] = _raceId;
       doc["mission_name"] = _missionName;
       doc["source"] = _roversFromPortal ? "portal" : "manual";
@@ -1052,11 +1134,13 @@ public:
 private:
   SDCardManager *_sd;
   BaseOperationState _opState;
+  int32_t _circuitId;
   char _stationName[32];
   char _raceId[32];
-  char _missionName[48];
+  char _missionName[64];
 
   std::vector<FleetRover> rovers;
+  std::vector<uint8_t> _removedRoverIds;
   std::vector<QueuedCommand> commandQueue;
   int16_t selectedRoverIndex;
   bool _roversFromPortal;
