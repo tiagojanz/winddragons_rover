@@ -263,7 +263,7 @@ public:
 
     uint8_t getOpMenuIdx() const { return _opMenuIdx; }
     void setOpMenuIdx(uint8_t idx) {
-        _opMenuIdx = idx % 3;
+        _opMenuIdx = idx % 4;
         lastRender = 0;
     }
 
@@ -973,23 +973,23 @@ private:
                           int16_t lastRssi, bool failsafeActive) {
         uint16_t stCol = getMotorStatusColor(motorStatus);
 
-        // --- Topo da página: Modo Operacional em letra grande (x=6, y=26, w=308, h=36) ---
-        canvas->fillRect(6, 26, 308, 36, UI_PANEL_BG);
-        canvas->drawRect(6, 26, 308, 36, UI_CARD_BG);
+        // --- Topo da página: Modo Operacional em letra grande (x=6, y=26, w=308, h=34) ---
+        canvas->fillRect(6, 26, 308, 34, UI_PANEL_BG);
+        canvas->drawRect(6, 26, 308, 34, UI_CARD_BG);
 
         canvas->setTextSize(1);
         canvas->setTextColor(UI_LIGHTGREY);
-        canvas->setCursor(12, 29);
+        canvas->setCursor(12, 28);
         canvas->printf("ROVER-%02d | MODO OPERACIONAL:", _roverId);
 
         canvas->setTextSize(2);
         canvas->setTextColor(stCol);
-        canvas->setCursor(12, 41);
+        canvas->setCursor(12, 40);
         canvas->printf("%.16s", get_motor_status_str(motorStatus));
 
         canvas->setTextSize(1);
         canvas->setTextColor(failsafeActive ? UI_RED : (_loraHasContact ? UI_GREEN : UI_LIGHTGREY));
-        canvas->setCursor(214, 46);
+        canvas->setCursor(214, 44);
         if (failsafeActive) {
             canvas->print("LORA: FAILSAFE");
         } else if (_loraHasContact || lastRssi != 0) {
@@ -998,14 +998,14 @@ private:
             canvas->print("RF: A aguardar");
         }
 
-        // --- Lista de 3 itens de 1 linha (Navegacao, Bateria, Atuadores) ---
-        const char *titles[3] = {"Navegacao", "Bateria", "Atuadores"};
-        for (uint8_t i = 0; i < 3; ++i) {
+        // --- Lista de 4 itens de 1 linha (Navegacao, Bateria, Atuadores, SET RTL) ---
+        const char *titles[4] = {"Navegacao", "Bateria", "Atuadores", "SET RTL"};
+        for (uint8_t i = 0; i < 4; ++i) {
             bool sel = (_opMenuIdx == i);
             int x = 6;
-            int y = 66 + i * 28;
+            int y = 63 + i * 21;
             int w = 308;
-            int h = 26;
+            int h = 20;
 
             if (sel) {
                 canvas->fillRect(x, y, w, h, UI_NAVY);
@@ -1015,13 +1015,13 @@ private:
 
             canvas->setTextSize(2);
             canvas->setTextColor(sel ? UI_YELLOW : UI_WHITE);
-            canvas->setCursor(x + 10, y + 5);
+            canvas->setCursor(x + 10, y + 2);
             canvas->print(titles[i]);
 
             canvas->setTextSize(1);
             if (i == 0) {
                 canvas->setTextColor(gps.hasFix() ? UI_GREEN : UI_RED);
-                canvas->setCursor(x + 140, y + 9);
+                canvas->setCursor(x + 132, y + 6);
                 if (gps.hasFix()) {
                     canvas->printf("FIX (%uS) | %.1fkn | %.0fdeg",
                                    gps.getSatellites(), gps.getSpeedKnots(), gps.getHeading());
@@ -1032,20 +1032,29 @@ private:
                 uint8_t pct = batt.getPercentage();
                 uint16_t bCol = (pct < 25) ? UI_RED : ((pct < 50) ? UI_YELLOW : UI_GREEN);
                 canvas->setTextColor(bCol);
-                canvas->setCursor(x + 140, y + 9);
+                canvas->setCursor(x + 132, y + 6);
                 canvas->printf("%u%% | %.2fV | %.1fA",
                                pct, batt.getVoltageMv() / 1000.0f, batt.getCurrentAmps());
-            } else {
+            } else if (i == 2) {
                 canvas->setTextColor(UI_CYAN);
-                canvas->setCursor(x + 140, y + 9);
+                canvas->setCursor(x + 132, y + 6);
                 canvas->printf("T:%+d%% R:%+d%% | %.1fm",
                                actuators.getThrottle(), actuators.getRudder(),
                                actuators.getAnchorDepthCm() / 100.0f);
+            } else {
+                canvas->setTextColor(gps.hasHome() ? UI_GREEN : UI_YELLOW);
+                canvas->setCursor(x + 132, y + 6);
+                if (gps.hasHome()) {
+                    canvas->printf("HOME OK | %.0fm | %.0fdeg",
+                                   gps.distanceToHome(), gps.courseToHome());
+                } else {
+                    canvas->print("GRAVAR POSICAO ATUAL");
+                }
             }
 
             canvas->setTextSize(2);
             canvas->setTextColor(sel ? UI_CYAN : UI_DARKGREY);
-            canvas->setCursor(x + w - 16, y + 5);
+            canvas->setCursor(x + w - 16, y + 2);
             canvas->print(">");
         }
 

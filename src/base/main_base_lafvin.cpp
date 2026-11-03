@@ -376,7 +376,8 @@ void handleUartFromC6() {
                                  webServer.getC6Version() == "Desconhecido" ||
                                  webServer.getC6Version() != (rxBuf + 9));
           if (firstHandshake) {
-            printLog("[BASE LAFVIN] ★ Versao Coprocessador C6: %s\n", rxBuf + 9);
+            printLog("[BASE LAFVIN] ★ Versao Coprocessador C6: %s\n",
+                     rxBuf + 9);
             webServer.setC6Version(rxBuf + 9);
             display.setC6Version(rxBuf + 9);
             String ledCfgCmd = fleet.buildC6LedCfgCommand();
@@ -478,7 +479,8 @@ void handleInputsAndMenu(uint32_t now, bool &forceDisplay) {
     return;
   }
 
-  // Ecrã de inserção de texto com teclado QWERTY (Password WiFi ou Nome da Estação Base):
+  // Ecrã de inserção de texto com teclado QWERTY (Password WiFi ou Nome da
+  // Estação Base):
   if (page == BASE_PAGE_CONFIG_WIFI_PASS || page == BASE_PAGE_CONFIG_NAME) {
     bool isNamePage = (page == BASE_PAGE_CONFIG_NAME);
     BaseScreenPage backPage =
@@ -584,7 +586,7 @@ void handleInputsAndMenu(uint32_t now, bool &forceDisplay) {
 
   case BASE_PAGE_MISSION_MENU:
     if (navY != 0) {
-      display.setMissionMenuIdx((display.getMissionMenuIdx() + 2 + navY) % 2);
+      display.setMissionMenuIdx((display.getMissionMenuIdx() + 3 + navY) % 3);
       forceDisplay = true;
     }
     if (navX == -1 || clickBack) {
@@ -596,7 +598,7 @@ void handleInputsAndMenu(uint32_t now, bool &forceDisplay) {
         display.setStateCursorIdx((uint8_t)fleet.getOperationState());
         display.setPage(BASE_PAGE_MISSION_STATE);
         printLog("[UI] Missao -> Estado\n");
-      } else {
+      } else if (display.getMissionMenuIdx() == 1) {
         const auto &rovers = fleet.getRovers();
         uint8_t selId = fleet.getSelectedRoverId();
         for (size_t i = 0; i < rovers.size(); ++i) {
@@ -607,8 +609,42 @@ void handleInputsAndMenu(uint32_t now, bool &forceDisplay) {
         }
         display.setPage(BASE_PAGE_ROVER_LIST);
         printLog("[UI] Missao -> Lista de Rovers\n");
+      } else {
+        joystick.disarmNav();
+        joystick.wasShortClicked();
+        joystick.wasLongClicked();
+        display.setRtlConfirmIdx(0);
+        display.setPage(BASE_PAGE_MISSION_SET_ALL_RTL);
+        printLog("[UI] Missao -> Confirmar SET ALL RTL\n");
       }
       forceDisplay = true;
+    }
+    break;
+
+  case BASE_PAGE_MISSION_SET_ALL_RTL:
+    if (bootShort || bootLong) {
+      if (display.getRtlConfirmIdx() == 0) {
+        fleet.queueCommand(BROADCAST_ROVER_ID, ++localCmdId, ACTION_SET_HOME);
+        for (const auto &rv : fleet.getRovers()) {
+          fleet.queueCommand(rv.id, ++localCmdId, ACTION_SET_HOME);
+        }
+        display.showFeedback("SET ALL RTL ENVIADO!", 1500);
+        printLog("[UI] ★ Missao -> SET ALL RTL confirmado e enviado (%u rovers + broadcast)\n",
+                 (unsigned)fleet.getRovers().size());
+      } else {
+        printLog("[UI] SET ALL RTL: Cancelar -> Menu Missao\n");
+      }
+      joystick.disarmNav();
+      display.setPage(BASE_PAGE_MISSION_MENU);
+      forceDisplay = true;
+    } else if (navY != 0 || navX != 0) {
+      display.setRtlConfirmIdx((display.getRtlConfirmIdx() + 1) % 2);
+      forceDisplay = true;
+    } else if (btnModeEdge) {
+      joystick.disarmNav();
+      display.setPage(BASE_PAGE_MISSION_MENU);
+      forceDisplay = true;
+      printLog("[UI] SET ALL RTL cancelado -> Menu Missao\n");
     }
     break;
 
@@ -663,7 +699,7 @@ void handleInputsAndMenu(uint32_t now, bool &forceDisplay) {
 
   case BASE_PAGE_ROVER_MENU:
     if (navY != 0) {
-      display.setRoverMenuIdx((display.getRoverMenuIdx() + 3 + navY) % 3);
+      display.setRoverMenuIdx((display.getRoverMenuIdx() + 4 + navY) % 4);
       forceDisplay = true;
     }
     if (navX == -1 || clickBack) {
@@ -681,6 +717,13 @@ void handleInputsAndMenu(uint32_t now, bool &forceDisplay) {
         display.setBootHoldProgressPct(0);
         display.setPage(BASE_PAGE_ROVER_CONTROL);
         printLog("[UI] Rover Menu -> Comando\n");
+      } else if (display.getRoverMenuIdx() == 2) {
+        joystick.disarmNav();
+        joystick.wasShortClicked();
+        joystick.wasLongClicked();
+        display.setRtlConfirmIdx(0);
+        display.setPage(BASE_PAGE_ROVER_SET_RTL);
+        printLog("[UI] Rover Menu -> Confirmar SET RTL\n");
       } else {
         joystick.disarmNav();
         joystick.wasShortClicked();
@@ -690,6 +733,39 @@ void handleInputsAndMenu(uint32_t now, bool &forceDisplay) {
         printLog("[UI] Rover Menu -> Confirmar Remocao\n");
       }
       forceDisplay = true;
+    }
+    break;
+
+  case BASE_PAGE_ROVER_SET_RTL:
+    if (bootShort || bootLong) {
+      if (display.getRtlConfirmIdx() == 0) {
+        uint8_t rId = fleet.getSelectedRoverId();
+        if (rId == 0 && !fleet.getRovers().empty()) {
+          uint8_t idx = display.getRoverListIdx();
+          rId = (idx < fleet.getRovers().size()) ? fleet.getRovers()[idx].id
+                                                 : fleet.getRovers()[0].id;
+        }
+        if (rId != 0) {
+          fleet.queueCommand(rId, ++localCmdId, ACTION_SET_HOME);
+          display.showFeedback("SET RTL ENVIADO!", 1500);
+          printLog("[UI] ★ Rover Menu -> SET RTL confirmado e enviado ao Rover "
+                   "#%u\n",
+                   rId);
+        }
+      } else {
+        printLog("[UI] SET RTL Rover: Cancelar -> Rover Menu\n");
+      }
+      joystick.disarmNav();
+      display.setPage(BASE_PAGE_ROVER_MENU);
+      forceDisplay = true;
+    } else if (navY != 0 || navX != 0) {
+      display.setRtlConfirmIdx((display.getRtlConfirmIdx() + 1) % 2);
+      forceDisplay = true;
+    } else if (btnModeEdge) {
+      joystick.disarmNav();
+      display.setPage(BASE_PAGE_ROVER_MENU);
+      forceDisplay = true;
+      printLog("[UI] SET RTL Rover cancelado -> Rover Menu\n");
     }
     break;
 
@@ -713,7 +789,8 @@ void handleInputsAndMenu(uint32_t now, bool &forceDisplay) {
             fleet.selectRoverById(fleet.getRovers()[nextIdx].id);
           }
           display.showFeedback("ROVER REMOVIDO!", 2000);
-          printLog("[UI] Rover #%u removido da frota -> Lista de Rovers\n", rId);
+          printLog("[UI] Rover #%u removido da frota -> Lista de Rovers\n",
+                   rId);
         }
         joystick.disarmNav();
         display.setPage(BASE_PAGE_ROVER_LIST);
@@ -750,17 +827,49 @@ void handleInputsAndMenu(uint32_t now, bool &forceDisplay) {
         currentNavMode = 0;
         fleet.queueCommand(rId, ++localCmdId, ACTION_MANUAL);
         display.showFeedback("MODO MANUAL ENVIADO!", 1500);
+        printLog("[UI] Modo #0 enviado ao Rover #%u\n", rId);
       } else if (mIdx == 1) {
         currentNavMode = 1;
         fleet.queueCommand(rId, ++localCmdId, ACTION_HOLD_STATION);
         display.showFeedback("MODO HOLD ENVIADO!", 1500);
+        printLog("[UI] Modo #1 enviado ao Rover #%u\n", rId);
       } else {
+        joystick.disarmNav();
+        joystick.wasShortClicked();
+        joystick.wasLongClicked();
+        display.setRtlConfirmIdx(0);
+        display.setPage(BASE_PAGE_ROVER_RTL_CONFIRM);
+        printLog("[UI] Modo -> Confirmar RETURN HOME (RTL) p/ Rover #%u\n",
+                 rId);
+      }
+      forceDisplay = true;
+    }
+    break;
+
+  case BASE_PAGE_ROVER_RTL_CONFIRM:
+    if (bootShort || bootLong) {
+      if (display.getRtlConfirmIdx() == 0) {
+        uint8_t rId = fleet.getSelectedRoverId();
         currentNavMode = 2;
         fleet.queueCommand(rId, ++localCmdId, ACTION_RTL);
         display.showFeedback("RETURN HOME ENVIADO!", 1500);
+        printLog(
+            "[UI] ★ Modo RETURN HOME (RTL) confirmado e enviado ao Rover #%u\n",
+            rId);
+      } else {
+        printLog("[UI] RETURN HOME (RTL): Cancelar -> Modo\n");
       }
+      joystick.disarmNav();
+      display.setPage(BASE_PAGE_ROVER_MODE);
       forceDisplay = true;
-      printLog("[UI] Modo #%u enviado ao Rover #%u\n", mIdx, rId);
+    } else if (navY != 0 || navX != 0) {
+      display.setRtlConfirmIdx((display.getRtlConfirmIdx() + 1) % 2);
+      forceDisplay = true;
+    } else if (btnModeEdge) {
+      joystick.disarmNav();
+      display.setPage(BASE_PAGE_ROVER_MODE);
+      forceDisplay = true;
+      printLog("[UI] RETURN HOME (RTL) cancelado -> Modo\n");
     }
     break;
 

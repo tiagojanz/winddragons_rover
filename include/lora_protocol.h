@@ -53,7 +53,8 @@ enum CloudAction : uint8_t {
     ACTION_ALARM           = 8, // Strobe LED & acoustic alarm
     ACTION_PING            = 9, // Request immediate telemetry
     ACTION_MANUAL          = 10,// Manual joystick control
-    ACTION_SET_BUOY_ROLE   = 18 // Set regatta buoy LED role/rounding (BuoyLightRole in target_depth_cm)
+    ACTION_SET_BUOY_ROLE   = 18,// Set regatta buoy LED role/rounding (BuoyLightRole in target_depth_cm)
+    ACTION_SET_HOME        = 19 // Set Rover Home / RTL coordinates (current GPS or target_lat/lng)
 };
 
 // Regatta Buoy LED Role / Rounding signaling on Rover WS2812B LEDs
@@ -96,7 +97,7 @@ struct __attribute__((packed)) PacketTelemetry {
     // BNO055 9-DOF IMU / Compass Telemetry
     int16_t  roll_deg10;     // Roll angle in degrees * 10 (e.g. -12.5° -> -125)
     int16_t  pitch_deg10;    // Pitch angle in degrees * 10 (e.g. +5.3° -> 53)
-    uint8_t  compass_flags;  // Bit 7: active (1=BNO055, 0=GPS_COG), Bits 5..4: cal_sys (0..3), Bits 3..2: cal_mag (0..3), Bits 1..0: cal_imu (0..3)
+    uint8_t  compass_flags;  // Bit 7: active (1=BNO055, 0=GPS_COG), Bit 6: home_set (1=Home RTL set), Bits 5..4: cal_sys (0..3), Bits 3..2: cal_mag (0..3), Bits 1..0: cal_imu (0..3)
 
     uint16_t checksum;
 };
@@ -104,9 +105,10 @@ struct __attribute__((packed)) PacketTelemetry {
 // Size of legacy PacketTelemetry before BNO055 fields were added (for backward-compatible RX)
 static constexpr size_t LORA_LEGACY_TELEMETRY_SIZE = sizeof(PacketTelemetry) - 5;
 
-inline uint8_t pack_compass_flags(bool active, uint8_t cal_sys, uint8_t cal_mag, uint8_t cal_gyro = 0, uint8_t cal_accel = 0) {
+inline uint8_t pack_compass_flags(bool active, uint8_t cal_sys, uint8_t cal_mag, uint8_t cal_gyro = 0, uint8_t cal_accel = 0, bool home_set = false) {
     uint8_t imu = (cal_gyro < cal_accel) ? cal_gyro : cal_accel;
     return (active ? 0x80 : 0x00) |
+           (home_set ? 0x40 : 0x00) |
            ((cal_sys & 0x03) << 4) |
            ((cal_mag & 0x03) << 2) |
            (imu & 0x03);
@@ -114,6 +116,10 @@ inline uint8_t pack_compass_flags(bool active, uint8_t cal_sys, uint8_t cal_mag,
 
 inline bool unpack_compass_active(uint8_t flags) {
     return (flags & 0x80) != 0;
+}
+
+inline bool unpack_home_set(uint8_t flags) {
+    return (flags & 0x40) != 0;
 }
 
 inline uint8_t unpack_compass_cal_sys(uint8_t flags) {
@@ -205,6 +211,7 @@ inline const char* get_action_str(uint8_t action) {
         case ACTION_PING:            return "PING";
         case ACTION_MANUAL:          return "MANUAL";
         case ACTION_SET_BUOY_ROLE:   return "SET_BUOY_ROLE";
+        case ACTION_SET_HOME:        return "SET_RTL";
         default:                     return "NONE";
     }
 }

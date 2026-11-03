@@ -131,7 +131,7 @@ const uint32_t FAILSAFE_TIMEOUT_MS = 2500;
 uint8_t currentMotorStatus = MOTOR_IDLE;
 uint16_t lastExecutedCommandId = 0;
 
-// Coordenadas autónomas
+// Coordenadas autónomas (apenas em memória RAM durante a sessão atual)
 double homeLat = 0.0;
 double homeLng = 0.0;
 bool hasHomeSet = false;
@@ -141,6 +141,42 @@ double navTargetLat = 0.0;
 double navTargetLng = 0.0;
 const float STATION_KEEPING_TOLERANCE_M = 8.0f;
 const float WAYPOINT_ARRIVAL_RADIUS_M = 4.0f;
+
+void sendHomeStatToMaster() {
+  char hmLine[96];
+  // Formato: HOME_STAT:<hasHomeSet>:<homeLat7>:<homeLng7>
+  long hLat7 = static_cast<long>(homeLat * 10000000.0);
+  long hLng7 = static_cast<long>(homeLng * 10000000.0);
+  snprintf(hmLine, sizeof(hmLine), "HOME_STAT:%d:%ld:%ld\n",
+           hasHomeSet ? 1 : 0, hLat7, hLng7);
+  interSerial.print(hmLine);
+}
+
+void setRoverHome(double lat, double lng) {
+  homeLat = lat;
+  homeLng = lng;
+  hasHomeSet = true;
+  gps.setHome(lat, lng);
+  sendHomeStatToMaster();
+}
+
+bool setRoverHomeFromCurrentGps() {
+  double lat = gps.getLatitude();
+  double lng = gps.getLongitude();
+  if (!gps.hasFix() && (lat == 0.0 && lng == 0.0)) {
+    return false;
+  }
+  setRoverHome(lat, lng);
+  return true;
+}
+
+void clearRoverHome() {
+  hasHomeSet = false;
+  homeLat = 0.0;
+  homeLng = 0.0;
+  gps.clearHome();
+  sendHomeStatToMaster();
+}
 
 void printLog(const char *format, ...) {
   char buf[256];
@@ -464,12 +500,12 @@ void sendLoRaTelemetry() {
   packet.anchor_depth_cm = actuators.getAnchorDepthCm();
   packet.last_cmd_id = lastExecutedCommandId;
 
-  // Telemetria BNO055 9-DOF IMU / Bússola
+  // Telemetria BNO055 9-DOF IMU / Bússola + Estado Home/RTL (Bit 6)
   packet.roll_deg10 = static_cast<int16_t>(roundf(compass.getRoll() * 10.0f));
   packet.pitch_deg10 = static_cast<int16_t>(roundf(compass.getPitch() * 10.0f));
   packet.compass_flags = pack_compass_flags(
       compass.isReady(), compass.getCalSys(), compass.getCalMag(),
-      compass.getCalGyro(), compass.getCalAccel());
+      compass.getCalGyro(), compass.getCalAccel(), hasHomeSet);
 
   packet.checksum =
       calculate_checksum(reinterpret_cast<const uint8_t *>(&packet),
@@ -599,6 +635,25 @@ void processIncomingLoRa(uint8_t *buffer, int len) {
         navTargetLat = homeLat;
         navTargetLng = homeLng;
         currentMotorStatus = MOTOR_RTL;
+        printLog("[C6 ROVER] ★ RTL ATIVADO -> Regressar a Home (%.6f, %.6f)\n",
+                 homeLat, homeLng);
+      } else {
+        printLog("[C6 ROVER] ⚠ RTL ignorado: Posicao Home nao definida!\n");
+      }
+      break;
+    case ACTION_SET_HOME:
+      if (cmd->target_lat_deg7 != 0 || cmd->target_lng_deg7 != 0) {
+        setRoverHome(cmd->target_lat_deg7 / 10000000.0,
+                     cmd->target_lng_deg7 / 10000000.0);
+        printLog("[C6 ROVER] ★ Posicao Home/RTL definida via LoRa (coordenadas): "
+                 "%.6f, %.6f\n",
+                 homeLat, homeLng);
+      } else if (setRoverHomeFromCurrentGps()) {
+        printLog("[C6 ROVER] ★ Posicao Home/RTL definida via LoRa (GPS atual): "
+                 "%.6f, %.6f\n",
+                 homeLat, homeLng);
+      } else {
+        printLog("[C6 ROVER] ⚠ SET_HOME via LoRa: Sem coordenadas GPS validas!\n");
       }
       break;
     case ACTION_ALARM:
@@ -666,12 +721,6 @@ void updateAutonomousNavigation() {
     actuators.stopMotor();
     actuators.centerRudder();
     return;
-  }
-
-  if (!hasHomeSet) {
-    homeLat = gps.getLatitude();
-    homeLng = gps.getLongitude();
-    hasHomeSet = true;
   }
 
   if (currentMotorStatus == MOTOR_HOLDING_STATION) {
@@ -1061,6 +1110,58 @@ void handleIncomingCommand(const char *cmdStr) {
     currentMotorStatus = MOTOR_MANUAL;
     lastControlReceivedTime = now;
     printLog("[C6 ROVER] Modo Manual ativado via Web/Lafvin\n");
+  } else if (strcmp(cmdStr, "CMD:MODE:HOLD") == 0) {
+    stationTargetLat = gps.getLatitude();
+    stationTargetLng = gps.getLongitude();
+    currentMotorStatus = MOTOR_HOLDING_STATION;
+    printLog("[C6 ROVER] ★ Modo HOLD STATION ativado em (%.6f, %.6f)\n",
+             stationTargetLat, stationTargetLng);
+  } else if (strncmp(cmdStr, "CMD:MODE:GOTO:", 14) == 0) {
+    long tLat7 = 0, tLng7 = 0;
+    if (sscanf(cmdStr + 14, "%ld:%ld", &tLat7, &tLng7) == 2 &&
+        (tLat7 != 0 || tLng7 != 0)) {
+      navTargetLat = (double)tLat7 / 10000000.0;
+      navTargetLng = (double)tLng7 / 10000000.0;
+      currentMotorStatus = MOTOR_MOVING_TO_TARGET;
+      printLog("[C6 ROVER] ★ Modo GOTO ativado -> Destino (%.6f, %.6f)\n",
+               navTargetLat, navTargetLng);
+    }
+  } else if (strcmp(cmdStr, "CMD:MODE:RTL") == 0) {
+    if (hasHomeSet) {
+      navTargetLat = homeLat;
+      navTargetLng = homeLng;
+      currentMotorStatus = MOTOR_RTL;
+      printLog("[C6 ROVER] ★ Modo RTL ativado -> Regressar a Home (%.6f, %.6f)\n",
+               homeLat, homeLng);
+    } else {
+      printLog("[C6 ROVER] ⚠ CMD:MODE:RTL ignorado: Home nao definido!\n");
+    }
+  } else if (strcmp(cmdStr, "CMD:SET_HOME") == 0) {
+    if (setRoverHomeFromCurrentGps()) {
+      printLog("[C6 ROVER] ★ Posicao Home/RTL definida (GPS atual): %.6f, %.6f\n",
+               homeLat, homeLng);
+    } else {
+      printLog("[C6 ROVER] ⚠ CMD:SET_HOME: Sem coordenadas GPS!\n");
+    }
+  } else if (strncmp(cmdStr, "CMD:SET_HOME:", 13) == 0) {
+    long hLat7 = 0, hLng7 = 0;
+    if (sscanf(cmdStr + 13, "%ld:%ld", &hLat7, &hLng7) == 2 &&
+        (hLat7 != 0 || hLng7 != 0)) {
+      setRoverHome((double)hLat7 / 10000000.0, (double)hLng7 / 10000000.0);
+      printLog("[C6 ROVER] ★ Posicao Home/RTL definida em RAM: %.6f, %.6f\n",
+               homeLat, homeLng);
+    } else if (setRoverHomeFromCurrentGps()) {
+      printLog("[C6 ROVER] ★ Posicao Home/RTL definida (GPS atual): %.6f, %.6f\n",
+               homeLat, homeLng);
+    }
+  } else if (strcmp(cmdStr, "CMD:CLEAR_HOME") == 0) {
+    clearRoverHome();
+    if (currentMotorStatus == MOTOR_RTL) {
+      actuators.stopMotor();
+      actuators.centerRudder();
+      currentMotorStatus = MOTOR_IDLE;
+    }
+    printLog("[C6 ROVER] Posicao Home/RTL limpa da RAM\n");
   } else if (strncmp(cmdStr, "CMD:TX_TELEM", 12) == 0) {
     sendLoRaTelemetry();
   } else if (strncmp(cmdStr, "CMD:GET_LORA", 12) == 0) {
@@ -1590,6 +1691,7 @@ void loop() {
           interSerial.print(pong);
           sendLoraStatToMaster();
           sendCompassStatToMaster();
+          sendHomeStatToMaster();
           printLog("[C6 ROVER] <<< %s | >>> PONG: Bat=%.2fV / "
                    "%.2fA (%d%%) "
                    "LoRa=%s | Head=%.1f° (%s) | Winch=%dus | "

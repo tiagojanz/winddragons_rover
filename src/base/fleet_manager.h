@@ -170,6 +170,7 @@ struct FleetRover {
   float speed_knots;
   float heading_deg;
   bool compass_active;
+  bool home_set;
   float roll_deg;
   float pitch_deg;
   uint8_t compass_cal_sys;
@@ -533,6 +534,7 @@ public:
         r.speed_knots = (pkt.speed_cm_s / 51.4444f);
         r.heading_deg = pkt.heading_deg10 / 10.0f;
         r.compass_active = unpack_compass_active(pkt.compass_flags);
+        r.home_set = unpack_home_set(pkt.compass_flags);
         r.roll_deg = pkt.roll_deg10 / 10.0f;
         r.pitch_deg = pkt.pitch_deg10 / 10.0f;
         r.compass_cal_sys = unpack_compass_cal_sys(pkt.compass_flags);
@@ -567,6 +569,7 @@ public:
       r.speed_knots = (pkt.speed_cm_s / 51.4444f);
       r.heading_deg = pkt.heading_deg10 / 10.0f;
       r.compass_active = unpack_compass_active(pkt.compass_flags);
+      r.home_set = unpack_home_set(pkt.compass_flags);
       r.roll_deg = pkt.roll_deg10 / 10.0f;
       r.pitch_deg = pkt.pitch_deg10 / 10.0f;
       r.compass_cal_sys = unpack_compass_cal_sys(pkt.compass_flags);

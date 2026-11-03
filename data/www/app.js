@@ -69,9 +69,9 @@ function pollGlobalStatus() {
         }
       }
       if (data.version) {
-        const laf = data.version.lafvin || 'v2.1.9';
+        const laf = data.version.lafvin || 'v2.1.10';
         const c6 = data.version.c6 || '--';
-        const bun = data.version.bundle || 'v2.1.9';
+        const bun = data.version.bundle || 'v2.1.10';
 
         const navLaf = document.getElementById('navLafvinVer');
         if (navLaf) navLaf.innerText = 'Lafvin ' + laf;

@@ -222,6 +222,11 @@ void processIncomingPacket(uint8_t *buffer, size_t length) {
                         break;
 
                     case ACTION_RTL:
+                        if (gps.hasHome()) {
+                            homeLat = gps.getHomeLatitude();
+                            homeLng = gps.getHomeLongitude();
+                            hasHomeSet = true;
+                        }
                         if (hasHomeSet) {
                             navTargetLat = homeLat;
                             navTargetLng = homeLng;
@@ -229,6 +234,23 @@ void processIncomingPacket(uint8_t *buffer, size_t length) {
                             Serial.printf("[ROVER] RTL: Returning to Home (%.6f, %.6f)\n", homeLat, homeLng);
                         } else {
                             Serial.println("[ROVER] RTL ignored: Home position not yet established");
+                        }
+                        break;
+
+                    case ACTION_SET_HOME:
+                        if (cmd->target_lat_deg7 != 0 || cmd->target_lng_deg7 != 0) {
+                            homeLat = cmd->target_lat_deg7 / 10000000.0;
+                            homeLng = cmd->target_lng_deg7 / 10000000.0;
+                            hasHomeSet = true;
+                            gps.setHome(homeLat, homeLng);
+                            Serial.printf("[ROVER] SET_HOME established at: %.6f, %.6f\n", homeLat, homeLng);
+                        } else if (gps.setHomeToCurrent()) {
+                            homeLat = gps.getHomeLatitude();
+                            homeLng = gps.getHomeLongitude();
+                            hasHomeSet = true;
+                            Serial.printf("[ROVER] SET_HOME established at current GPS: %.6f, %.6f\n", homeLat, homeLng);
+                        } else {
+                            Serial.println("[ROVER] SET_HOME ignored: No valid GPS coordinates");
                         }
                         break;
 
@@ -271,12 +293,10 @@ void updateAutonomousNavigation() {
         return;
     }
 
-    // Set initial Home position once GPS fix is acquired
-    if (!hasHomeSet) {
-        homeLat = gps.getLatitude();
-        homeLng = gps.getLongitude();
+    if (gps.hasHome()) {
+        homeLat = gps.getHomeLatitude();
+        homeLng = gps.getHomeLongitude();
         hasHomeSet = true;
-        Serial.printf("[ROVER] Home GPS position recorded: %.6f, %.6f\n", homeLat, homeLng);
     }
 
     // 1. Station Keeping Mode (Virtual Anchor)

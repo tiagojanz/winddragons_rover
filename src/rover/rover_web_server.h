@@ -386,6 +386,7 @@ private:
     _server.on("/api/gps/rate", HTTP_POST, [this]() { handleApiGpsRate(); });
     _server.on("/api/gps/command", HTTP_POST,
                [this]() { handleApiGpsCommand(); });
+    _server.on("/api/gps/home", [this]() { handleApiGpsHome(); });
     _server.on("/api/compass/calibrate", HTTP_POST, [this]() {
       if (_server.hasArg("plain")) {
         JsonDocument doc;
@@ -2418,6 +2419,51 @@ private:
             String(_gps.getLongitude(), 6) +
             "' target='_blank' class='btn btn-secondary'><i class='fa-solid "
             "fa-location-dot'></i> Google Maps</a>";
+    html += "</div>";
+
+    // Secção Ponto Home / Return to Launch (RTL) em RAM
+    html += "<div style='margin-top:18px;background:rgba(0,0,0,0.25);padding:14px;"
+            "border-radius:10px;border:1px solid var(--card-border);'>";
+    html += "  <div style='display:flex;justify-content:space-between;align-items:"
+            "center;flex-wrap:wrap;gap:8px;margin-bottom:10px;'>";
+    html += "    <span style='font-weight:700;color:var(--text);font-size:0.95rem;'>"
+            "<i class='fa-solid fa-house' style='color:var(--primary);'></i> Ponto "
+            "Home / Return to Launch (RTL)</span>";
+    html += "    <span id='homeBadge' class='badge' style='background:" +
+            String(_gps.hasHome()
+                       ? "rgba(16,185,129,0.2);color:var(--green);border:1px solid var(--green);"
+                       : "rgba(245,158,11,0.15);color:var(--yellow);border:1px solid var(--yellow);") +
+            "'>" +
+            String(_gps.hasHome() ? "HOME DEFINIDO (RAM)" : "HOME NÃO DEFINIDO") +
+            "</span>";
+    html += "  </div>";
+    html += "  <div class='grid-4' style='margin-bottom:12px;'>";
+    html += "    <div class='stat-box'><div class='stat-label'>Latitude Home</div>"
+            "<div class='stat-value' id='homeLatVal' style='font-size:1.1rem;'>" +
+            String(_gps.hasHome() ? String(_gps.getHomeLatitude(), 6) : "--") +
+            "</div></div>";
+    html += "    <div class='stat-box'><div class='stat-label'>Longitude Home</div>"
+            "<div class='stat-value' id='homeLngVal' style='font-size:1.1rem;'>" +
+            String(_gps.hasHome() ? String(_gps.getHomeLongitude(), 6) : "--") +
+            "</div></div>";
+    html += "    <div class='stat-box'><div class='stat-label'>Distância até Home</div>"
+            "<div class='stat-value' id='homeDistVal' style='font-size:1.1rem;color:var(--primary);'>" +
+            String(_gps.hasHome() ? (String(_gps.distanceToHome(), 1) + " m") : "--") +
+            "</div></div>";
+    html += "    <div class='stat-box'><div class='stat-label'>Rumo p/ Home</div>"
+            "<div class='stat-value' id='homeCourseVal' style='font-size:1.1rem;'>" +
+            String(_gps.hasHome() ? (String(_gps.courseToHome(), 0) + "°") : "--") +
+            "</div></div>";
+    html += "  </div>";
+    html += "  <div style='display:flex;gap:10px;flex-wrap:wrap;align-items:center;'>";
+    html += "    <button type='button' class='btn btn-primary' onclick='setGpsHome()'>"
+            "<i class='fa-solid fa-location-dot'></i> Definir Posição Atual como Home (SET RTL)</button>";
+    html += "    <button type='button' class='btn btn-secondary' onclick='triggerGpsRtl()'>"
+            "<i class='fa-solid fa-house'></i> Ativar RTL (Regressar a Home)</button>";
+    html += "    <button type='button' class='btn btn-secondary' onclick='clearGpsHome()'>"
+            "<i class='fa-solid fa-trash-can'></i> Limpar Home</button>";
+    html += "    <span id='homeFeedback' style='font-size:0.82rem;color:var(--green);font-weight:600;'></span>";
+    html += "  </div>";
     html += "</div></div>";
 
     // Painel de Configuração Quectel LC29H
@@ -2560,6 +2606,9 @@ private:
     html += "</div></div>";
 
     html += "<script>";
+    html += "function setGpsHome(){fetch('/api/gps/home',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({use_current:true})}).then(r=>r.json()).then(res=>{const el=document.getElementById('homeFeedback');if(el){el.style.color=res.success?'var(--green)':'var(--red)';el.innerText=res.msg||'OK';setTimeout(()=>el.innerText='',4000);}});}";
+    html += "function clearGpsHome(){fetch('/api/gps/home',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clear:true})}).then(r=>r.json()).then(res=>{const el=document.getElementById('homeFeedback');if(el){el.style.color='var(--yellow)';el.innerText=res.msg||'Home limpo';setTimeout(()=>el.innerText='',4000);}});}";
+    html += "function triggerGpsRtl(){fetch('/api/control/action',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:7})}).then(r=>r.json()).then(res=>{const el=document.getElementById('homeFeedback');if(el){el.style.color=res.success?'var(--green)':'var(--red)';el.innerText=res.msg||'OK';setTimeout(()=>el.innerText='',4000);}});}";
     html += "function "
             "zeroCompass(){fetch('/api/compass/"
             "calibrate',{method:'POST',headers:{'Content-Type':'application/"
@@ -2663,6 +2712,15 @@ private:
     html += "const "
             "co=document.getElementById('cmpOff');if(co&&g.compass_offset!=="
             "undefined)co.innerText=g.compass_offset.toFixed(1)+'°';";
+    html += "const hb=document.getElementById('homeBadge');";
+    html += "if(hb){hb.innerText=g.home_set?'HOME DEFINIDO (RAM)':'HOME NÃO DEFINIDO';";
+    html += "hb.style.color=g.home_set?'var(--green)':'var(--yellow)';";
+    html += "hb.style.borderColor=g.home_set?'var(--green)':'var(--yellow)';";
+    html += "hb.style.background=g.home_set?'rgba(16,185,129,0.2)':'rgba(245,158,11,0.15)';}";
+    html += "const hLat=document.getElementById('homeLatVal');if(hLat)hLat.innerText=g.home_set?(g.home_lat||0).toFixed(6):'--';";
+    html += "const hLng=document.getElementById('homeLngVal');if(hLng)hLng.innerText=g.home_set?(g.home_lng||0).toFixed(6):'--';";
+    html += "const hDist=document.getElementById('homeDistVal');if(hDist)hDist.innerText=g.home_set?((g.home_dist_m||0).toFixed(1)+' m'):'--';";
+    html += "const hCrs=document.getElementById('homeCourseVal');if(hCrs)hCrs.innerText=g.home_set?((g.home_course_deg||0).toFixed(0)+'°'):'--';";
     html += "});},1000);";
     html += "</script>";
 
@@ -3933,6 +3991,11 @@ private:
     g["bytes"] = _gps.getTotalBytes();
     g["raw"] = _gps.getRawSentence();
     g["rate_hz"] = _gps.getRateHz();
+    g["home_set"] = _gps.hasHome();
+    g["home_lat"] = _gps.getHomeLatitude();
+    g["home_lng"] = _gps.getHomeLongitude();
+    g["home_dist_m"] = _gps.distanceToHome();
+    g["home_course_deg"] = _gps.courseToHome();
 
     JsonObject cmp = doc["compass"].to<JsonObject>();
     cmp["active"] = _gps.hasCompass();
@@ -4102,6 +4165,99 @@ private:
     res["cmd"] = cmd;
     res["msg"] = ok ? "Instrução enviada ao Quectel LC29H com sucesso!"
                     : "Erro ao enviar instrução.";
+
+    String out;
+    serializeJson(res, out);
+    _server.send(200, "application/json", out);
+  }
+
+  void handleApiGpsHome() {
+    if (_server.method() == HTTP_GET) {
+      JsonDocument res;
+      res["success"] = true;
+      res["home_set"] = _gps.hasHome();
+      res["home_lat"] = _gps.getHomeLatitude();
+      res["home_lng"] = _gps.getHomeLongitude();
+      res["home_dist_m"] = _gps.distanceToHome();
+      res["home_course_deg"] = _gps.courseToHome();
+      String out;
+      serializeJson(res, out);
+      _server.send(200, "application/json", out);
+      return;
+    }
+
+    bool doClear = false;
+    bool hasCustomCoords = false;
+    double customLat = 0.0;
+    double customLng = 0.0;
+
+    if (_server.hasArg("plain")) {
+      JsonDocument doc;
+      if (!deserializeJson(doc, _server.arg("plain"))) {
+        doClear = doc["clear"] | false;
+        if (!doc["lat"].isNull() && !doc["lng"].isNull()) {
+          customLat = doc["lat"].as<double>();
+          customLng = doc["lng"].as<double>();
+          hasCustomCoords = (customLat != 0.0 || customLng != 0.0);
+        }
+      }
+    }
+
+    JsonDocument res;
+    if (doClear) {
+      _gps.clearHome();
+      if (_commandQueueCb) {
+        _commandQueueCb("CMD:CLEAR_HOME");
+      }
+      if (_display) {
+        _display->showFeedback("HOME RTL LIMPO!", 1500);
+      }
+      res["success"] = true;
+      res["home_set"] = false;
+      res["msg"] = "Posição Home (RTL) limpa da memória RAM!";
+    } else if (hasCustomCoords) {
+      _gps.setHome(customLat, customLng);
+      if (_commandQueueCb) {
+        char cmd[64];
+        snprintf(cmd, sizeof(cmd), "CMD:SET_HOME:%ld:%ld",
+                 (long)_gps.getHomeLatDeg7(), (long)_gps.getHomeLngDeg7());
+        _commandQueueCb(cmd);
+      }
+      if (_display) {
+        _display->showFeedback("HOME RTL DEFINIDO!", 2000);
+      }
+      res["success"] = true;
+      res["home_set"] = true;
+      res["home_lat"] = _gps.getHomeLatitude();
+      res["home_lng"] = _gps.getHomeLongitude();
+      res["msg"] = String("Posição Home (RTL) definida em RAM: ") +
+                   String(_gps.getHomeLatitude(), 6) + ", " +
+                   String(_gps.getHomeLongitude(), 6);
+    } else if (_gps.setHomeToCurrent()) {
+      if (_commandQueueCb) {
+        char cmd[64];
+        snprintf(cmd, sizeof(cmd), "CMD:SET_HOME:%ld:%ld",
+                 (long)_gps.getHomeLatDeg7(), (long)_gps.getHomeLngDeg7());
+        _commandQueueCb(cmd);
+      }
+      if (_display) {
+        _display->showFeedback("HOME RTL DEFINIDO!", 2000);
+      }
+      res["success"] = true;
+      res["home_set"] = true;
+      res["home_lat"] = _gps.getHomeLatitude();
+      res["home_lng"] = _gps.getHomeLongitude();
+      res["msg"] = String("Posição GPS atual definida como Home (RTL): ") +
+                   String(_gps.getHomeLatitude(), 6) + ", " +
+                   String(_gps.getHomeLongitude(), 6);
+    } else {
+      if (_commandQueueCb) {
+        _commandQueueCb("CMD:SET_HOME");
+      }
+      res["success"] = false;
+      res["home_set"] = _gps.hasHome();
+      res["msg"] = "Sem Fix GPS válido! Aguarde sinal de satélite para definir o Home.";
+    }
 
     String out;
     serializeJson(res, out);
@@ -4763,9 +4919,13 @@ private:
 
     _lastControlTime = millis();
 
+    bool actionOk = true;
+
     switch (action) {
     case 1: // Hold Station
       _motorStatus = MOTOR_HOLDING_STATION;
+      if (_commandQueueCb)
+        _commandQueueCb("CMD:MODE:HOLD");
       msg = "Modo Hold Station ativado!";
       break;
     case 2: // Emergency Stop
@@ -4829,8 +4989,38 @@ private:
             _config.getRackAngleReleased() + "°)";
       break;
     case 7: // RTL
-      _motorStatus = MOTOR_RTL;
-      msg = "Modo RTL (Return to Launch) ativado!";
+      if (_gps.hasHome()) {
+        _motorStatus = MOTOR_RTL;
+        if (_commandQueueCb)
+          _commandQueueCb("CMD:MODE:RTL");
+        msg = String("Modo RTL ativado! A regressar a Home (") +
+              String(_gps.getHomeLatitude(), 6) + ", " +
+              String(_gps.getHomeLongitude(), 6) + ")";
+      } else {
+        actionOk = false;
+        msg = "Posição Home (RTL) não definida! Defina o Home primeiro.";
+      }
+      break;
+    case ACTION_SET_HOME: // 19: Set Home / RTL
+      if (_gps.setHomeToCurrent()) {
+        if (_commandQueueCb) {
+          char cmd[64];
+          snprintf(cmd, sizeof(cmd), "CMD:SET_HOME:%ld:%ld",
+                   (long)_gps.getHomeLatDeg7(), (long)_gps.getHomeLngDeg7());
+          _commandQueueCb(cmd);
+        }
+        if (_display) {
+          _display->showFeedback("HOME RTL DEFINIDO!", 2000);
+        }
+        msg = String("Posição Home (RTL) definida em RAM: ") +
+              String(_gps.getHomeLatitude(), 6) + ", " +
+              String(_gps.getHomeLongitude(), 6);
+      } else {
+        actionOk = false;
+        if (_commandQueueCb)
+          _commandQueueCb("CMD:SET_HOME");
+        msg = "Sem Fix GPS válido para definir o Home!";
+      }
       break;
     case 8: // Toggle Alarm
       if (_actuators.isAlarmActive()) {
@@ -4872,7 +5062,7 @@ private:
                   msg.c_str());
 
     JsonDocument resDoc;
-    resDoc["success"] = true;
+    resDoc["success"] = actionOk;
     resDoc["msg"] = msg;
     String res;
     serializeJson(resDoc, res);

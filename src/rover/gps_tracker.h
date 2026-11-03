@@ -12,7 +12,8 @@ public:
         isLocked(true), lastScanTime(0), lastRxByteTime(0), scanStep(0),
         rawIdx(0), totalBytesReceived(0), manualLat(0.0), manualLng(0.0),
         manualSpeed(0.0f), manualHeading(0.0f), manualSats(0), manualFix(false),
-        hasManualData(false), compassActive(false), compassHeading(0.0f),
+        hasManualData(false), homeSet(false), homeLat(0.0), homeLng(0.0),
+        compassActive(false), compassHeading(0.0f),
         compassRawHeading(0.0f), compassRoll(0.0f), compassPitch(0.0f),
         compassOffset(0.0f), compassCalSys(0), compassCalGyro(0),
         compassCalAccel(0), compassCalMag(0), compassI2cAddr(0x28) {
@@ -348,6 +349,59 @@ public:
                                  targetLng);
   }
 
+  // Gestão de posição Home / RTL (apenas em memória RAM durante a sessão atual)
+  void setHome(double lat, double lng) {
+    homeLat = lat;
+    homeLng = lng;
+    homeSet = true;
+  }
+
+  bool setHomeToCurrent() {
+    double lat = getLatitude();
+    double lng = getLongitude();
+    if (!hasFix() && (lat == 0.0 && lng == 0.0)) {
+      return false;
+    }
+    setHome(lat, lng);
+    return true;
+  }
+
+  void clearHome() {
+    homeSet = false;
+    homeLat = 0.0;
+    homeLng = 0.0;
+  }
+
+  bool hasHome() const { return homeSet; }
+  double getHomeLatitude() const { return homeLat; }
+  double getHomeLongitude() const { return homeLng; }
+  int32_t getHomeLatDeg7() const {
+    return static_cast<int32_t>(homeLat * 10000000.0);
+  }
+  int32_t getHomeLngDeg7() const {
+    return static_cast<int32_t>(homeLng * 10000000.0);
+  }
+
+  double distanceToHome() {
+    if (!homeSet)
+      return 0.0;
+    double curLat = getLatitude();
+    double curLng = getLongitude();
+    if (!hasFix() && curLat == 0.0 && curLng == 0.0)
+      return 0.0;
+    return TinyGPSPlus::distanceBetween(curLat, curLng, homeLat, homeLng);
+  }
+
+  double courseToHome() {
+    if (!homeSet)
+      return 0.0;
+    double curLat = getLatitude();
+    double curLng = getLongitude();
+    if (!hasFix() && curLat == 0.0 && curLng == 0.0)
+      return 0.0;
+    return TinyGPSPlus::courseTo(curLat, curLng, homeLat, homeLng);
+  }
+
 private:
   HardwareSerial &gpsSerial;
   TinyGPSPlus gps;
@@ -372,6 +426,10 @@ private:
   uint8_t manualSats;
   bool manualFix;
   bool hasManualData;
+
+  bool homeSet;
+  double homeLat;
+  double homeLng;
 
   bool compassActive;
   float compassHeading;

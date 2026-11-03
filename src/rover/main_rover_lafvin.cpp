@@ -6,6 +6,7 @@
 
 #include "actuators.h"
 #include "battery_monitor.h"
+#include "../base/base_joystick.h"
 #include "config_common.h"
 #include "gps_tracker.h"
 #include "lora_protocol.h"
@@ -39,6 +40,7 @@ WebConsoleClass webConsole;
 GPSTracker gps;
 ActuatorController actuators;
 BatteryMonitor battery;
+BaseJoystick joystick;
 RoverDisplay roverDisplay;
 SDCardManager sdCard;
 Adafruit_NeoPixel rgbLed(1, PIN_RGB_LED, NEO_GRB + NEO_KHZ800);
@@ -105,87 +107,42 @@ static bool calibrateLocalJoystick(int samples, int delayMs) {
   return joyHwConnected;
 }
 
-// Controlo de botões e navegação de menus do ecrã do Rover
-static bool lastBootBtnState = false;
-static uint32_t bootPressStartMs = 0;
-static bool bootLongFired = false;
-static bool bootHoldBackFired = false;
-static bool navYArmed = true;
-static bool navXArmed = true;
-static uint32_t lastNavYMs = 0;
-static uint32_t lastNavXMs = 0;
+void printLog(const char *format, ...);
 
 static void disarmRoverNav() {
-  navYArmed = false;
-  navXArmed = false;
-  lastNavYMs = millis();
-  lastNavXMs = millis();
+  joystick.disarmNav();
 }
 
-static void handleRoverMenuInputs(uint32_t now, int joyThr, int joyRud,
-                                  bool &forceDisplay) {
-  bool btnDown = (digitalRead(PIN_BTN_BOOT) == LOW);
-  bool bootShort = false;
-  bool bootLong = false;
-  bool bootHoldBack = false;
+static void handleRoverMenuInputs(uint32_t now, bool &forceDisplay) {
+  (void)now;
+  joystick.update();
 
-  if (btnDown && !lastBootBtnState) {
-    bootPressStartMs = now;
-    bootLongFired = false;
-    bootHoldBackFired = false;
-  } else if (btnDown && lastBootBtnState) {
-    if (!bootLongFired && (now - bootPressStartMs >= 550)) {
-      bootLongFired = true;
-      bootLong = true;
-    }
-    if (!bootHoldBackFired && (now - bootPressStartMs >= 1500)) {
-      bootHoldBackFired = true;
-      bootHoldBack = true;
-    }
-  } else if (!btnDown && lastBootBtnState) {
-    if (!bootLongFired && (now - bootPressStartMs >= 40)) {
-      bootShort = true;
-    }
-  }
-  lastBootBtnState = btnDown;
-
-  int8_t navY = 0;
-  int8_t navX = 0;
-  if (joyHwConnected) {
-    bool upPressed = (joyThr > 45);
-    bool downPressed = (joyThr < -45);
-    if (!upPressed && !downPressed) {
-      if (abs(joyThr) < 20)
-        navYArmed = true;
-    } else if (navYArmed || (now - lastNavYMs >= 260)) {
-      navYArmed = false;
-      lastNavYMs = now;
-      navY = upPressed ? -1 : 1;
-    }
-
-    bool leftPressed = (joyRud < -50);
-    bool rightPressed = (joyRud > 50);
-    if (!leftPressed && !rightPressed) {
-      if (abs(joyRud) < 25)
-        navXArmed = true;
-    } else if (navXArmed && (now - lastNavXMs >= 220)) {
-      navXArmed = false;
-      lastNavXMs = now;
-      navX = leftPressed ? -1 : 1;
-    }
-  }
+  static bool lastModeRaw = false;
+  bool curModeRaw = (digitalRead(PIN_BTN_MODE) == LOW);
+  bool btnModeEdge = (curModeRaw && !lastModeRaw);
+  lastModeRaw = curModeRaw;
 
   RoverScreenPage page = roverDisplay.getCurrentPage();
 
-  // Ecrã QWERTY para password WiFi
+  // Ecrã QWERTY para password WiFi (idêntico à Estação Base)
   if (page == ROVER_PAGE_CONFIG_WIFI_PASS) {
-    if (navX != 0 || navY != 0) {
-      roverDisplay.moveWifiKbCursor(navX, navY);
+    int8_t dx = joystick.getNavXRepeat();
+    int8_t dy = joystick.getNavY();
+    bool keyClick = joystick.wasShortClicked();
+    bool longCancel = joystick.wasLongClicked();
+    joystick.wasBootHeld3s();
+
+    if (dx != 0 || dy != 0) {
+      roverDisplay.moveWifiKbCursor(dx, dy);
       forceDisplay = true;
-    } else if (bootShort && !joyHwConnected) {
-      roverDisplay.moveWifiKbCursor(1, 0);
+    } else if (btnModeEdge) {
+      roverDisplay.backspaceWifiPass();
       forceDisplay = true;
-    } else if ((bootShort && joyHwConnected) || (bootLong && !joyHwConnected)) {
+    } else if (longCancel) {
+      disarmRoverNav();
+      roverDisplay.setPage(ROVER_PAGE_CONFIG_WIFI_SCAN);
+      forceDisplay = true;
+    } else if (keyClick) {
       int8_t res = roverDisplay.pressWifiKbKey();
       forceDisplay = true;
       if (res == -1) {
@@ -209,49 +166,82 @@ static void handleRoverMenuInputs(uint32_t now, int joyThr, int joyRud,
         }
         roverDisplay.setPage(ROVER_PAGE_CONFIG_WIFI);
       }
-    } else if (bootHoldBack) {
-      disarmRoverNav();
-      roverDisplay.setPage(ROVER_PAGE_CONFIG_WIFI_SCAN);
-      forceDisplay = true;
     }
     return;
   }
 
+  // Navegação padrão por Joystick (idêntica à Base):
+  // Eixo Y: itera por cada menu (-1 = Cima, +1 = Baixo)
+  // Eixo X Esquerda (-1): sai da página para o menu/página pai
+  // Eixo X Direita (+1): entra na página ou confirma seleção
+  int8_t navY = joystick.getNavY();
+  int8_t navX = joystick.getNavX();
+  bool bootShort = joystick.wasShortClicked();
+  bool bootLong = joystick.wasLongClicked();
+  bool clickEnter = bootShort;
+  bool clickBack = btnModeEdge || bootLong;
+
   switch (page) {
   case ROVER_PAGE_HOME:
-    if (navY != 0 || bootShort) {
-      int8_t step = (navY != 0) ? navY : 1;
-      roverDisplay.setHomeMenuIdx((roverDisplay.getHomeMenuIdx() + 2 + step) % 2);
+    if (navY != 0) {
+      roverDisplay.setHomeMenuIdx(
+          (roverDisplay.getHomeMenuIdx() + 2 + navY) % 2);
       forceDisplay = true;
-    } else if (navX == 1 || bootLong) {
+    }
+    if (navX == 1 || clickEnter) {
       disarmRoverNav();
       if (roverDisplay.getHomeMenuIdx() == 0) {
         roverDisplay.setPage(ROVER_PAGE_OP_MENU);
+        printLog("[UI] Home -> Operacao\n");
       } else {
         roverDisplay.setPage(ROVER_PAGE_CONFIG_MENU);
+        printLog("[UI] Home -> Configuracoes\n");
       }
       forceDisplay = true;
     }
     break;
 
   case ROVER_PAGE_OP_MENU:
-    if (navY != 0 || bootShort) {
-      int8_t step = (navY != 0) ? navY : 1;
-      roverDisplay.setOpMenuIdx((roverDisplay.getOpMenuIdx() + 3 + step) % 3);
+    if (navY != 0) {
+      roverDisplay.setOpMenuIdx((roverDisplay.getOpMenuIdx() + 4 + navY) % 4);
       forceDisplay = true;
-    } else if (navX == -1 || bootHoldBack) {
+    }
+    if (navX == -1 || clickBack) {
       disarmRoverNav();
       roverDisplay.setPage(ROVER_PAGE_HOME);
       forceDisplay = true;
-    } else if (navX == 1 || bootLong) {
+      printLog("[UI] Operacao -> Home\n");
+    } else if (navX == 1 || clickEnter) {
       disarmRoverNav();
       uint8_t idx = roverDisplay.getOpMenuIdx();
-      if (idx == 0)
+      if (idx == 0) {
         roverDisplay.setPage(ROVER_PAGE_NAV);
-      else if (idx == 1)
+        printLog("[UI] Operacao -> Navegacao\n");
+      } else if (idx == 1) {
         roverDisplay.setPage(ROVER_PAGE_POWER);
-      else
+        printLog("[UI] Operacao -> Bateria\n");
+      } else if (idx == 2) {
         roverDisplay.setPage(ROVER_PAGE_ACTUATORS);
+        printLog("[UI] Operacao -> Atuadores\n");
+      } else {
+        if (gps.setHomeToCurrent()) {
+          char cmd[64];
+          snprintf(cmd, sizeof(cmd), "CMD:SET_HOME:%ld:%ld",
+                   (long)gps.getHomeLatDeg7(), (long)gps.getHomeLngDeg7());
+          interSerial.println(cmd);
+          interSerial.flush();
+          strncpy(queuedWebCommand, cmd, sizeof(queuedWebCommand) - 1);
+          queuedWebCommand[sizeof(queuedWebCommand) - 1] = '\0';
+          roverDisplay.showFeedback("HOME RTL DEFINIDO!", 2000);
+          printLog("[UI] ★ Operacao -> SET RTL gravado em RAM (%.6f, %.6f)\n",
+                   gps.getHomeLatitude(), gps.getHomeLongitude());
+        } else {
+          interSerial.println("CMD:SET_HOME");
+          interSerial.flush();
+          roverDisplay.showFeedback("SEM FIX GPS P/ RTL!", 2000);
+          printLog("[UI] ⚠ Operacao -> SET RTL sem fix GPS local!\n");
+        }
+      }
       forceDisplay = true;
     }
     break;
@@ -259,65 +249,75 @@ static void handleRoverMenuInputs(uint32_t now, int joyThr, int joyRud,
   case ROVER_PAGE_NAV:
   case ROVER_PAGE_POWER:
   case ROVER_PAGE_ACTUATORS:
-    if (navX == -1 || bootShort || bootLong) {
+    if (navX == -1 || clickBack || clickEnter) {
       disarmRoverNav();
       roverDisplay.setPage(ROVER_PAGE_OP_MENU);
       forceDisplay = true;
+      printLog("[UI] Voltou para Operacao\n");
     }
     break;
 
   case ROVER_PAGE_CONFIG_MENU:
-    if (navY != 0 || bootShort) {
-      int8_t step = (navY != 0) ? navY : 1;
+    if (navY != 0) {
       roverDisplay.setConfigMenuIdx(
-          (roverDisplay.getConfigMenuIdx() + 4 + step) % 4);
+          (roverDisplay.getConfigMenuIdx() + 4 + navY) % 4);
       forceDisplay = true;
-    } else if (navX == -1 || bootHoldBack) {
+    }
+    if (navX == -1 || clickBack) {
       disarmRoverNav();
       roverDisplay.setPage(ROVER_PAGE_HOME);
       forceDisplay = true;
-    } else if (navX == 1 || bootLong) {
+      printLog("[UI] Configuracoes -> Home\n");
+    } else if (navX == 1 || clickEnter) {
       disarmRoverNav();
       uint8_t idx = roverDisplay.getConfigMenuIdx();
-      if (idx == 0)
+      if (idx == 0) {
         roverDisplay.setPage(ROVER_PAGE_CONFIG_WIFI);
-      else if (idx == 1)
+        printLog("[UI] Configuracoes -> WiFi\n");
+      } else if (idx == 1) {
         roverDisplay.setPage(ROVER_PAGE_CONFIG_ID);
-      else if (idx == 2)
+        printLog("[UI] Configuracoes -> ID\n");
+      } else if (idx == 2) {
         roverDisplay.setPage(ROVER_PAGE_CONFIG_FW);
-      else
+        printLog("[UI] Configuracoes -> Firmware\n");
+      } else {
         roverDisplay.setPage(ROVER_PAGE_CONFIG_LORA);
+        printLog("[UI] Configuracoes -> LoRa\n");
+      }
       forceDisplay = true;
     }
     break;
 
   case ROVER_PAGE_CONFIG_WIFI:
-    if (navX == -1 || bootShort) {
+    if (navX == -1 || clickBack) {
       disarmRoverNav();
       roverDisplay.setPage(ROVER_PAGE_CONFIG_MENU);
       forceDisplay = true;
-    } else if (navX == 1 || bootLong) {
+      printLog("[UI] WiFi -> Configuracoes\n");
+    } else if (navX == 1 || clickEnter) {
       disarmRoverNav();
       size_t totalItems = 1 + wifiConfig.getNetworks().size();
       roverDisplay.setWifiListIdx(0, totalItems);
       roverDisplay.setPage(ROVER_PAGE_CONFIG_WIFI_LIST);
       forceDisplay = true;
+      printLog("[UI] WiFi -> Lista\n");
     }
     break;
 
   case ROVER_PAGE_CONFIG_WIFI_LIST: {
     const auto &nets = wifiConfig.getNetworks();
     size_t total = 1 + nets.size();
-    if ((navY != 0 || bootShort) && total > 0) {
-      int8_t step = (navY != 0) ? navY : 1;
-      uint8_t nextIdx = (roverDisplay.getWifiListIdx() + total + step) % total;
+    if (navY != 0 && total > 0) {
+      uint8_t nextIdx = (roverDisplay.getWifiListIdx() + total + navY) % total;
       roverDisplay.setWifiListIdx(nextIdx, total);
       forceDisplay = true;
-    } else if (navX == -1 || bootHoldBack) {
+    }
+    if (navX == -1 || clickBack) {
       disarmRoverNav();
       roverDisplay.setPage(ROVER_PAGE_CONFIG_WIFI);
       forceDisplay = true;
-    } else if (navX == 1 || bootLong) {
+      printLog("[UI] Lista -> WiFi\n");
+    } else if (navX == 1 || clickEnter) {
       uint8_t idx = roverDisplay.getWifiListIdx();
       if (idx == 0) {
         roverDisplay.showWifiScanningScreen();
@@ -351,16 +351,17 @@ static void handleRoverMenuInputs(uint32_t now, int joyThr, int joyRud,
   case ROVER_PAGE_CONFIG_WIFI_SCAN: {
     const auto &scanned = wifiConfig.getScannedNetworks();
     size_t total = scanned.size();
-    if ((navY != 0 || bootShort) && total > 0) {
-      int8_t step = (navY != 0) ? navY : 1;
-      uint8_t nextIdx = (roverDisplay.getWifiScanIdx() + total + step) % total;
+    if (navY != 0 && total > 0) {
+      uint8_t nextIdx = (roverDisplay.getWifiScanIdx() + total + navY) % total;
       roverDisplay.setWifiScanIdx(nextIdx, total);
       forceDisplay = true;
-    } else if (navX == -1 || bootHoldBack || (bootShort && total == 0)) {
+    }
+    if (navX == -1 || clickBack) {
       disarmRoverNav();
       roverDisplay.setPage(ROVER_PAGE_CONFIG_WIFI_LIST);
       forceDisplay = true;
-    } else if ((navX == 1 || bootLong) && total > 0) {
+      printLog("[UI] Scan -> Lista\n");
+    } else if ((navX == 1 || clickEnter) && total > 0) {
       uint8_t idx = roverDisplay.getWifiScanIdx();
       if (idx < total) {
         const auto &sn = scanned[idx];
@@ -398,10 +399,11 @@ static void handleRoverMenuInputs(uint32_t now, int joyThr, int joyRud,
   case ROVER_PAGE_CONFIG_ID:
   case ROVER_PAGE_CONFIG_FW:
   case ROVER_PAGE_CONFIG_LORA:
-    if (navX == -1 || bootShort || bootLong) {
+    if (navX == -1 || clickBack || clickEnter) {
       disarmRoverNav();
       roverDisplay.setPage(ROVER_PAGE_CONFIG_MENU);
       forceDisplay = true;
+      printLog("[UI] Voltou para Configuracoes\n");
     }
     break;
 
@@ -569,27 +571,15 @@ void setup() {
       "[UART] Canal serie com C6 iniciado nos pinos TX=%d, RX=%d (%d baud)\n",
       PIN_INTER_ESP_LAFVIN_TX, PIN_INTER_ESP_LAFVIN_RX, INTER_ESP_BAUDRATE);
 
-  // 7. Botão BOOT para navegar nos menus do ecrã
-  pinMode(PIN_BTN_BOOT, INPUT_PULLUP);
-
-  // 8. Configurar Joystick Analógico (Pad 3=GPIO 3, Pad 6=GPIO 0)
-  analogReadResolution(12);
-  pinMode(PIN_JOYSTICK_X, INPUT);
-  pinMode(PIN_JOYSTICK_Y, INPUT);
-
-  if (roverConfig.isJoystickEnabled()) {
-    // Auto-calibração do Ponto Neutro / Centro com verificação de presença
-    // física do hardware
-    calibrateLocalJoystick(30, 5);
-    printLog("[JOYSTICK] Auto-calibracao de centro concluida: X0=%d, Y0=%d "
-             "(HW_detetado=%s)\n",
-             joyCenterX, joyCenterY,
-             joyHwConnected ? "SIM" : "NAO - pinos flutuantes ignorados");
-  } else {
-    joyHwConnected = false;
-    printLog("[JOYSTICK] Desativado nas configuracoes (modo sem joystick "
-             "fisico montado)\n");
-  }
+  // 7. Inicializar Joystick e Botões (mesmo driver BaseJoystick usado na Base)
+  joystick.begin();
+  joyCenterX = joystick.getCenterX();
+  joyCenterY = joystick.getCenterY();
+  joyHwConnected =
+      joystick.isAxisXConnected() || joystick.isAxisYConnected();
+  printLog("[JOYSTICK] Inicializado (X0=%d [%s], Y0=%d [%s])\n", joyCenterX,
+           joystick.isAxisXConnected() ? "OK" : "ABERTO", joyCenterY,
+           joystick.isAxisYConnected() ? "OK" : "ABERTO");
 
   roverDisplay.bootLogf(UI_GREEN, 100, "[BOOT] Sistema Pronto!");
   roverDisplay.endBootScreen(600);
@@ -610,11 +600,9 @@ void loop() {
   // 1. Processar clientes HTTP Web
   webServer.handleClient();
 
-  // 2. Navegação de Menus (Botão BOOT e Joystick se ligado)
+  // 2. Navegação de Menus (Joystick + Botões, idêntico ao firmware da Base)
   bool forceDisplay = false;
-  static int curJoyThr = 0;
-  static int curJoyRud = 0;
-  handleRoverMenuInputs(now, curJoyThr, curJoyRud, forceDisplay);
+  handleRoverMenuInputs(now, forceDisplay);
 
   // 3. Leitura do Joystick Analógico com Curso Completo (100% no fim mecânico)
   static uint32_t lastJoyReadTime = 0;
@@ -706,9 +694,6 @@ void loop() {
         maxSeenUp = d;
       thr = constrain(d * 100 / maxSeenUp, 0, 100);
     }
-
-    curJoyThr = thr;
-    curJoyRud = rud;
 
     if (rud != 0 || thr != 0) {
       joyActive = true;
@@ -870,6 +855,18 @@ void loop() {
                                (uint8_t)calSys, (uint8_t)calMag, cmpOff,
                                (uint8_t)calGyro, (uint8_t)calAccel, cmpRawHead,
                                (uint8_t)i2cAddr);
+          }
+        } else if (strncmp(rxBuf, "HOME_STAT:", 10) == 0) {
+          lastUartRxTime = now;
+          int hmSet = 0;
+          long hmLat7 = 0, hmLng7 = 0;
+          if (sscanf(rxBuf + 10, "%d:%ld:%ld", &hmSet, &hmLat7, &hmLng7) >= 1) {
+            if (hmSet != 0 && (hmLat7 != 0 || hmLng7 != 0)) {
+              gps.setHome((double)hmLat7 / 10000000.0,
+                          (double)hmLng7 / 10000000.0);
+            } else if (hmSet == 0) {
+              gps.clearHome();
+            }
           }
         } else {
           lastUartRxTime = now;

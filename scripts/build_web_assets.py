@@ -1300,6 +1300,48 @@ GPS_CONTENT = """
       <i class="fa-solid fa-location-dot"></i> Google Maps
     </a>
   </div>
+
+  <!-- Secção Ponto Home / Return to Launch (RTL) em RAM -->
+  <div style="margin-top:18px;background:rgba(0,0,0,0.25);padding:14px;border-radius:10px;border:1px solid var(--card-border);">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+      <span style="font-weight:700;color:var(--text);font-size:0.95rem;">
+        <i class="fa-solid fa-house" style="color:var(--primary);"></i> Ponto Home / Return to Launch (RTL)
+      </span>
+      <span id="homeBadge" class="badge" style="background:rgba(245,158,11,0.15);color:var(--yellow);border:1px solid var(--yellow);">
+        HOME NÃO DEFINIDO
+      </span>
+    </div>
+    <div class="grid-4" style="margin-bottom:12px;">
+      <div class="stat-box">
+        <div class="stat-label">Latitude Home</div>
+        <div class="stat-value" id="homeLatVal" style="font-size:1.1rem;">--</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Longitude Home</div>
+        <div class="stat-value" id="homeLngVal" style="font-size:1.1rem;">--</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Distância até Home</div>
+        <div class="stat-value" id="homeDistVal" style="font-size:1.1rem;color:var(--primary);">--</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Rumo p/ Home</div>
+        <div class="stat-value" id="homeCourseVal" style="font-size:1.1rem;">--</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+      <button type="button" class="btn btn-primary" onclick="setGpsHome()">
+        <i class="fa-solid fa-location-dot"></i> Definir Posição Atual como Home (SET RTL)
+      </button>
+      <button type="button" class="btn btn-secondary" onclick="triggerGpsRtl()">
+        <i class="fa-solid fa-house"></i> Ativar RTL (Regressar a Home)
+      </button>
+      <button type="button" class="btn btn-secondary" onclick="clearGpsHome()">
+        <i class="fa-solid fa-trash-can"></i> Limpar Home
+      </button>
+      <span id="homeFeedback" style="font-size:0.82rem;color:var(--green);font-weight:600;"></span>
+    </div>
+  </div>
 </div>
 
 <!-- Painel de Configuração Quectel LC29H -->
@@ -1378,6 +1420,51 @@ GPS_CONTENT = """
 </div>
 
 <script>
+function setGpsHome() {
+  fetch('/api/gps/home', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({use_current: true})
+  }).then(r => r.json()).then(res => {
+    const el = document.getElementById('homeFeedback');
+    if (el) {
+      el.style.color = res.success ? 'var(--green)' : 'var(--red)';
+      el.innerText = res.msg || 'OK';
+      setTimeout(() => el.innerText = '', 4000);
+    }
+    if (typeof showToast === 'function' && res.msg) showToast(res.msg, !res.success);
+  });
+}
+function clearGpsHome() {
+  fetch('/api/gps/home', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({clear: true})
+  }).then(r => r.json()).then(res => {
+    const el = document.getElementById('homeFeedback');
+    if (el) {
+      el.style.color = 'var(--yellow)';
+      el.innerText = res.msg || 'Home limpo';
+      setTimeout(() => el.innerText = '', 4000);
+    }
+    if (typeof showToast === 'function' && res.msg) showToast(res.msg, false);
+  });
+}
+function triggerGpsRtl() {
+  fetch('/api/control/action', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({action: 7})
+  }).then(r => r.json()).then(res => {
+    const el = document.getElementById('homeFeedback');
+    if (el) {
+      el.style.color = res.success ? 'var(--green)' : 'var(--red)';
+      el.innerText = res.msg || 'OK';
+      setTimeout(() => el.innerText = '', 4000);
+    }
+    if (typeof showToast === 'function' && res.msg) showToast(res.msg, !res.success);
+  });
+}
 function zeroCompass() {
   fetch('/api/compass/calibrate', {
     method: 'POST',
@@ -1475,6 +1562,21 @@ setInterval(() => {
       if (cc && g.compass_cal_sys !== undefined) cc.innerText = (g.compass_cal_sys || 0) + '/3 • ' + (g.compass_cal_mag || 0) + '/3';
       const co = document.getElementById('cmpOff');
       if (co && g.compass_offset !== undefined) co.innerText = (g.compass_offset || 0).toFixed(1) + '°';
+      const hb = document.getElementById('homeBadge');
+      if (hb) {
+        hb.innerText = g.home_set ? 'HOME DEFINIDO (RAM)' : 'HOME NÃO DEFINIDO';
+        hb.style.color = g.home_set ? 'var(--green)' : 'var(--yellow)';
+        hb.style.borderColor = g.home_set ? 'var(--green)' : 'var(--yellow)';
+        hb.style.background = g.home_set ? 'rgba(16,185,129,0.2)' : 'rgba(245,158,11,0.15)';
+      }
+      const hLat = document.getElementById('homeLatVal');
+      if (hLat) hLat.innerText = g.home_set ? (g.home_lat || 0).toFixed(6) : '--';
+      const hLng = document.getElementById('homeLngVal');
+      if (hLng) hLng.innerText = g.home_set ? (g.home_lng || 0).toFixed(6) : '--';
+      const hDist = document.getElementById('homeDistVal');
+      if (hDist) hDist.innerText = g.home_set ? ((g.home_dist_m || 0).toFixed(1) + ' m') : '--';
+      const hCrs = document.getElementById('homeCourseVal');
+      if (hCrs) hCrs.innerText = g.home_set ? ((g.home_course_deg || 0).toFixed(0) + '°') : '--';
     }).catch(() => {});
 }, 1000);
 </script>

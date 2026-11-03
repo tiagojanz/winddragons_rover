@@ -350,6 +350,8 @@ private:
             action = ACTION_PING;
         } else if (strcmp(actionStr, "MANUAL") == 0) {
             action = ACTION_MANUAL;
+        } else if (strcmp(actionStr, "SET_RTL") == 0 || strcmp(actionStr, "SET_HOME") == 0) {
+            action = ACTION_SET_HOME;
         }
 
         if (action != ACTION_NONE) {
