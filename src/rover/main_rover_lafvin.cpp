@@ -105,11 +105,310 @@ static bool calibrateLocalJoystick(int samples, int delayMs) {
   return joyHwConnected;
 }
 
-void IRAM_ATTR isrBootButton() {
-  uint32_t now = millis();
-  if (now - lastBtnPressTime > 200) {
-    lastBtnPressTime = now;
-    flagPageChange = true;
+// Controlo de botões e navegação de menus do ecrã do Rover
+static bool lastBootBtnState = false;
+static uint32_t bootPressStartMs = 0;
+static bool bootLongFired = false;
+static bool bootHoldBackFired = false;
+static bool navYArmed = true;
+static bool navXArmed = true;
+static uint32_t lastNavYMs = 0;
+static uint32_t lastNavXMs = 0;
+
+static void disarmRoverNav() {
+  navYArmed = false;
+  navXArmed = false;
+  lastNavYMs = millis();
+  lastNavXMs = millis();
+}
+
+static void handleRoverMenuInputs(uint32_t now, int joyThr, int joyRud,
+                                  bool &forceDisplay) {
+  bool btnDown = (digitalRead(PIN_BTN_BOOT) == LOW);
+  bool bootShort = false;
+  bool bootLong = false;
+  bool bootHoldBack = false;
+
+  if (btnDown && !lastBootBtnState) {
+    bootPressStartMs = now;
+    bootLongFired = false;
+    bootHoldBackFired = false;
+  } else if (btnDown && lastBootBtnState) {
+    if (!bootLongFired && (now - bootPressStartMs >= 550)) {
+      bootLongFired = true;
+      bootLong = true;
+    }
+    if (!bootHoldBackFired && (now - bootPressStartMs >= 1500)) {
+      bootHoldBackFired = true;
+      bootHoldBack = true;
+    }
+  } else if (!btnDown && lastBootBtnState) {
+    if (!bootLongFired && (now - bootPressStartMs >= 40)) {
+      bootShort = true;
+    }
+  }
+  lastBootBtnState = btnDown;
+
+  int8_t navY = 0;
+  int8_t navX = 0;
+  if (joyHwConnected) {
+    bool upPressed = (joyThr > 45);
+    bool downPressed = (joyThr < -45);
+    if (!upPressed && !downPressed) {
+      if (abs(joyThr) < 20)
+        navYArmed = true;
+    } else if (navYArmed || (now - lastNavYMs >= 260)) {
+      navYArmed = false;
+      lastNavYMs = now;
+      navY = upPressed ? -1 : 1;
+    }
+
+    bool leftPressed = (joyRud < -50);
+    bool rightPressed = (joyRud > 50);
+    if (!leftPressed && !rightPressed) {
+      if (abs(joyRud) < 25)
+        navXArmed = true;
+    } else if (navXArmed && (now - lastNavXMs >= 220)) {
+      navXArmed = false;
+      lastNavXMs = now;
+      navX = leftPressed ? -1 : 1;
+    }
+  }
+
+  RoverScreenPage page = roverDisplay.getCurrentPage();
+
+  // Ecrã QWERTY para password WiFi
+  if (page == ROVER_PAGE_CONFIG_WIFI_PASS) {
+    if (navX != 0 || navY != 0) {
+      roverDisplay.moveWifiKbCursor(navX, navY);
+      forceDisplay = true;
+    } else if (bootShort && !joyHwConnected) {
+      roverDisplay.moveWifiKbCursor(1, 0);
+      forceDisplay = true;
+    } else if ((bootShort && joyHwConnected) || (bootLong && !joyHwConnected)) {
+      int8_t res = roverDisplay.pressWifiKbKey();
+      forceDisplay = true;
+      if (res == -1) {
+        disarmRoverNav();
+        roverDisplay.setPage(ROVER_PAGE_CONFIG_WIFI_SCAN);
+      } else if (res == 1) {
+        String targetSsid = roverDisplay.getWifiTargetSsid();
+        String pass = roverDisplay.getWifiPassBuffer();
+        roverDisplay.showWifiConnectingScreen(targetSsid.c_str());
+        wifiConfig.addOrUpdateNetwork(targetSsid, pass, true);
+        bool ok = wifiConfig.connectTo(targetSsid, 8000);
+        disarmRoverNav();
+        if (ok) {
+          roverDisplay.showFeedback("WIFI CONECTADO!", 2000);
+        } else {
+          char apName[32];
+          snprintf(apName, sizeof(apName), "WINDDRAGONS-ROVER-%02d",
+                   roverConfig.getRoverId());
+          wifiConfig.startAccessPoint(apName, "winddragon");
+          roverDisplay.showFeedback("FALHA! MODO AP ATIVO", 2000);
+        }
+        roverDisplay.setPage(ROVER_PAGE_CONFIG_WIFI);
+      }
+    } else if (bootHoldBack) {
+      disarmRoverNav();
+      roverDisplay.setPage(ROVER_PAGE_CONFIG_WIFI_SCAN);
+      forceDisplay = true;
+    }
+    return;
+  }
+
+  switch (page) {
+  case ROVER_PAGE_HOME:
+    if (navY != 0 || bootShort) {
+      int8_t step = (navY != 0) ? navY : 1;
+      roverDisplay.setHomeMenuIdx((roverDisplay.getHomeMenuIdx() + 2 + step) % 2);
+      forceDisplay = true;
+    } else if (navX == 1 || bootLong) {
+      disarmRoverNav();
+      if (roverDisplay.getHomeMenuIdx() == 0) {
+        roverDisplay.setPage(ROVER_PAGE_OP_MENU);
+      } else {
+        roverDisplay.setPage(ROVER_PAGE_CONFIG_MENU);
+      }
+      forceDisplay = true;
+    }
+    break;
+
+  case ROVER_PAGE_OP_MENU:
+    if (navY != 0 || bootShort) {
+      int8_t step = (navY != 0) ? navY : 1;
+      roverDisplay.setOpMenuIdx((roverDisplay.getOpMenuIdx() + 3 + step) % 3);
+      forceDisplay = true;
+    } else if (navX == -1 || bootHoldBack) {
+      disarmRoverNav();
+      roverDisplay.setPage(ROVER_PAGE_HOME);
+      forceDisplay = true;
+    } else if (navX == 1 || bootLong) {
+      disarmRoverNav();
+      uint8_t idx = roverDisplay.getOpMenuIdx();
+      if (idx == 0)
+        roverDisplay.setPage(ROVER_PAGE_NAV);
+      else if (idx == 1)
+        roverDisplay.setPage(ROVER_PAGE_POWER);
+      else
+        roverDisplay.setPage(ROVER_PAGE_ACTUATORS);
+      forceDisplay = true;
+    }
+    break;
+
+  case ROVER_PAGE_NAV:
+  case ROVER_PAGE_POWER:
+  case ROVER_PAGE_ACTUATORS:
+    if (navX == -1 || bootShort || bootLong) {
+      disarmRoverNav();
+      roverDisplay.setPage(ROVER_PAGE_OP_MENU);
+      forceDisplay = true;
+    }
+    break;
+
+  case ROVER_PAGE_CONFIG_MENU:
+    if (navY != 0 || bootShort) {
+      int8_t step = (navY != 0) ? navY : 1;
+      roverDisplay.setConfigMenuIdx(
+          (roverDisplay.getConfigMenuIdx() + 4 + step) % 4);
+      forceDisplay = true;
+    } else if (navX == -1 || bootHoldBack) {
+      disarmRoverNav();
+      roverDisplay.setPage(ROVER_PAGE_HOME);
+      forceDisplay = true;
+    } else if (navX == 1 || bootLong) {
+      disarmRoverNav();
+      uint8_t idx = roverDisplay.getConfigMenuIdx();
+      if (idx == 0)
+        roverDisplay.setPage(ROVER_PAGE_CONFIG_WIFI);
+      else if (idx == 1)
+        roverDisplay.setPage(ROVER_PAGE_CONFIG_ID);
+      else if (idx == 2)
+        roverDisplay.setPage(ROVER_PAGE_CONFIG_FW);
+      else
+        roverDisplay.setPage(ROVER_PAGE_CONFIG_LORA);
+      forceDisplay = true;
+    }
+    break;
+
+  case ROVER_PAGE_CONFIG_WIFI:
+    if (navX == -1 || bootShort) {
+      disarmRoverNav();
+      roverDisplay.setPage(ROVER_PAGE_CONFIG_MENU);
+      forceDisplay = true;
+    } else if (navX == 1 || bootLong) {
+      disarmRoverNav();
+      size_t totalItems = 1 + wifiConfig.getNetworks().size();
+      roverDisplay.setWifiListIdx(0, totalItems);
+      roverDisplay.setPage(ROVER_PAGE_CONFIG_WIFI_LIST);
+      forceDisplay = true;
+    }
+    break;
+
+  case ROVER_PAGE_CONFIG_WIFI_LIST: {
+    const auto &nets = wifiConfig.getNetworks();
+    size_t total = 1 + nets.size();
+    if ((navY != 0 || bootShort) && total > 0) {
+      int8_t step = (navY != 0) ? navY : 1;
+      uint8_t nextIdx = (roverDisplay.getWifiListIdx() + total + step) % total;
+      roverDisplay.setWifiListIdx(nextIdx, total);
+      forceDisplay = true;
+    } else if (navX == -1 || bootHoldBack) {
+      disarmRoverNav();
+      roverDisplay.setPage(ROVER_PAGE_CONFIG_WIFI);
+      forceDisplay = true;
+    } else if (navX == 1 || bootLong) {
+      uint8_t idx = roverDisplay.getWifiListIdx();
+      if (idx == 0) {
+        roverDisplay.showWifiScanningScreen();
+        const auto &scanned = wifiConfig.scanNetworks();
+        disarmRoverNav();
+        roverDisplay.setWifiScanIdx(0, scanned.size());
+        roverDisplay.setPage(ROVER_PAGE_CONFIG_WIFI_SCAN);
+        forceDisplay = true;
+      } else if ((idx - 1) < nets.size()) {
+        String targetSsid = nets[idx - 1].ssid;
+        roverDisplay.showWifiConnectingScreen(targetSsid.c_str());
+        wifiConfig.setDefault(targetSsid);
+        bool ok = wifiConfig.connectTo(targetSsid, 8000);
+        disarmRoverNav();
+        if (ok) {
+          roverDisplay.showFeedback("WIFI CONECTADO!", 2000);
+        } else {
+          char apName[32];
+          snprintf(apName, sizeof(apName), "WINDDRAGONS-ROVER-%02d",
+                   roverConfig.getRoverId());
+          wifiConfig.startAccessPoint(apName, "winddragon");
+          roverDisplay.showFeedback("FALHA! MODO AP ATIVO", 2000);
+        }
+        roverDisplay.setPage(ROVER_PAGE_CONFIG_WIFI);
+        forceDisplay = true;
+      }
+    }
+    break;
+  }
+
+  case ROVER_PAGE_CONFIG_WIFI_SCAN: {
+    const auto &scanned = wifiConfig.getScannedNetworks();
+    size_t total = scanned.size();
+    if ((navY != 0 || bootShort) && total > 0) {
+      int8_t step = (navY != 0) ? navY : 1;
+      uint8_t nextIdx = (roverDisplay.getWifiScanIdx() + total + step) % total;
+      roverDisplay.setWifiScanIdx(nextIdx, total);
+      forceDisplay = true;
+    } else if (navX == -1 || bootHoldBack || (bootShort && total == 0)) {
+      disarmRoverNav();
+      roverDisplay.setPage(ROVER_PAGE_CONFIG_WIFI_LIST);
+      forceDisplay = true;
+    } else if ((navX == 1 || bootLong) && total > 0) {
+      uint8_t idx = roverDisplay.getWifiScanIdx();
+      if (idx < total) {
+        const auto &sn = scanned[idx];
+        if (wifiConfig.hasSavedNetwork(sn.ssid) || sn.open) {
+          roverDisplay.showWifiConnectingScreen(sn.ssid.c_str());
+          if (sn.open && !wifiConfig.hasSavedNetwork(sn.ssid)) {
+            wifiConfig.addOrUpdateNetwork(sn.ssid, "", true);
+          } else {
+            wifiConfig.setDefault(sn.ssid);
+          }
+          bool ok = wifiConfig.connectTo(sn.ssid, 8000);
+          disarmRoverNav();
+          if (ok) {
+            roverDisplay.showFeedback("WIFI CONECTADO!", 2000);
+          } else {
+            char apName[32];
+            snprintf(apName, sizeof(apName), "WINDDRAGONS-ROVER-%02d",
+                     roverConfig.getRoverId());
+            wifiConfig.startAccessPoint(apName, "winddragon");
+            roverDisplay.showFeedback("FALHA! MODO AP ATIVO", 2000);
+          }
+          roverDisplay.setPage(ROVER_PAGE_CONFIG_WIFI);
+          forceDisplay = true;
+        } else {
+          roverDisplay.beginWifiPasswordEntry(sn.ssid.c_str());
+          disarmRoverNav();
+          roverDisplay.setPage(ROVER_PAGE_CONFIG_WIFI_PASS);
+          forceDisplay = true;
+        }
+      }
+    }
+    break;
+  }
+
+  case ROVER_PAGE_CONFIG_ID:
+  case ROVER_PAGE_CONFIG_FW:
+  case ROVER_PAGE_CONFIG_LORA:
+    if (navX == -1 || bootShort || bootLong) {
+      disarmRoverNav();
+      roverDisplay.setPage(ROVER_PAGE_CONFIG_MENU);
+      forceDisplay = true;
+    }
+    break;
+
+  default:
+    roverDisplay.setPage(ROVER_PAGE_HOME);
+    forceDisplay = true;
+    break;
   }
 }
 
@@ -222,6 +521,7 @@ void setup() {
   char apName[32];
   snprintf(apName, sizeof(apName), "WINDDRAGONS-ROVER-%02d", currentRoverId);
   wifiConfig.begin(&sdCard);
+  roverDisplay.setWiFiConfigManager(&wifiConfig);
 
   roverDisplay.bootLogf(UI_YELLOW, 65, "[WIFI] A procurar redes...");
   printLog("[WIFI] A procurar redes no cartao SD / NVS...\n");
@@ -269,9 +569,8 @@ void setup() {
       "[UART] Canal serie com C6 iniciado nos pinos TX=%d, RX=%d (%d baud)\n",
       PIN_INTER_ESP_LAFVIN_TX, PIN_INTER_ESP_LAFVIN_RX, INTER_ESP_BAUDRATE);
 
-  // 7. Botão BOOT para alternar ecrãs
+  // 7. Botão BOOT para navegar nos menus do ecrã
   pinMode(PIN_BTN_BOOT, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(PIN_BTN_BOOT), isrBootButton, FALLING);
 
   // 8. Configurar Joystick Analógico (Pad 3=GPIO 3, Pad 6=GPIO 0)
   analogReadResolution(12);
@@ -311,13 +610,11 @@ void loop() {
   // 1. Processar clientes HTTP Web
   webServer.handleClient();
 
-  // 2. Interrupção do Botão BOOT para troca de página
+  // 2. Navegação de Menus (Botão BOOT e Joystick se ligado)
   bool forceDisplay = false;
-  if (flagPageChange) {
-    flagPageChange = false;
-    roverDisplay.nextPage();
-    forceDisplay = true;
-  }
+  static int curJoyThr = 0;
+  static int curJoyRud = 0;
+  handleRoverMenuInputs(now, curJoyThr, curJoyRud, forceDisplay);
 
   // 3. Leitura do Joystick Analógico com Curso Completo (100% no fim mecânico)
   static uint32_t lastJoyReadTime = 0;
@@ -409,6 +706,9 @@ void loop() {
         maxSeenUp = d;
       thr = constrain(d * 100 / maxSeenUp, 0, 100);
     }
+
+    curJoyThr = thr;
+    curJoyRud = rud;
 
     if (rud != 0 || thr != 0) {
       joyActive = true;
@@ -552,6 +852,7 @@ void loop() {
             roverLoraDiag.rssi = rssi;
             roverLoraDiag.snr = snr;
             roverLoraDiag.hasContact = (contact != 0);
+            roverDisplay.setLoraStats(txT, rxP, ago, snr, contact != 0);
           }
         } else if (strncmp(rxBuf, "COMPASS_STAT:", 13) == 0) {
           lastUartRxTime = now;
