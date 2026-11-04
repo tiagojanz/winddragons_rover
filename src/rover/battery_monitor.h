@@ -27,7 +27,7 @@ public:
           lastUpdateMs(0),
           adsAvailable(false),
           cellCount(4),
-          capacityMah(2650) {}
+          capacityMah(3000) {}
 
     void setCellCount(uint8_t cells) {
         if (cells == 3 || cells == 4 || cells == 6) {
@@ -197,5 +197,5 @@ private:
     bool     useDirectAdc = false;
     bool     useRemoteValues = false;
     uint8_t  cellCount = 4;
-    uint16_t capacityMah = 2650;
+    uint16_t capacityMah = 3000;
 };

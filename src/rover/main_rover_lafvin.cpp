@@ -124,6 +124,152 @@ static void handleRoverMenuInputs(uint32_t now, bool &forceDisplay) {
 
   RoverScreenPage page = roverDisplay.getCurrentPage();
 
+  // Ecrãs Interativos com Joystick (Atuadores e Teste do Joystick):
+  // Retenção de 3 segundos no botão BOOT abre modal SAIR | CONTINUAR
+  if (page == ROVER_PAGE_CONFIG_JOY_TEST || page == ROVER_PAGE_ACTUATORS) {
+    RoverScreenPage parentPage = (page == ROVER_PAGE_ACTUATORS)
+                                     ? ROVER_PAGE_OP_MENU
+                                     : ROVER_PAGE_CONFIG_JOY;
+    if (!roverDisplay.isJoyExitPromptActive()) {
+      uint8_t holdPct = joystick.getBootHoldProgressPct(3000);
+      if (holdPct != roverDisplay.getBootHoldProgressPct()) {
+        roverDisplay.setBootHoldProgressPct(holdPct);
+        forceDisplay = true;
+      }
+      joystick.wasShortClicked();
+      joystick.wasLongClicked();
+      joystick.getNavX();
+      joystick.getNavY();
+
+      if (joystick.wasBootHeld3s()) {
+        disarmRoverNav();
+        roverDisplay.setJoyExitPromptActive(true);
+        roverDisplay.setJoyExitCursorIdx(0); // 0 = SAIR
+        roverDisplay.setBootHoldProgressPct(0);
+        forceDisplay = true;
+        printLog("[UI] Hold BOOT 3s -> Modal Sair/Continuar\n");
+      }
+    } else {
+      int8_t navY = joystick.getNavY();
+      int8_t navX = joystick.getNavX();
+      bool confirm = joystick.wasShortClicked() || joystick.wasLongClicked();
+      joystick.wasBootHeld3s();
+
+      if (navY != 0 || navX != 0) {
+        roverDisplay.setJoyExitCursorIdx(
+            (roverDisplay.getJoyExitCursorIdx() + 1) % 2);
+        forceDisplay = true;
+      }
+      if (confirm) {
+        if (roverDisplay.getJoyExitCursorIdx() == 0) {
+          disarmRoverNav();
+          roverDisplay.setJoyExitPromptActive(false);
+          roverDisplay.setPage(parentPage);
+          forceDisplay = true;
+          printLog("[UI] Confirmou SAIR -> Menu Pai\n");
+        } else {
+          disarmRoverNav();
+          roverDisplay.setJoyExitPromptActive(false);
+          forceDisplay = true;
+          printLog("[UI] Confirmou CONTINUAR\n");
+        }
+      }
+    }
+    return;
+  }
+
+  // Wizard de Calibração do Joystick em 5 Passos (BOOT avança, MODE cancela)
+  if (page == ROVER_PAGE_CONFIG_JOY_CAL) {
+    roverDisplay.updateJoyCalSample(joystick.getRawX(), joystick.getRawY());
+    joystick.getNavX();
+    joystick.getNavY();
+    joystick.wasLongClicked();
+    joystick.wasBootHeld3s();
+    bool advance = joystick.wasShortClicked();
+
+    if (btnModeEdge) {
+      disarmRoverNav();
+      roverDisplay.setPage(ROVER_PAGE_CONFIG_JOY);
+      forceDisplay = true;
+      printLog("[UI] Wizard Calibracao Joystick cancelado\n");
+    } else if (advance) {
+      if (!roverDisplay.isJoyCalStepReady()) {
+        roverDisplay.showFeedback("ENCOSTE O JOYSTICK AO FIM!", 1400);
+        forceDisplay = true;
+      } else {
+        uint8_t step = roverDisplay.getJoyCalStep();
+        if (step < 4) {
+          roverDisplay.setJoyCalStep(step + 1);
+          forceDisplay = true;
+          printLog("[UI] Wizard Calibracao Joystick -> Passo %u/5\n",
+                   (unsigned)(step + 2));
+        } else {
+          uint16_t cx = roverDisplay.getJoyCalCenterX();
+          uint16_t cy = roverDisplay.getJoyCalCenterY();
+          uint16_t xl = roverDisplay.getJoyCalXLeft();
+          uint16_t xr = roverDisplay.getJoyCalXRight();
+          uint16_t yu = roverDisplay.getJoyCalYUp();
+          uint16_t yd = roverDisplay.getJoyCalYDown();
+
+          roverConfig.setJoystickCalibration(cx, cy, xl, xr, yu, yd, true);
+          joystick.setCalibration(cx, cy, xl, xr, yu, yd);
+          joyCenterX = cx;
+          joyCenterY = cy;
+          joyHwConnected = true;
+
+          roverDisplay.showFeedback("CALIBRACAO GUARDADA!", 2000);
+          disarmRoverNav();
+          roverDisplay.setPage(ROVER_PAGE_CONFIG_JOY);
+          forceDisplay = true;
+          printLog("[UI] ★ Calibracao do Joystick guardada: CX=%u CY=%u | "
+                   "XL=%u XR=%u | YU=%u YD=%u\n",
+                   cx, cy, xl, xr, yu, yd);
+        }
+      }
+    }
+    return;
+  }
+
+  // Editor Numérico de Capacidade da Bateria (mAh)
+  if (page == ROVER_PAGE_CONFIG_BATT_MAH) {
+    int8_t dx = joystick.getNavXRepeat();
+    int8_t dy = joystick.getNavY();
+    bool keyClick = joystick.wasShortClicked();
+    bool longCancel = joystick.wasLongClicked();
+    joystick.wasBootHeld3s();
+
+    if (dx != 0 || dy != 0) {
+      roverDisplay.moveBattMahKbCursor(dx, dy);
+      forceDisplay = true;
+    } else if (btnModeEdge) {
+      roverDisplay.backspaceBattMah();
+      forceDisplay = true;
+    } else if (longCancel) {
+      disarmRoverNav();
+      roverDisplay.setPage(ROVER_PAGE_CONFIG_BATT);
+      forceDisplay = true;
+    } else if (keyClick) {
+      int8_t res = roverDisplay.pressBattMahKbKey();
+      forceDisplay = true;
+      if (res == -1) {
+        disarmRoverNav();
+        roverDisplay.setPage(ROVER_PAGE_CONFIG_BATT);
+      } else if (res == 1) {
+        uint16_t mah = roverDisplay.getBattMahValue();
+        roverConfig.setBatteryCapacityMah(mah);
+        roverConfig.saveConfig();
+        battery.setCapacityMah(mah);
+        char fb[32];
+        snprintf(fb, sizeof(fb), "CAPACIDADE %u mAh OK!", mah);
+        roverDisplay.showFeedback(fb, 1800);
+        disarmRoverNav();
+        roverDisplay.setPage(ROVER_PAGE_CONFIG_BATT);
+        printLog("[UI] ★ Capacidade da bateria guardada: %u mAh\n", mah);
+      }
+    }
+    return;
+  }
+
   // Ecrã QWERTY para password WiFi (idêntico à Estação Base)
   if (page == ROVER_PAGE_CONFIG_WIFI_PASS) {
     int8_t dx = joystick.getNavXRepeat();
@@ -221,6 +367,9 @@ static void handleRoverMenuInputs(uint32_t now, bool &forceDisplay) {
         roverDisplay.setPage(ROVER_PAGE_POWER);
         printLog("[UI] Operacao -> Bateria\n");
       } else if (idx == 2) {
+        joystick.wasBootHeld3s();
+        roverDisplay.setJoyExitPromptActive(false);
+        roverDisplay.setBootHoldProgressPct(0);
         roverDisplay.setPage(ROVER_PAGE_ACTUATORS);
         printLog("[UI] Operacao -> Atuadores\n");
       } else {
@@ -248,7 +397,6 @@ static void handleRoverMenuInputs(uint32_t now, bool &forceDisplay) {
 
   case ROVER_PAGE_NAV:
   case ROVER_PAGE_POWER:
-  case ROVER_PAGE_ACTUATORS:
     if (navX == -1 || clickBack || clickEnter) {
       disarmRoverNav();
       roverDisplay.setPage(ROVER_PAGE_OP_MENU);
@@ -260,7 +408,7 @@ static void handleRoverMenuInputs(uint32_t now, bool &forceDisplay) {
   case ROVER_PAGE_CONFIG_MENU:
     if (navY != 0) {
       roverDisplay.setConfigMenuIdx(
-          (roverDisplay.getConfigMenuIdx() + 4 + navY) % 4);
+          (roverDisplay.getConfigMenuIdx() + 6 + navY) % 6);
       forceDisplay = true;
     }
     if (navX == -1 || clickBack) {
@@ -275,14 +423,128 @@ static void handleRoverMenuInputs(uint32_t now, bool &forceDisplay) {
         roverDisplay.setPage(ROVER_PAGE_CONFIG_WIFI);
         printLog("[UI] Configuracoes -> WiFi\n");
       } else if (idx == 1) {
+        roverDisplay.setPage(ROVER_PAGE_CONFIG_BATT);
+        printLog("[UI] Configuracoes -> Bateria\n");
+      } else if (idx == 2) {
+        roverDisplay.setPage(ROVER_PAGE_CONFIG_JOY);
+        printLog("[UI] Configuracoes -> JoyStick\n");
+      } else if (idx == 3) {
         roverDisplay.setPage(ROVER_PAGE_CONFIG_ID);
         printLog("[UI] Configuracoes -> ID\n");
-      } else if (idx == 2) {
+      } else if (idx == 4) {
         roverDisplay.setPage(ROVER_PAGE_CONFIG_FW);
         printLog("[UI] Configuracoes -> Firmware\n");
       } else {
         roverDisplay.setPage(ROVER_PAGE_CONFIG_LORA);
         printLog("[UI] Configuracoes -> LoRa\n");
+      }
+      forceDisplay = true;
+    }
+    break;
+
+  case ROVER_PAGE_CONFIG_BATT:
+    if (navY != 0) {
+      roverDisplay.setBattMenuIdx(
+          (roverDisplay.getBattMenuIdx() + 2 + navY) % 2);
+      forceDisplay = true;
+    }
+    if (navX == -1 || clickBack) {
+      disarmRoverNav();
+      roverDisplay.setPage(ROVER_PAGE_CONFIG_MENU);
+      forceDisplay = true;
+      printLog("[UI] Bateria -> Configuracoes\n");
+    } else if (navX == 1 || clickEnter) {
+      disarmRoverNav();
+      if (roverDisplay.getBattMenuIdx() == 0) {
+        uint8_t curCells = roverConfig.getBatteryCells();
+        uint8_t curIdx = (curCells == 3) ? 0 : ((curCells == 4) ? 1 : 2);
+        roverDisplay.setBattCellsCursorIdx(curIdx);
+        roverDisplay.setPage(ROVER_PAGE_CONFIG_BATT_CELLS);
+        printLog("[UI] Bateria -> Opcoes (3S/4S/6S)\n");
+      } else {
+        roverDisplay.beginBattMahEntry(roverConfig.getBatteryCapacityMah());
+        roverDisplay.setPage(ROVER_PAGE_CONFIG_BATT_MAH);
+        printLog("[UI] Bateria -> Capacidade mAh\n");
+      }
+      forceDisplay = true;
+    }
+    break;
+
+  case ROVER_PAGE_CONFIG_BATT_CELLS:
+    if (navY != 0) {
+      roverDisplay.setBattCellsCursorIdx(
+          (roverDisplay.getBattCellsCursorIdx() + 3 + navY) % 3);
+      forceDisplay = true;
+    }
+    if (navX == -1 || clickBack) {
+      disarmRoverNav();
+      roverDisplay.setPage(ROVER_PAGE_CONFIG_BATT);
+      forceDisplay = true;
+      printLog("[UI] Opcoes Bateria -> Bateria\n");
+    } else if (navX == 1 || clickEnter) {
+      disarmRoverNav();
+      const uint8_t cellMap[3] = {3, 4, 6};
+      uint8_t cells = cellMap[roverDisplay.getBattCellsCursorIdx() % 3];
+      roverConfig.setBatteryCells(cells);
+      roverConfig.saveConfig();
+      battery.setCellCount(cells);
+
+      char cmd[32];
+      snprintf(cmd, sizeof(cmd), "CMD:BATT:%u", cells);
+      interSerial.println(cmd);
+      interSerial.flush();
+      strncpy(queuedWebCommand, cmd, sizeof(queuedWebCommand) - 1);
+      queuedWebCommand[sizeof(queuedWebCommand) - 1] = '\0';
+
+      char fb[32];
+      snprintf(fb, sizeof(fb), "BATERIA %uS GUARDADA!", cells);
+      roverDisplay.showFeedback(fb, 1800);
+      roverDisplay.setPage(ROVER_PAGE_CONFIG_BATT);
+      forceDisplay = true;
+      printLog("[UI] ★ Celulas da bateria alteradas para %uS\n", cells);
+    }
+    break;
+
+  case ROVER_PAGE_CONFIG_JOY:
+    if (navY != 0) {
+      roverDisplay.setJoyMenuIdx((roverDisplay.getJoyMenuIdx() + 4 + navY) % 4);
+      forceDisplay = true;
+    }
+    if (navX == -1 || clickBack) {
+      disarmRoverNav();
+      roverDisplay.setPage(ROVER_PAGE_CONFIG_MENU);
+      forceDisplay = true;
+      printLog("[UI] JoyStick -> Configuracoes\n");
+    } else if (navX == 1 || clickEnter) {
+      disarmRoverNav();
+      uint8_t idx = roverDisplay.getJoyMenuIdx();
+      if (idx == 0) {
+        bool inv = !roverConfig.isJoystickInvertX();
+        roverConfig.setJoystickInvertX(inv, true);
+        joystick.setInvertX(inv);
+        roverDisplay.showFeedback(inv ? "EIXO X: INVERTIDO" : "EIXO X: NORMAL",
+                                  1500);
+        printLog("[UI] ★ JoyStick Eixo X Invertido = %d\n", inv ? 1 : 0);
+      } else if (idx == 1) {
+        bool inv = !roverConfig.isJoystickInvertY();
+        roverConfig.setJoystickInvertY(inv, true);
+        joystick.setInvertY(inv);
+        roverDisplay.showFeedback(inv ? "EIXO Y: INVERTIDO" : "EIXO Y: NORMAL",
+                                  1500);
+        printLog("[UI] ★ JoyStick Eixo Y Invertido = %d\n", inv ? 1 : 0);
+      } else if (idx == 2) {
+        joystick.wasShortClicked();
+        joystick.wasLongClicked();
+        joystick.wasBootHeld3s();
+        roverDisplay.beginJoyCalWizard(joystick.getRawX(), joystick.getRawY());
+        roverDisplay.setPage(ROVER_PAGE_CONFIG_JOY_CAL);
+        printLog("[UI] JoyStick -> Calibrar (Wizard 1/5)\n");
+      } else {
+        joystick.wasBootHeld3s();
+        roverDisplay.setJoyExitPromptActive(false);
+        roverDisplay.setBootHoldProgressPct(0);
+        roverDisplay.setPage(ROVER_PAGE_CONFIG_JOY_TEST);
+        printLog("[UI] JoyStick -> Testar\n");
       }
       forceDisplay = true;
     }
@@ -573,13 +835,24 @@ void setup() {
 
   // 7. Inicializar Joystick e Botões (mesmo driver BaseJoystick usado na Base)
   joystick.begin();
+  joystick.setInvertX(roverConfig.isJoystickInvertX());
+  joystick.setInvertY(roverConfig.isJoystickInvertY());
+  if (roverConfig.isJoystickCalibrated()) {
+    joystick.setCalibration(
+        roverConfig.getJoyCenterX(), roverConfig.getJoyCenterY(),
+        roverConfig.getJoyXLeft(), roverConfig.getJoyXRight(),
+        roverConfig.getJoyYUp(), roverConfig.getJoyYDown());
+  }
   joyCenterX = joystick.getCenterX();
   joyCenterY = joystick.getCenterY();
   joyHwConnected =
       joystick.isAxisXConnected() || joystick.isAxisYConnected();
-  printLog("[JOYSTICK] Inicializado (X0=%d [%s], Y0=%d [%s])\n", joyCenterX,
-           joystick.isAxisXConnected() ? "OK" : "ABERTO", joyCenterY,
-           joystick.isAxisYConnected() ? "OK" : "ABERTO");
+  printLog("[JOYSTICK] Inicializado (X0=%d [%s], Y0=%d [%s], InvX=%d, InvY=%d, Cal=%d)\n",
+           joyCenterX, joystick.isAxisXConnected() ? "OK" : "ABERTO",
+           joyCenterY, joystick.isAxisYConnected() ? "OK" : "ABERTO",
+           roverConfig.isJoystickInvertX() ? 1 : 0,
+           roverConfig.isJoystickInvertY() ? 1 : 0,
+           roverConfig.isJoystickCalibrated() ? 1 : 0);
 
   roverDisplay.bootLogf(UI_GREEN, 100, "[BOOT] Sistema Pronto!");
   roverDisplay.endBootScreen(600);
@@ -601,6 +874,8 @@ void loop() {
   webServer.handleClient();
 
   // 2. Navegação de Menus (Joystick + Botões, idêntico ao firmware da Base)
+  joystick.setInvertX(roverConfig.isJoystickInvertX());
+  joystick.setInvertY(roverConfig.isJoystickInvertY());
   bool forceDisplay = false;
   handleRoverMenuInputs(now, forceDisplay);
 
@@ -652,54 +927,74 @@ void loop() {
     filtX = 0.75f * filtX + 0.25f * (float)rawX;
     filtY = 0.75f * filtY + 0.25f * (float)rawY;
 
-    int deadband = 500; // Zona morta com filtro anti-ruído ADC
-    bool axisXValid = (joyCenterX >= 1100 && joyCenterX <= 2900) &&
-                      (rawX >= 50 && rawX <= 4045);
-    bool axisYValid = (joyCenterY >= 1100 && joyCenterY <= 2900) &&
-                      (rawY >= 50 && rawY <= 4045);
+    int deadband = 220; // Zona morta alinhada com BaseJoystick
+    bool axisXValid = (joyCenterX >= 1100 && joyCenterX <= 2900);
+    bool axisYValid = (joyCenterY >= 1100 && joyCenterY <= 2900);
     int diffX = axisXValid ? ((int)filtX - joyCenterX) : 0;
     int diffY = axisYValid ? ((int)filtY - joyCenterY) : 0;
+    if (roverConfig.isJoystickInvertX())
+      diffX = -diffX;
+    if (roverConfig.isJoystickInvertY())
+      diffY = -diffY;
 
-    static int maxSeenRight = 1450;
-    static int maxSeenLeft = 1450;
-    static int maxSeenDown = 1450;
-    static int maxSeenUp = 1450;
+    static int maxSeenRight = 1200;
+    static int maxSeenLeft = 1200;
+    static int maxSeenDown = 1200;
+    static int maxSeenUp = 1200;
 
     int rud = 0;
-    if (diffX > deadband) {
-      // Estibordo (Right)
-      int d = diffX - deadband;
-      if (d > maxSeenRight)
-        maxSeenRight = d;
-      rud = constrain(d * 100 / maxSeenRight, 0, 100);
-    } else if (diffX < -deadband) {
-      // Bombordo (Left)
-      int d = (-diffX) - deadband;
-      if (d > maxSeenLeft)
-        maxSeenLeft = d;
-      rud = -constrain(d * 100 / maxSeenLeft, 0, 100);
+    int thr = 0;
+    if (joystick.isCalibrated()) {
+      rud = joystick.getRudder();
+      thr = joystick.getThrottle();
+    } else {
+      if (diffX > deadband) {
+        // Estibordo (Right)
+        int d = diffX - deadband;
+        if (d > maxSeenRight)
+          maxSeenRight = d;
+        rud = constrain(d * 100 / maxSeenRight, 0, 100);
+      } else if (diffX < -deadband) {
+        // Bombordo (Left)
+        int d = (-diffX) - deadband;
+        if (d > maxSeenLeft)
+          maxSeenLeft = d;
+        rud = -constrain(d * 100 / maxSeenLeft, 0, 100);
+      }
+
+      if (diffY > deadband) {
+        // Marcha-atrás / Ré (Pull back)
+        int d = diffY - deadband;
+        if (d > maxSeenDown)
+          maxSeenDown = d;
+        thr = -constrain(d * 100 / maxSeenDown, 0, 100);
+      } else if (diffY < -deadband) {
+        // Avanço / Frente (Push forward)
+        int d = (-diffY) - deadband;
+        if (d > maxSeenUp)
+          maxSeenUp = d;
+        thr = constrain(d * 100 / maxSeenUp, 0, 100);
+      }
     }
 
-    int thr = 0;
-    if (diffY > deadband) {
-      // Marcha-atrás / Ré (Pull back)
-      int d = diffY - deadband;
-      if (d > maxSeenDown)
-        maxSeenDown = d;
-      thr = -constrain(d * 100 / maxSeenDown, 0, 100);
-    } else if (diffY < -deadband) {
-      // Avanço / Frente (Push forward)
-      int d = (-diffY) - deadband;
-      if (d > maxSeenUp)
-        maxSeenUp = d;
-      thr = constrain(d * 100 / maxSeenUp, 0, 100);
+    // Não acionar atuadores enquanto estiver nos ecrãs de teste/calibração do
+    // joystick ou com o modal SAIR | CONTINUAR aberto
+    if (roverDisplay.getCurrentPage() == ROVER_PAGE_CONFIG_JOY_TEST ||
+        roverDisplay.getCurrentPage() == ROVER_PAGE_CONFIG_JOY_CAL ||
+        roverDisplay.isJoyExitPromptActive()) {
+      rud = 0;
+      thr = 0;
     }
 
     if (rud != 0 || thr != 0) {
       joyActive = true;
       actuators.setRudder((int8_t)rud);
       actuators.setThrottle((int8_t)thr);
-      if (abs(rud - lastSentRud) >= 3 || abs(thr - lastSentThr) >= 3) {
+      bool hitFullScale =
+          (abs(rud) == 100 && lastSentRud != rud) ||
+          (abs(thr) == 100 && lastSentThr != thr);
+      if (abs(rud - lastSentRud) >= 3 || abs(thr - lastSentThr) >= 3 ||
+          hitFullScale) {
         lastSentRud = rud;
         lastSentThr = thr;
         interSerial.printf("CMD:JOY:%d:%d\n", thr, rud);
@@ -774,8 +1069,9 @@ void loop() {
           printLog("[LAFVIN ROVER] ★ Versao Coprocessador C6: %s\n", rxBuf + 9);
           webServer.setC6Version(rxBuf + 9);
           roverDisplay.setC6Version(rxBuf + 9);
-          // Sincronizar calibração da cremalheira, âncora e estado do joystick
-          // com o Coprocessador C6
+          // Sincronizar calibração da cremalheira, âncora, bateria e estado do
+          // joystick com o Coprocessador C6
+          interSerial.printf("CMD:BATT:%u\n", roverConfig.getBatteryCells());
           interSerial.printf("CMD:RACK_CFG:%u:%u:%d\n",
                              roverConfig.getRackAngleEngaged(),
                              roverConfig.getRackAngleReleased(),
@@ -812,7 +1108,9 @@ void loop() {
               ancSt = (motSt == MOTOR_ANCHORED) ? ANCHOR_DEPLOYED
                                                 : ANCHOR_RETRACTED;
             }
-            actuators.setValues((int8_t)thr, (int8_t)rud, winch, rack > 0,
+            int8_t effThr = joyActive ? actuators.getThrottle() : (int8_t)thr;
+            int8_t effRud = joyActive ? actuators.getRudder() : (int8_t)rud;
+            actuators.setValues(effThr, effRud, winch, rack > 0,
                                 (uint8_t)ancSt, (uint16_t)depth);
             currentMotorStatus = (uint8_t)motSt;
             currentLoraRssi = (int16_t)rssi;
@@ -880,10 +1178,17 @@ void loop() {
     }
   }
 
-  // 5. Atualização do ecrã LCD ST7789 (a cada 200ms, se barramento SPI estiver
-  // livre)
+  // 5. Atualização do ecrã LCD ST7789 (a cada 200ms ou 60ms em Atuadores / Teste
+  // / Calibração de Joystick, se barramento SPI estiver livre)
   static uint32_t lastLcdUpdate = 0;
-  if (!webServer.isBusy() && (forceDisplay || (now - lastLcdUpdate >= 200))) {
+  uint32_t lcdInterval =
+      (roverDisplay.getCurrentPage() == ROVER_PAGE_CONFIG_JOY_TEST ||
+       roverDisplay.getCurrentPage() == ROVER_PAGE_CONFIG_JOY_CAL ||
+       roverDisplay.getCurrentPage() == ROVER_PAGE_ACTUATORS)
+          ? 60
+          : 200;
+  if (!webServer.isBusy() &&
+      (forceDisplay || (now - lastLcdUpdate >= lcdInterval))) {
     lastLcdUpdate = now;
     bool failsafeActive = (currentMotorStatus == MOTOR_FAILSAFE);
 
@@ -892,7 +1197,12 @@ void loop() {
         currentLoraRssi, failsafeActive, forceDisplay, sdCard.isReady(),
         wifiConfig.isAPMode(), wifiConfig.getIPAddress().c_str(),
         wifiConfig.getSSID().c_str(), wifiConfig.getRSSI(),
-        wifiConfig.getAPStationCount(), wifiConfig.getAPPassword().c_str());
+        wifiConfig.getAPStationCount(), wifiConfig.getAPPassword().c_str(),
+        roverConfig.isJoystickInvertX(), roverConfig.isJoystickInvertY(),
+        joystick.getRawX(), joystick.getRawY(), joystick.getThrottle(),
+        joystick.getRudder(), joystick.getDeadband(), joystick.isBootPressed(),
+        joystick.isModePressed(), joystick.isAnchorUpPressed(),
+        joystick.isAnchorDownPressed(), joystick.getJoyClickCount());
   }
 
   // 5b. Atualizar LED NeoPixel onboard (GPIO 8) conforme modo e intensidade C6

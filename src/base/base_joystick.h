@@ -8,8 +8,9 @@ class BaseJoystick {
 public:
   BaseJoystick()
       : rawX(1595), rawY(1595), centerX(1595), centerY(1595),
-        axisXConnected(true), axisYConnected(true), throttle(0), rudder(0),
-        deadband(220) {}
+        axisXConnected(true), axisYConnected(true), invertX(false),
+        invertY(false), calibrated(false), calXLeft(50), calXRight(3200),
+        calYUp(50), calYDown(3200), throttle(0), rudder(0), deadband(220) {}
 
   void begin() {
     analogReadResolution(12); // 0 to 4095
@@ -49,6 +50,24 @@ public:
   bool isAxisYConnected() const { return axisYConnected; }
   int getCenterX() const { return centerX; }
   int getCenterY() const { return centerY; }
+  void setInvertX(bool inv) { invertX = inv; }
+  void setInvertY(bool inv) { invertY = inv; }
+  bool isInvertX() const { return invertX; }
+  bool isInvertY() const { return invertY; }
+  bool isCalibrated() const { return calibrated; }
+
+  void setCalibration(int cx, int cy, int xLeft, int xRight, int yUp,
+                      int yDown) {
+    centerX = constrain(cx, 0, 4095);
+    centerY = constrain(cy, 0, 4095);
+    calXLeft = constrain(xLeft, 0, 4095);
+    calXRight = constrain(xRight, 0, 4095);
+    calYUp = constrain(yUp, 0, 4095);
+    calYDown = constrain(yDown, 0, 4095);
+    axisXConnected = true;
+    axisYConnected = true;
+    calibrated = true;
+  }
 
   bool isClicked() const {
     int swPin = (PIN_JOYSTICK_SW >= 0) ? PIN_JOYSTICK_SW : PIN_BTN_BOOT;
@@ -194,63 +213,79 @@ public:
   }
 
   void update() {
-    // 1. Read Joystick ADC (PIN_JOYSTICK_Y = IO0 = Eixo Vertical/Propulsão,
-    // PIN_JOYSTICK_X = IO3 = Eixo Horizontal/Leme)
-    int currentX = analogRead(PIN_JOYSTICK_X);
-    int currentY = analogRead(PIN_JOYSTICK_Y);
-
-    // Low-pass filter
-    rawX = (rawX * 3 + currentX) / 4;
-    rawY = (rawY * 3 + currentY) / 4;
-
-    // Mapear Eixo Y (IO0 -> Throttle / Propulsão) com escala adaptativa
-    static int maxUpY = 1200;
-    static int maxDownY = 1200;
-    int diffY = rawY - centerY;
-    if (!axisYConnected && rawY > 350 && rawY < 1350) {
-      throttle = 0;
-    } else if (diffY > deadband) {
-      int d = diffY - deadband;
-      if (d > maxUpY)
-        maxUpY = d;
-      throttle = constrain(d * 100 / maxUpY, 0, 100);
-    } else if (diffY < -deadband) {
-      int d = (-diffY) - deadband;
-      if (d > maxDownY)
-        maxDownY = d;
-      throttle = -constrain(d * 100 / maxDownY, 0, 100);
-    } else {
-      throttle = 0;
+    // 1. Read Joystick ADC com média rápida de 4 amostras no próprio ciclo
+    // (sem atraso/lag entre frames do LCD SPI)
+    int sumX = 0, sumY = 0;
+    for (int i = 0; i < 4; ++i) {
+      sumX += analogRead(PIN_JOYSTICK_X);
+      sumY += analogRead(PIN_JOYSTICK_Y);
     }
+    int currentX = sumX / 4;
+    int currentY = sumY / 4;
 
-    // Mapear Eixo X (IO3 -> Rudder / Leme) com proteção contra pino em aberto
-    static int maxRightX = 1200;
-    static int maxLeftX = 1200;
-    int diffX = rawX - centerX;
-    if (!axisXConnected) {
-      // Se o contacto elétrico no pino 3 da Lafvin for restabelecido (~1.65V ->
-      // ADC ~1595 estável por 20 leituras), ativa o eixo X em tempo real
-      if (currentX >= 1350 && currentX <= 2200) {
-        if (++validXCount >= 20) {
-          centerX = rawX;
-          axisXConnected = true;
-        }
-      } else {
-        validXCount = 0;
-      }
-      rudder = 0;
-    } else if (diffX > deadband) {
-      int d = diffX - deadband;
-      if (d > maxRightX)
-        maxRightX = d;
-      rudder = constrain(d * 100 / maxRightX, 0, 100);
-    } else if (diffX < -deadband) {
-      int d = (-diffX) - deadband;
-      if (d > maxLeftX)
-        maxLeftX = d;
-      rudder = -constrain(d * 100 / maxLeftX, 0, 100);
+    rawX = currentX;
+    rawY = currentY;
+
+    if (calibrated) {
+      int db = 180;
+      int8_t t = mapCalibratedAxis(rawY, centerY, calYDown, calYUp, db);
+      int8_t r = mapCalibratedAxis(rawX, centerX, calXLeft, calXRight, db);
+      throttle = invertY ? (int8_t)(-t) : t;
+      rudder = invertX ? (int8_t)(-r) : r;
     } else {
-      rudder = 0;
+      // Mapear Eixo Y (IO0 -> Throttle / Propulsão) com escala adaptativa
+      static int maxUpY = 1200;
+      static int maxDownY = 1200;
+      int diffY = rawY - centerY;
+      if (invertY)
+        diffY = -diffY;
+      if (!axisYConnected && rawY > 350 && rawY < 1350) {
+        throttle = 0;
+      } else if (diffY > deadband) {
+        int d = diffY - deadband;
+        if (d > maxUpY)
+          maxUpY = d;
+        throttle = constrain(d * 100 / maxUpY, 0, 100);
+      } else if (diffY < -deadband) {
+        int d = (-diffY) - deadband;
+        if (d > maxDownY)
+          maxDownY = d;
+        throttle = -constrain(d * 100 / maxDownY, 0, 100);
+      } else {
+        throttle = 0;
+      }
+
+      // Mapear Eixo X (IO3 -> Rudder / Leme) com proteção contra pino em aberto
+      static int maxRightX = 1200;
+      static int maxLeftX = 1200;
+      int diffX = rawX - centerX;
+      if (invertX)
+        diffX = -diffX;
+      if (!axisXConnected) {
+        // Se o contacto elétrico no pino 3 da Lafvin for restabelecido (~1.65V ->
+        // ADC ~1595 estável por 20 leituras), ativa o eixo X em tempo real
+        if (currentX >= 1350 && currentX <= 2200) {
+          if (++validXCount >= 20) {
+            centerX = rawX;
+            axisXConnected = true;
+          }
+        } else {
+          validXCount = 0;
+        }
+        rudder = 0;
+      } else if (diffX > deadband) {
+        int d = diffX - deadband;
+        if (d > maxRightX)
+          maxRightX = d;
+        rudder = constrain(d * 100 / maxRightX, 0, 100);
+      } else if (diffX < -deadband) {
+        int d = (-diffX) - deadband;
+        if (d > maxLeftX)
+          maxLeftX = d;
+        rudder = -constrain(d * 100 / maxLeftX, 0, 100);
+      } else {
+        rudder = 0;
+      }
     }
 
     // 2. Handle Joystick Switch / BOOT Button Click (Debounced Short & Long
@@ -312,12 +347,47 @@ public:
   }
 
 private:
+  static int8_t mapCalibratedAxis(int raw, int center, int &negEnd, int &posEnd,
+                                  int db) {
+    int dirPos = (posEnd >= center) ? 1 : -1;
+    int deltaPos = (raw - center) * dirPos;
+    if (deltaPos > db) {
+      int maxDeltaPos = abs(posEnd - center);
+      if (deltaPos > maxDeltaPos) {
+        posEnd = raw;
+        maxDeltaPos = deltaPos;
+      }
+      int fullSpan = max(120, maxDeltaPos - db - 20);
+      return (int8_t)constrain((deltaPos - db) * 100 / fullSpan, 0, 100);
+    }
+
+    int dirNeg = (negEnd >= center) ? 1 : -1;
+    int deltaNeg = (raw - center) * dirNeg;
+    if (deltaNeg > db) {
+      int maxDeltaNeg = abs(negEnd - center);
+      if (deltaNeg > maxDeltaNeg) {
+        negEnd = raw;
+        maxDeltaNeg = deltaNeg;
+      }
+      int fullSpan = max(120, maxDeltaNeg - db - 20);
+      return (int8_t)(-constrain((deltaNeg - db) * 100 / fullSpan, 0, 100));
+    }
+    return 0;
+  }
+
   int rawX;
   int rawY;
   int centerX;
   int centerY;
   bool axisXConnected;
   bool axisYConnected;
+  bool invertX;
+  bool invertY;
+  bool calibrated;
+  int calXLeft;
+  int calXRight;
+  int calYUp;
+  int calYDown;
   int8_t throttle;
   int8_t rudder;
   int deadband;

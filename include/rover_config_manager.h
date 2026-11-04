@@ -15,7 +15,7 @@ struct RoverConfig {
   String apPassword;
   uint8_t screenBrightness;    // 0 - 100%
   uint8_t batteryCells;        // 3, 4, or 6
-  uint16_t batteryCapacityMah; // e.g. 2650 mAh
+  uint16_t batteryCapacityMah; // e.g. 3000 mAh
   float anchorDrumDiamMm;      // Diâmetro do tambor do guincho da âncora (mm,
                                // ex: 30.0)
   uint8_t
@@ -26,7 +26,16 @@ struct RoverConfig {
   bool rackInverted;         // Inverter direção do servo da cremalheira
   bool joystickEnabled;  // Habilitar/desabilitar leitura do joystick analógico
                          // físico (GPIO 3 / GPIO 0)
-  uint8_t ledCount;      // Quantidade de LEDs WS2812B na fita (GPIO 19)
+  bool joystickInvertX;  // Inverter Eixo X (Horizontal / Leme) do Joystick
+  bool joystickInvertY;  // Inverter Eixo Y (Vertical / Propulsão) do Joystick
+  bool joystickCalibrated; // Se o wizard de calibração já foi concluído
+  uint16_t joyCenterX;     // ADC neutro X
+  uint16_t joyCenterY;     // ADC neutro Y
+  uint16_t joyXLeft;       // ADC fim de curso Esquerda
+  uint16_t joyXRight;      // ADC fim de curso Direita
+  uint16_t joyYUp;         // ADC fim de curso Cima
+  uint16_t joyYDown;       // ADC fim de curso Baixo
+  uint8_t ledCount;        // Quantidade de LEDs WS2812B na fita (GPIO 19)
   uint8_t ledBrightness; // Brilho da fita de LEDs WS2812B (5 - 100%)
   uint8_t c6LedBrightness; // Intensidade do LED RGB onboard da C6 (GPIO 8, 0 -
                            // 100%)
@@ -57,13 +66,22 @@ public:
     _config.apPassword = "password123";
     _config.screenBrightness = 85;
     _config.batteryCells = 4;
-    _config.batteryCapacityMah = 2650;
+    _config.batteryCapacityMah = 3000;
     _config.anchorDrumDiamMm = 30.0f;
     _config.anchorPulsesPerRev = 1;
     _config.rackAngleEngaged = RACK_POS_ENGAGED;
     _config.rackAngleReleased = RACK_POS_RELEASED;
     _config.rackInverted = RACK_SERVO_INVERTED_DEFAULT;
     _config.joystickEnabled = false;
+    _config.joystickInvertX = false;
+    _config.joystickInvertY = false;
+    _config.joystickCalibrated = false;
+    _config.joyCenterX = 1600;
+    _config.joyCenterY = 1600;
+    _config.joyXLeft = 50;
+    _config.joyXRight = 3200;
+    _config.joyYUp = 50;
+    _config.joyYDown = 3200;
     _config.ledCount = NUM_STROBE_LEDS;
     _config.ledBrightness = 100;
     _config.c6LedBrightness = 80;
@@ -119,6 +137,15 @@ public:
   uint8_t getRackAngleReleased() const { return _config.rackAngleReleased; }
   bool isRackInverted() const { return _config.rackInverted; }
   bool isJoystickEnabled() const { return _config.joystickEnabled; }
+  bool isJoystickInvertX() const { return _config.joystickInvertX; }
+  bool isJoystickInvertY() const { return _config.joystickInvertY; }
+  bool isJoystickCalibrated() const { return _config.joystickCalibrated; }
+  uint16_t getJoyCenterX() const { return _config.joyCenterX; }
+  uint16_t getJoyCenterY() const { return _config.joyCenterY; }
+  uint16_t getJoyXLeft() const { return _config.joyXLeft; }
+  uint16_t getJoyXRight() const { return _config.joyXRight; }
+  uint16_t getJoyYUp() const { return _config.joyYUp; }
+  uint16_t getJoyYDown() const { return _config.joyYDown; }
   uint8_t getLedCount() const { return _config.ledCount; }
   uint8_t getLedBrightness() const { return _config.ledBrightness; }
   uint8_t getC6LedBrightness() const { return _config.c6LedBrightness; }
@@ -173,6 +200,32 @@ public:
   void setJoystickEnabled(bool enabled) {
     _config.joystickEnabled = enabled;
     saveConfig();
+  }
+
+  void setJoystickInvertX(bool invert, bool save = true) {
+    _config.joystickInvertX = invert;
+    if (save)
+      saveConfig();
+  }
+
+  void setJoystickInvertY(bool invert, bool save = true) {
+    _config.joystickInvertY = invert;
+    if (save)
+      saveConfig();
+  }
+
+  void setJoystickCalibration(uint16_t cx, uint16_t cy, uint16_t xl,
+                              uint16_t xr, uint16_t yu, uint16_t yd,
+                              bool save = true) {
+    _config.joystickCalibrated = true;
+    _config.joyCenterX = constrain((int)cx, 0, 4095);
+    _config.joyCenterY = constrain((int)cy, 0, 4095);
+    _config.joyXLeft = constrain((int)xl, 0, 4095);
+    _config.joyXRight = constrain((int)xr, 0, 4095);
+    _config.joyYUp = constrain((int)yu, 0, 4095);
+    _config.joyYDown = constrain((int)yd, 0, 4095);
+    if (save)
+      saveConfig();
   }
 
   void setLedConfig(uint8_t count, uint8_t brightness) {
@@ -280,10 +333,10 @@ public:
           _config.batteryCells != 6) {
         _config.batteryCells = 4;
       }
-      _config.batteryCapacityMah = prefs.getUShort("cap_mah", 2650);
+      _config.batteryCapacityMah = prefs.getUShort("cap_mah", 3000);
       if (_config.batteryCapacityMah < 500 ||
           _config.batteryCapacityMah > 50000) {
-        _config.batteryCapacityMah = 2650;
+        _config.batteryCapacityMah = 3000;
       }
       _config.anchorDrumDiamMm = prefs.getFloat("anc_diam", 30.0f);
       if (_config.anchorDrumDiamMm < 5.0f ||
@@ -303,6 +356,15 @@ public:
       _config.rackInverted =
           prefs.getBool("rck_inv", RACK_SERVO_INVERTED_DEFAULT);
       _config.joystickEnabled = prefs.getBool("joy_en", false);
+      _config.joystickInvertX = prefs.getBool("joy_inv_x", false);
+      _config.joystickInvertY = prefs.getBool("joy_inv_y", false);
+      _config.joystickCalibrated = prefs.getBool("joy_cal", false);
+      _config.joyCenterX = prefs.getUShort("joy_cx", 1600);
+      _config.joyCenterY = prefs.getUShort("joy_cy", 1600);
+      _config.joyXLeft = prefs.getUShort("joy_xl", 50);
+      _config.joyXRight = prefs.getUShort("joy_xr", 3200);
+      _config.joyYUp = prefs.getUShort("joy_yu", 50);
+      _config.joyYDown = prefs.getUShort("joy_yd", 3200);
       _config.ledCount = prefs.getUChar("led_cnt", NUM_STROBE_LEDS);
       if (_config.ledCount < 1 || _config.ledCount > 120)
         _config.ledCount = NUM_STROBE_LEDS;
@@ -359,6 +421,15 @@ public:
     prefs.putUChar("rck_rel", _config.rackAngleReleased);
     prefs.putBool("rck_inv", _config.rackInverted);
     prefs.putBool("joy_en", _config.joystickEnabled);
+    prefs.putBool("joy_inv_x", _config.joystickInvertX);
+    prefs.putBool("joy_inv_y", _config.joystickInvertY);
+    prefs.putBool("joy_cal", _config.joystickCalibrated);
+    prefs.putUShort("joy_cx", _config.joyCenterX);
+    prefs.putUShort("joy_cy", _config.joyCenterY);
+    prefs.putUShort("joy_xl", _config.joyXLeft);
+    prefs.putUShort("joy_xr", _config.joyXRight);
+    prefs.putUShort("joy_yu", _config.joyYUp);
+    prefs.putUShort("joy_yd", _config.joyYDown);
     prefs.putUChar("led_cnt", _config.ledCount);
     prefs.putUChar("led_brt", _config.ledBrightness);
     prefs.putUChar("c6l_brt", _config.c6LedBrightness);
@@ -461,6 +532,33 @@ public:
         doc["joystick_enabled"].is<bool>()) {
       _config.joystickEnabled = doc["joystick_enabled"].as<bool>();
     }
+    if (doc["joystick_invert_x"].is<bool>()) {
+      _config.joystickInvertX = doc["joystick_invert_x"].as<bool>();
+    }
+    if (doc["joystick_invert_y"].is<bool>()) {
+      _config.joystickInvertY = doc["joystick_invert_y"].as<bool>();
+    }
+    if (doc["joy_calibrated"].is<bool>()) {
+      _config.joystickCalibrated = doc["joy_calibrated"].as<bool>();
+    }
+    if (doc["joy_center_x"].is<uint16_t>()) {
+      _config.joyCenterX = doc["joy_center_x"].as<uint16_t>();
+    }
+    if (doc["joy_center_y"].is<uint16_t>()) {
+      _config.joyCenterY = doc["joy_center_y"].as<uint16_t>();
+    }
+    if (doc["joy_x_left"].is<uint16_t>()) {
+      _config.joyXLeft = doc["joy_x_left"].as<uint16_t>();
+    }
+    if (doc["joy_x_right"].is<uint16_t>()) {
+      _config.joyXRight = doc["joy_x_right"].as<uint16_t>();
+    }
+    if (doc["joy_y_up"].is<uint16_t>()) {
+      _config.joyYUp = doc["joy_y_up"].as<uint16_t>();
+    }
+    if (doc["joy_y_down"].is<uint16_t>()) {
+      _config.joyYDown = doc["joy_y_down"].as<uint16_t>();
+    }
     if (doc["led_count"].is<int>()) {
       int lc = doc["led_count"].as<int>();
       if (lc >= 1 && lc <= 120)
@@ -522,6 +620,15 @@ public:
     doc["rack_angle_released"] = _config.rackAngleReleased;
     doc["rack_inverted"] = _config.rackInverted;
     doc["joystick_enabled"] = _config.joystickEnabled;
+    doc["joystick_invert_x"] = _config.joystickInvertX;
+    doc["joystick_invert_y"] = _config.joystickInvertY;
+    doc["joy_calibrated"] = _config.joystickCalibrated;
+    doc["joy_center_x"] = _config.joyCenterX;
+    doc["joy_center_y"] = _config.joyCenterY;
+    doc["joy_x_left"] = _config.joyXLeft;
+    doc["joy_x_right"] = _config.joyXRight;
+    doc["joy_y_up"] = _config.joyYUp;
+    doc["joy_y_down"] = _config.joyYDown;
     doc["joystick_user_set"] = true;
     doc["led_count"] = _config.ledCount;
     doc["led_brightness"] = _config.ledBrightness;
