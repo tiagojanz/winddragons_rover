@@ -12,16 +12,16 @@ flowchart LR
     API["HTTPS REST API<br/>/api/circuits/station/telemetry"]
   end
 
-  subgraph BASE["🎮 BASE STATION (Dual ESP32-C6)"]
-    BM["<b>Master: Lafvin ESP32-C6</b><br/>• LCD 1.47&quot; ST7789 (320x172)<br/>• MicroSD (/www/base/)<br/>• Web Server WiFi (STA/AP)<br/>• Joystick Analógico + Botões<br/>• Coordenador OTA Dual"]
-    BC["<b>Slave: ESP32-C6 DevKitC-1</b><br/>• Rádio LoRa SX1278 (433 MHz)<br/>• Polling &amp; Escuta Contínua<br/>• Telemetria da Frota (1..8)"]
-    BM <-->|"UART Inter-ESP<br/>115200 bps (TX:IO2 / RX:IO1)"| BC
+  subgraph BASE["🎮 BASE STATION - Dual ESP32-C6"]
+    BM["Master: Lafvin ESP32-C6<br/>• LCD 1.47 pol. ST7789 320x172<br/>• MicroSD /www/base/<br/>• Web Server WiFi STA e AP<br/>• Joystick Analógico + Botões<br/>• Coordenador OTA Dual"]
+    BC["Slave: ESP32-C6 DevKitC-1<br/>• Rádio LoRa SX1278 433 MHz<br/>• Polling e Escuta Contínua<br/>• Telemetria da Frota 1..8"]
+    BM <-->|"UART Inter-ESP 115200 bps<br/>TX:IO2 / RX:IO1"| BC
   end
 
-  subgraph ROVER["🚤 ROVER / BOIA AUTÓNOMA (Dual ESP32-C6)"]
-    RM["<b>Master: Lafvin ESP32-C6</b><br/>• LCD 1.47&quot; ST7789 + MicroSD<br/>• GPS Quectel LC29H (UART1)<br/>• Dashboard Web &amp; OTA Dual<br/>• Joystick Local (Opcional)"]
-    RC["<b>Slave: ESP32-C6 DevKitC-1</b><br/>• Rádio LoRa SX1278 (433 MHz)<br/>• IMU 9-DOF GY-BNO055 (J_EXP I2C)<br/>• PWM: ESC, Leme, Guincho, Trinco<br/>• Sensores: Bateria 6S, Hall, Fim-Curso<br/>• Fita LEDs WS2812B Strobe"]
-    RM <-->|"UART Inter-ESP<br/>115200 bps (TX:IO2 / RX:IO1)"| RC
+  subgraph ROVER["🚤 ROVER / BOIA AUTÓNOMA - Dual ESP32-C6"]
+    RM["Master: Lafvin ESP32-C6<br/>• LCD 1.47 pol. ST7789 + MicroSD<br/>• GPS Quectel LC29H UART1<br/>• Dashboard Web e OTA Dual<br/>• Joystick Local Opcional"]
+    RC["Slave: ESP32-C6 DevKitC-1<br/>• Rádio LoRa SX1278 433 MHz<br/>• IMU 9-DOF GY-BNO055 em J_EXP<br/>• PWM: ESC, Leme, Guincho, Trinco<br/>• Sensores: Bateria 6S, Hall, Fim-Curso<br/>• Fita LEDs WS2812B Strobe"]
+    RM <-->|"UART Inter-ESP 115200 bps<br/>TX:IO2 / RX:IO1"| RC
   end
 
   BM <-->|"WiFi HTTPS JSON"| API
@@ -36,30 +36,30 @@ O módulo **GY-BNO055** liga-se diretamente à ilha de expansão **`J_EXP` (2x03
 
 ```mermaid
 flowchart LR
-  subgraph J_EXP["📌 Conector J_EXP (PCB Carrier — Coprocessador C6)"]
+  subgraph J_EXP["📌 Conector J_EXP - PCB Carrier C6"]
     direction TB
-    P1["<b>Pino 1: IO1</b> (GPIO 1) — Coluna Esq. Topo"]
-    P3["<b>Pino 3: IO11</b> (GPIO 11) — Coluna Esq. Meio"]
-    P5["<b>Pino 5: GND</b> — Coluna Esq. Base"]
-    P2["<b>Pino 2: 3V3</b> (+3.3V_C6) — Coluna Dir. Topo"]
-    P4["<b>Pino 4: 5V</b> (Não ligar ao BNO055)"]
-    P6["<b>Pino 6: GND</b> — Coluna Dir. Base"]
+    P1["Pino 1: IO1 - GPIO 1<br/>Coluna Esq. Topo"]
+    P3["Pino 3: IO11 - GPIO 11<br/>Coluna Esq. Meio"]
+    P5["Pino 5: GND<br/>Coluna Esq. Base"]
+    P2["Pino 2: 3V3 - +3.3V_C6<br/>Coluna Dir. Topo"]
+    P4["Pino 4: 5V<br/>Não ligar ao BNO055"]
+    P6["Pino 6: GND<br/>Coluna Dir. Base"]
   end
 
-  subgraph BNO["🧭 Módulo GY-BNO055 (Modo I2C 0x28 / 0x29)"]
+  subgraph BNO["🧭 Módulo GY-BNO055 - I2C 0x28"]
     direction TB
-    VIN["<b>VIN</b> (Alimentação 3.3V)"]
-    GND["<b>GND</b> (Terra Comum)"]
-    SCL["<b>SCL \ Rx</b> (I2C Clock)"]
-    SDA["<b>SDA \ Tx</b> (I2C Data)"]
-    ADD["<b>ADD / ADR</b> (Aberto = 0x28 | 3V3 = 0x29)"]
-    INT["<b>INT / BOOT / REST</b> (Não ligados)"]
+    VIN["VIN - Alimentação 3.3V"]
+    GND["GND - Terra Comum"]
+    SCL["SCL / Rx - I2C Clock"]
+    SDA["SDA / Tx - I2C Data"]
+    ADD["ADD - Aberto = 0x28"]
+    INT["INT / BOOT / REST - NC"]
   end
 
-  P2 ===>|"🔴 Fio Vermelho (+3.3V)"| VIN
-  P5 ===>|"⚫ Fio Preto (GND)"| GND
-  P3 ===>|"🟡 Fio Amarelo (I2C SCL)"| SCL
-  P1 ===>|"🔵 Fio Azul/Verde (I2C SDA)"| SDA
+  P2 -->|"🔴 Fio Vermelho +3.3V"| VIN
+  P5 -->|"⚫ Fio Preto GND"| GND
+  P3 -->|"🟡 Fio Amarelo I2C SCL"| SCL
+  P1 <-->|"🔵 Fio Azul/Verde I2C SDA"| SDA
 ```
 
 ### Disposição Física da Serigrafia `J_EXP` na PCB vs `GY-BNO055`
@@ -95,40 +95,37 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-  subgraph MASTER["🖥️ MASTER: Lafvin ESP32-C6 (LCD 1.47&quot; IPS + MicroSD)"]
+  subgraph MASTER["🖥️ MASTER: Lafvin ESP32-C6 - LCD 1.47 pol. IPS + MicroSD"]
     LCD["Ecrã ST7789 172x320<br/>MOSI:IO6 • SCLK:IO7 • CS:IO14<br/>DC:IO15 • RST:IO21 • BL:IO22"]
     SD["Leitor MicroSD Onboard<br/>CS:IO4 • MISO:IO5<br/>MOSI:IO6 • SCLK:IO7"]
-    M_UART["UART Inter-ESP (J1)<br/>TX: IO2 (Pad 4)<br/>RX: IO1 (Pad 5)"]
-    M_GPS["UART1 GPS (J2)<br/>TX: IO16 (Pad 8)<br/>RX: IO17 (Pad 9)"]
-    M_JOY["Joystick Local (J1)<br/>VRx: IO3 (Pad 3)<br/>VRy: IO0 (Pad 6)"]
+    M_UART["UART Inter-ESP J1<br/>TX: IO2 Pad 4<br/>RX: IO1 Pad 5"]
+    M_GPS["UART1 GPS J2<br/>TX: IO16 Pad 8<br/>RX: IO17 Pad 9"]
+    M_JOY["Joystick Local J1<br/>VRx: IO3 Pad 3<br/>VRy: IO0 Pad 6"]
   end
 
   subgraph SLAVE["⚙️ SLAVE / COPROCESSADOR: ESP32-C6 DevKitC-1"]
-    S_UART["UART Inter-ESP (J3)<br/>RX: GPIO 22 (Pin 6)<br/>TX: GPIO 13 (Pin 13)"]
-    S_LORA["SPI Hardware (FSPI)<br/>NSS:IO6 • SCK:IO5 • MOSI:IO7<br/>MISO:IO4 • DIO0:IO0"]
-    S_I2C["Barramento I2C (J_EXP)<br/>SDA: GPIO 1 (IO1)<br/>SCL: GPIO 11 (IO11)"]
-    S_PWM["Controladores PWM (50 Hz)<br/>ESC: GPIO 17 • RUD: GPIO 15<br/>WIN: GPIO 23 • RCK: GPIO 21"]
+    S_UART["UART Inter-ESP J3<br/>RX: GPIO 22 Pin 6<br/>TX: GPIO 13 Pin 13"]
+    S_LORA["SPI Hardware FSPI<br/>NSS:IO6 • SCK:IO5 • MOSI:IO7<br/>MISO:IO4 • DIO0:IO0"]
+    S_I2C["Barramento I2C J_EXP<br/>SDA: GPIO 1 IO1<br/>SCL: GPIO 11 IO11"]
+    S_PWM["Controladores PWM 50 Hz<br/>ESC: GPIO 17 • RUD: GPIO 15<br/>WIN: GPIO 23 • RCK: GPIO 21"]
     S_SENS["Entradas de Sensores<br/>Bateria V: GPIO 2 • I: GPIO 3<br/>Fim Curso: GPIO 18 • Hall: GPIO 20<br/>LEDs Strobe: GPIO 19"]
   end
 
-  %% Ligações Externas Master
-  GPS_MOD["🛰️ GPS Quectel LC29H<br/>(115200 bps • 3.3V)"]
-  JOY_MOD["🕹️ Joystick Analógico<br/>(Opcional no Rover)"]
-  M_GPS <-->|"IO16->R1 / IO17<-T1"| GPS_MOD
-  M_JOY <--- JOY_MOD
+  GPS_MOD["🛰️ GPS Quectel LC29H<br/>115200 bps • 3.3V"]
+  JOY_MOD["🕹️ Joystick Analógico<br/>Opcional no Rover"]
+  M_GPS <-->|"TX:IO16 para R1 / RX:IO17 de T1"| GPS_MOD
+  JOY_MOD --> M_JOY
 
-  %% Link Inter-ESP
-  M_UART <===>|"921600 / 115200 bps<br/>Verde (IO2->IO22) • Amarelo (IO13->IO1)"| S_UART
+  M_UART <-->|"115200 bps<br/>Verde IO2-IO22 • Amarelo IO13-IO1"| S_UART
 
-  %% Ligações Externas Slave
-  LORA_MOD["📡 Rádio LoRa Ra-02<br/>SX1278 (433 MHz)"]
-  BNO_MOD["🧭 Bússola &amp; IMU 9-DOF<br/>GY-BNO055 (0x28)"]
-  ACT_MOD["⚡ Atuadores PWM<br/>• ESC Motor (IO17)<br/>• Servo Leme (IO15)<br/>• Servo Guincho (IO23)<br/>• Servo Cremalheira (IO21)"]
-  ANCH_MOD["⚓ Sensores &amp; Strobe<br/>• Power Module 6S (IO2/IO3)<br/>• Microswitch Topo (IO18)<br/>• Sensor Hall DRV5032 (IO20)<br/>• Fita WS2812B 8 LEDs (IO19)"]
+  LORA_MOD["📡 Rádio LoRa Ra-02<br/>SX1278 433 MHz"]
+  BNO_MOD["🧭 Bússola e IMU 9-DOF<br/>GY-BNO055 0x28"]
+  ACT_MOD["⚡ Atuadores PWM<br/>• ESC Motor IO17<br/>• Servo Leme IO15<br/>• Servo Guincho IO23<br/>• Servo Cremalheira IO21"]
+  ANCH_MOD["⚓ Sensores e Strobe<br/>• Power Module 6S IO2 e IO3<br/>• Microswitch Topo IO18<br/>• Sensor Hall DRV5032 IO20<br/>• Fita WS2812B 8 LEDs IO19"]
 
   S_LORA <--> LORA_MOD
   S_I2C <--> BNO_MOD
-  S_PWM ---> ACT_MOD
+  S_PWM --> ACT_MOD
   S_SENS <--> ANCH_MOD
 ```
 
@@ -185,20 +182,20 @@ flowchart TB
 ```mermaid
 flowchart LR
   subgraph BASE_M["🖥️ BASE MASTER: Lafvin ESP32-C6"]
-    B_LCD["Ecrã LCD 1.47&quot; ST7789<br/>Dashboard Frota, Regata &amp; Rede"]
-    B_SD["MicroSD Onboard (CS:IO4)<br/>/www/base/ + Registo de Missões"]
-    B_JOY["Joystick Analógico PS5 (J1)<br/>Eixo X (Leme): GPIO 3<br/>Eixo Y (Motor): GPIO 0"]
-    B_BTN["Botões Físicos<br/>BOOT (Página): GPIO 9<br/>SW1/SW2/SW3: IO18 / IO19 / IO20"]
+    B_LCD["Ecrã LCD 1.47 pol. ST7789<br/>Dashboard Frota, Regata e Rede"]
+    B_SD["MicroSD Onboard CS:IO4<br/>/www/base/ + Registo de Missões"]
+    B_JOY["Joystick Analógico PS5 J1<br/>Eixo X Leme: GPIO 3<br/>Eixo Y Motor: GPIO 0"]
+    B_BTN["Botões Físicos<br/>BOOT Página: GPIO 9<br/>SW1/SW2/SW3: IO18 / IO19 / IO20"]
     B_UART["UART Inter-ESP<br/>TX: GPIO 2 • RX: GPIO 1"]
   end
 
   subgraph BASE_C["📡 BASE SLAVE: ESP32-C6 DevKitC-1"]
     BC_UART["UART Inter-ESP<br/>RX: GPIO 22 • TX: GPIO 13"]
-    BC_LORA["Rádio LoRa SX1278 (433 MHz)<br/>NSS:IO6 • SCK:IO5 • MOSI:IO7<br/>MISO:IO4 • DIO0:IO0"]
+    BC_LORA["Rádio LoRa SX1278 433 MHz<br/>NSS:IO6 • SCK:IO5 • MOSI:IO7<br/>MISO:IO4 • DIO0:IO0"]
   end
 
-  B_UART <===>|"115200 bps<br/>Comandos &amp; Telemetria Frota"| BC_UART
-  BC_LORA <===>|"Antena 433 MHz"| AIR(("🌊 Rovers 1..8"))
+  B_UART <-->|"115200 bps<br/>Comandos e Telemetria Frota"| BC_UART
+  BC_LORA <-->|"Antena 433 MHz"| AIR(("🌊 Rovers 1..8"))
 ```
 
 ---
