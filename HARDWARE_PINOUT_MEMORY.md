@@ -140,12 +140,18 @@ Para ligação futura de sensores analógicos/digitais, atuadores ou barramentos
   - *(Nota: Todos os outros pinos dos microcontroladores estão dedicados ao ecrã ST7789, SD Card, LoRa SX1278, GPS Quectel, Joysticks, Botões, Servos ou são strapping pins / LEDs internos).*
 - **Mapeamento de Pinos da Ilha `J_EXP`:**
 
-| Linha | Coluna Esquerda ($X = 64.00\text{ mm}$) | Coluna Direita ($X = 66.54\text{ mm}$) | Função / Aplicação |
+| Linha | Coluna Esquerda ($X = 64.00\text{ mm}$) | Coluna Direita ($X = 66.54\text{ mm}$) | Função / Aplicação (`GY-BNO055` 9-DOF IMU) |
 | :---: | :---: | :---: | :--- |
-| **Linha 1 ($Y = 78.00\text{ mm}$)** | **Pino 1:** `GPIO 1` (`/EXP_IO1`) | **Pino 2:** `+3V3_C6` (Alimentação 3.3V) | Canal Analógico / Sensor 3.3V |
-| **Linha 2 ($Y = 80.54\text{ mm}$)** | **Pino 3:** `GPIO 11` (`/EXP_IO11`) | **Pino 4:** `+5V` (Barramento 5V Principal) | Canal Digital / Atuador 5V |
-| **Linha 3 ($Y = 83.08\text{ mm}$)** | **Pino 5:** `GND` (Plano de Massa) | **Pino 6:** `GND` (Plano de Massa) | Referência de Terra Comum |
+| **Linha 1 ($Y = 78.00\text{ mm}$)** | **Pino 1:** `GPIO 1` (`/EXP_IO1`) | **Pino 2:** `+3V3_C6` (Alimentação 3.3V) | **Pino 1 = I2C SDA** (`SDA\Tx`) • **Pino 2 = `VIN` (3.3V)** |
+| **Linha 2 ($Y = 80.54\text{ mm}$)** | **Pino 3:** `GPIO 11` (`/EXP_IO11`) | **Pino 4:** `+5V` (Barramento 5V Principal) | **Pino 3 = I2C SCL** (`SCL\Rx`) • *(Pino 4 `5V` livre)* |
+| **Linha 3 ($Y = 83.08\text{ mm}$)** | **Pino 5:** `GND` (Plano de Massa) | **Pino 6:** `GND` (Plano de Massa) | **Pinos 5/6 = `GND` Comum** |
 
+- **Ligação Validada da Bússola & IMU 9-DOF `GY-BNO055` em `J_EXP`:**
+  - `VIN` (BNO055) $\longleftarrow$ `J_EXP Pino 2` (`3V3`)
+  - `GND` (BNO055) $\longleftarrow$ `J_EXP Pino 5 ou 6` (`GND`)
+  - `SCL \ Rx` (BNO055) $\longleftarrow$ `J_EXP Pino 3` (`IO11` / `GPIO 11`)
+  - `SDA \ Tx` (BNO055) $\longleftrightarrow$ `J_EXP Pino 1` (`IO1` / `GPIO 1`)
+  - Endereço I2C: `0x28` (com `ADD` aberto; auto-deteção `0x28` / `0x29` a 100 kHz em modo NDOF 9-DOF).
 - **Serigrafia Frontal (`F.SilkS`):** Caixa delimitadora retangular com identificadores em negrito: `EXPANSION`, `IO1  3V3`, `IO11  5V` e `GND  GND`.
 - **Validação DRC:** **0 erros DRC, 0 itens desconectados**.
 
