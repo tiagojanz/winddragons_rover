@@ -45,7 +45,7 @@ enum CloudAction : uint8_t {
     ACTION_NONE            = 0,
     ACTION_HOLD_STATION    = 1, // Station keeping (target or current GPS position)
     ACTION_STOP            = 2, // Stop motors / disarm (STANDBY)
-    ACTION_DROP_ANCHOR     = 3, // Lower physical anchor
+    ACTION_DROP_ANCHOR     = 3, // Lower physical anchor (watches Hall sensor & auto-locks on stop)
     ACTION_RETRIEVE_ANCHOR = 4, // Retrieve physical anchor
     ACTION_STOP_ANCHOR     = 5, // Emergency stop anchor winch
     ACTION_NAVIGATE        = 6, // Navigate to target coordinates (GOTO)
@@ -53,9 +53,70 @@ enum CloudAction : uint8_t {
     ACTION_ALARM           = 8, // Strobe LED & acoustic alarm
     ACTION_PING            = 9, // Request immediate telemetry
     ACTION_MANUAL          = 10,// Manual joystick control
+    ACTION_RELAX_RACK      = 13,// Relax rack servo
+    ACTION_LOWER_WINCH     = 14,// Lower winch continuously (1200us)
+    ACTION_ZERO_ANCHOR     = 15,// Zero anchor Hall counter
+    ACTION_ENGAGE_RACK     = 16,// Lock/engage anchor rack
+    ACTION_RELEASE_ANCHOR  = 17,// Release anchor/rack freely without sensor auto-lock ("Libertar")
     ACTION_SET_BUOY_ROLE   = 18,// Set regatta buoy LED role/rounding (BuoyLightRole in target_depth_cm)
-    ACTION_SET_HOME        = 19 // Set Rover Home / RTL coordinates (current GPS or target_lat/lng)
+    ACTION_SET_HOME        = 19,// Set Rover Home / RTL coordinates (current GPS or target_lat/lng)
+    ACTION_SET_LED_ANIMS   = 20 // Set per-mode Nautical Animation bitmasks (packed in target_lat/lng or single mode in target_depth_cm/duration_s)
 };
+
+// Bitmask de Animação e Sinalização Náutica (Fita WS2812B - GPIO 19)
+// Permite selecionar uma única animação, OFF (0x00) ou combinar múltiplas animações por Modo de Operação (0..6)
+enum NauticalAnimBit : uint8_t {
+    NAV_ANIM_OFF     = 0x00, // Desligado (OFF)
+    NAV_ANIM_STROBE  = 0x01, // Bit 0: Strobe Náutico (Duplo Flash branco)
+    NAV_ANIM_NAV     = 0x02, // Bit 1: Luzes de Navegação (Bombordo Vermelho / Estibordo Verde)
+    NAV_ANIM_BEACON  = 0x04, // Bit 2: Farol Âmbar (Beacon Rotativo 2Hz)
+    NAV_ANIM_RAINBOW = 0x08, // Bit 3: Arco-Íris (Rainbow Ciclo HSV)
+    NAV_ANIM_CHASE   = 0x10, // Bit 4: Scanner Pixel-a-Pixel (Chase)
+    NAV_ANIM_POLICE  = 0x20, // Bit 5: Emergência (Vermelho / Azul)
+    NAV_ANIM_BUOY    = 0x40  // Bit 6: Sinalização de Boia de Regata (BB/EB/Largada/Chegada/Porta)
+};
+
+// Configuração padrão de animação náutica por cada MotorStatus (0=IDLE .. 6=FAILSAFE)
+static constexpr uint8_t DEFAULT_ROVER_LED_MODE_ANIMS[7] = {
+    NAV_ANIM_BUOY,   // 0: MOTOR_IDLE (Boia Regata se atribuída, senão OFF)
+    NAV_ANIM_NAV,    // 1: MOTOR_MANUAL (Luzes de Navegação BB/EB)
+    NAV_ANIM_BUOY,   // 2: MOTOR_HOLDING_STATION (Boia Regata)
+    NAV_ANIM_BUOY,   // 3: MOTOR_ANCHORED (Boia Regata)
+    NAV_ANIM_NAV,    // 4: MOTOR_MOVING_TO_TARGET (Luzes de Navegação BB/EB)
+    NAV_ANIM_BEACON, // 5: MOTOR_RTL (Farol Âmbar)
+    NAV_ANIM_BEACON  // 6: MOTOR_FAILSAFE (Farol Âmbar 2Hz)
+};
+
+// Empacota os 7 bytes de máscaras de animação (modos 0..6) nos campos int32_t target_lat_deg7 e target_lng_deg7
+inline void pack_led_mode_anims(const uint8_t masks[7], int32_t &outLat7, int32_t &outLng7) {
+    uint32_t u0 = (static_cast<uint32_t>(masks[0] & 0x7F)) |
+                  (static_cast<uint32_t>(masks[1] & 0x7F) << 8) |
+                  (static_cast<uint32_t>(masks[2] & 0x7F) << 16) |
+                  (static_cast<uint32_t>(masks[3] & 0x7F) << 24);
+    uint32_t u1 = (static_cast<uint32_t>(masks[4] & 0x7F)) |
+                  (static_cast<uint32_t>(masks[5] & 0x7F) << 8) |
+                  (static_cast<uint32_t>(masks[6] & 0x7F) << 16) |
+                  (0xA5UL << 24);
+    outLat7 = static_cast<int32_t>(u0);
+    outLng7 = static_cast<int32_t>(u1);
+}
+
+// Desempacota os 7 bytes de máscaras de animação (modos 0..6) a partir de target_lat_deg7 e target_lng_deg7
+inline bool unpack_led_mode_anims(int32_t lat7, int32_t lng7, uint8_t outMasks[7]) {
+    uint32_t u0 = static_cast<uint32_t>(lat7);
+    uint32_t u1 = static_cast<uint32_t>(lng7);
+    if (((u1 >> 24) & 0xFF) != 0xA5) {
+        return false;
+    }
+    outMasks[0] = static_cast<uint8_t>(u0 & 0x7F);
+    outMasks[1] = static_cast<uint8_t>((u0 >> 8) & 0x7F);
+    outMasks[2] = static_cast<uint8_t>((u0 >> 16) & 0x7F);
+    outMasks[3] = static_cast<uint8_t>((u0 >> 24) & 0x7F);
+    outMasks[4] = static_cast<uint8_t>(u1 & 0x7F);
+    outMasks[5] = static_cast<uint8_t>((u1 >> 8) & 0x7F);
+    outMasks[6] = static_cast<uint8_t>((u1 >> 16) & 0x7F);
+    return true;
+}
 
 // Regatta Buoy LED Role / Rounding signaling on Rover WS2812B LEDs
 enum BuoyLightRole : uint8_t {
@@ -210,8 +271,14 @@ inline const char* get_action_str(uint8_t action) {
         case ACTION_ALARM:           return "ALARM";
         case ACTION_PING:            return "PING";
         case ACTION_MANUAL:          return "MANUAL";
+        case ACTION_RELAX_RACK:      return "RELAX_RACK";
+        case ACTION_LOWER_WINCH:     return "LOWER_WINCH";
+        case ACTION_ZERO_ANCHOR:     return "ZERO_ANCHOR";
+        case ACTION_ENGAGE_RACK:     return "LOCK_ANCHOR";
+        case ACTION_RELEASE_ANCHOR:  return "RELEASE_ANCHOR";
         case ACTION_SET_BUOY_ROLE:   return "SET_BUOY_ROLE";
         case ACTION_SET_HOME:        return "SET_RTL";
+        case ACTION_SET_LED_ANIMS:   return "SET_LED_ANIMS";
         default:                     return "NONE";
     }
 }

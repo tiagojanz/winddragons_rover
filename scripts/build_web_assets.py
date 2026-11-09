@@ -1923,11 +1923,11 @@ CONTROL_CONTENT = """
 <div class="card">
   <div class="card-title"><i class="fa-solid fa-anchor"></i> Guincho da Âncora &amp; Travão da Cremalheira</div>
   <div class="btn-group">
-    <button type="button" onclick="sendAction(3)" class="btn btn-primary"><i class="fa-solid fa-anchor"></i> Lançar Âncora (Soltar)</button>
+    <button type="button" onclick="sendAction(3)" class="btn btn-primary"><i class="fa-solid fa-anchor"></i> Lançar Âncora (Auto-Trancar)</button>
+    <button type="button" onclick="sendAction(17)" class="btn btn-secondary" style="background:#d97706;color:#fff;"><i class="fa-solid fa-lock-open"></i> Libertar (Sem Sensor)</button>
+    <button type="button" onclick="sendAction(16)" class="btn btn-primary" style="background:#059669;color:#fff;"><i class="fa-solid fa-lock"></i> Trancar Cremalheira (Encosto)</button>
     <button type="button" onclick="sendAction(4)" class="btn btn-primary"><i class="fa-solid fa-arrow-up"></i> Recolher Âncora (Guincho)</button>
     <button type="button" onclick="sendAction(5)" class="btn btn-secondary"><i class="fa-solid fa-stop"></i> Parar Guincho</button>
-    <button type="button" onclick="sendAction(16)" class="btn btn-primary" style="background:#059669;color:#fff;"><i class="fa-solid fa-lock"></i> Travar Cremalheira (Encosto)</button>
-    <button type="button" onclick="sendAction(17)" class="btn btn-secondary" style="background:#d97706;color:#fff;"><i class="fa-solid fa-lock-open"></i> Libertar Cremalheira (Livre)</button>
     <button type="button" onclick="sendAction(6)" class="btn btn-secondary"><i class="fa-solid fa-rotate"></i> Alternar Travão Cremalheira</button>
     <button type="button" onclick="sendAction(13)" class="btn btn-secondary" style="background:#475569;color:#fff;"><i class="fa-solid fa-feather"></i> Relaxar Servo</button>
   </div>
@@ -2474,6 +2474,28 @@ CONFIG_CONTENT = """
       <button type="button" onclick="saveLedConfig()" class="btn btn-primary" style="background:#9333ea;color:#fff;">
         <i class="fa-solid fa-floppy-disk"></i> Guardar Config LEDs
       </button>
+    </div>
+
+    <!-- Animação e Sinalização Náutica por Modo de Operação (0 a 6) — Seleção Simples ou Combinada -->
+    <div style="margin-top:14px;background:rgba(15,23,42,0.65);border:1px solid #4c1d95;border-radius:10px;padding:14px;" id="roverModeLedAnimsSection">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
+        <div class="stat-label" style="color:#e9d5ff;font-size:0.86rem;">
+          <i class="fa-solid fa-wand-magic-sparkles" style="color:#a855f7;"></i> Animação e Sinalização Náutica por Modo de Operação (0 a 6) — Seleção Simples ou Combinada:
+        </div>
+        <span class="badge" style="background:#3b0764;color:#e9d5ff;border:1px solid #7e22ce;">MULTI-SELEÇÃO POR MODO</span>
+      </div>
+      <p style="color:var(--muted);font-size:0.8rem;margin:0 0 12px 0;">
+        Para cada modo de operação do Rover, selecione <strong>uma animação</strong>, <strong>OFF</strong>, ou <strong>combine várias animações</strong> (ex.: <em>Luzes NAV + Strobe</em> sobrepõe o duplo-flash branco sobre Bombordo/Estibordo; múltiplas animações base alternam ciclicamente). A Estação Base também pode configurar estes modos remotamente via LoRa.
+      </p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:10px;" id="ledModeAnimsGrid"></div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;">
+        <button type="button" class="btn btn-primary" style="flex:1;min-width:210px;background:#7e22ce;color:#fff;" onclick="saveLedModeAnims()">
+          <i class="fa-solid fa-floppy-disk"></i> Guardar Animações por Modo
+        </button>
+        <button type="button" class="btn btn-secondary" onclick="resetLedModeAnims()">
+          <i class="fa-solid fa-rotate-left"></i> Repor Padrão Náutico
+        </button>
+      </div>
     </div>
   </div>
 
@@ -3280,6 +3302,128 @@ function resetC6LedDefaults() {
   .catch(() => {});
 }
 
+// ----------------- Animação e Sinalização Náutica por Modo (0..6) com Suporte a Combinações -----------------
+const NAUTICAL_ANIM_DEFS = [
+  { bit: 0x01, key: 'STROBE',  name: 'Strobe (2x Flash)', color: '#eab308' },
+  { bit: 0x02, key: 'NAV',     name: 'NAV BB/EB',         color: '#10b981' },
+  { bit: 0x04, key: 'BEACON',  name: 'Farol Âmbar',       color: '#0284c7' },
+  { bit: 0x08, key: 'RAINBOW', name: 'Arco-Íris',         color: '#a855f7' },
+  { bit: 0x10, key: 'CHASE',   name: 'Scanner Chase',     color: '#f97316' },
+  { bit: 0x20, key: 'POLICE',  name: 'Emergência Pol.',   color: '#ef4444' },
+  { bit: 0x40, key: 'BUOY',    name: 'Boia Regata',       color: '#ec4899' }
+];
+const ROVER_MODE_META = [
+  { id: 0, title: '0 • IDLE (Standby)',           desc: 'Aguardando missão / motores parados',                 defMask: 0x04 },
+  { id: 1, title: '1 • MANUAL (Comando)',         desc: 'Controlo manual ativo (Web / LoRa / Joystick)',      defMask: 0x02 },
+  { id: 2, title: '2 • HOLD STATION (Manter)',    desc: 'Manutenção autónoma de posição GPS',                 defMask: 0x40 },
+  { id: 3, title: '3 • ANCHORED (Ancorado)',      desc: 'Âncora lançada no fundo',                            defMask: 0x04 },
+  { id: 4, title: '4 • GOTO TARGET (Navegar)',    desc: 'Navegação autónoma para Waypoint',                   defMask: 0x02 },
+  { id: 5, title: '5 • RTL (Regresso Home)',      desc: 'Retorno automático ao ponto de partida',             defMask: 0x03 },
+  { id: 6, title: '6 • FAILSAFE (Emergência)',    desc: 'Perda de sinal / paragem de segurança',              defMask: 0x21 }
+];
+let currentLedModeAnims = ROVER_MODE_META.map(m => m.defMask);
+
+function describeAnimMask(mask) {
+  if (!mask || mask === 0) return 'OFF (Desligado)';
+  const parts = [];
+  NAUTICAL_ANIM_DEFS.forEach(a => {
+    if ((mask & a.bit) !== 0) parts.push(a.name);
+  });
+  return parts.length ? parts.join(' + ') : 'OFF';
+}
+
+function renderLedModeAnimsUI() {
+  const grid = document.getElementById('ledModeAnimsGrid');
+  if (!grid) return;
+  grid.innerHTML = ROVER_MODE_META.map(m => {
+    const mask = currentLedModeAnims[m.id] || 0;
+    const isOff = (mask === 0);
+    const chipsHtml = [
+      `<button type="button" onclick="toggleLedModeAnimBit(${m.id}, 0)" style="padding:4px 9px;border-radius:999px;font-size:0.72rem;font-weight:700;cursor:pointer;border:1px solid ${isOff ? '#ef4444' : '#334155'};background:${isOff ? 'rgba(239,68,68,0.22)' : '#0f172a'};color:${isOff ? '#fca5a5' : '#94a3b8'};">OFF</button>`
+    ].concat(NAUTICAL_ANIM_DEFS.map(a => {
+      const active = (mask & a.bit) !== 0;
+      return `<button type="button" onclick="toggleLedModeAnimBit(${m.id}, ${a.bit})" style="padding:4px 9px;border-radius:999px;font-size:0.72rem;font-weight:700;cursor:pointer;border:1px solid ${active ? a.color : '#334155'};background:${active ? a.color : '#0f172a'};color:${active ? '#ffffff' : '#94a3b8'};box-shadow:${active ? '0 0 8px ' + a.color + '66' : 'none'};">${a.name}</button>`;
+    })).join('');
+    return `
+      <div id="ledModeAnimCard_${m.id}" style="background:rgba(2,6,23,0.65);border:1px solid #334155;border-radius:8px;padding:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:4px;">
+          <div style="font-weight:700;font-size:0.82rem;color:var(--text);">${m.title}</div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span id="ledModeAnimSummary_${m.id}" class="badge" style="background:#1e1b4b;color:#c4b5fd;font-size:0.68rem;">${describeAnimMask(mask)}</span>
+            <button type="button" class="btn btn-secondary" style="padding:4px 8px;font-size:0.72rem;" onclick="testLedModeMask(${m.id})" title="Testar esta combinação na fita WS2812B"><i class="fa-solid fa-play"></i> Testar</button>
+          </div>
+        </div>
+        <div style="font-size:0.71rem;color:var(--muted);margin-bottom:8px;">${m.desc}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;" id="ledModeAnimChips_${m.id}">${chipsHtml}</div>
+      </div>`;
+  }).join('');
+}
+
+function toggleLedModeAnimBit(modeIdx, bit) {
+  if (bit === 0) {
+    currentLedModeAnims[modeIdx] = 0;
+  } else {
+    currentLedModeAnims[modeIdx] = (currentLedModeAnims[modeIdx] || 0) ^ bit;
+  }
+  renderLedModeAnimsUI();
+}
+
+function testLedModeMask(modeIdx) {
+  const mask = currentLedModeAnims[modeIdx] || 0;
+  fetch('/api/control/leds', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ test_mask: mask })
+  })
+  .then(r => r.json())
+  .then(res => {
+    const msg = res.msg || ('A testar combinação (' + describeAnimMask(mask) + ') na fita WS2812B!');
+    if (typeof showToast === 'function') showToast(msg);
+    showStatus(msg);
+  })
+  .catch(() => {});
+}
+
+function saveLedModeAnims() {
+  fetch('/api/control/leds', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ led_mode_anims: currentLedModeAnims, save: true })
+  })
+  .then(r => r.json())
+  .then(res => {
+    if (Array.isArray(res.led_mode_anims)) {
+      currentLedModeAnims = res.led_mode_anims.map(v => parseInt(v, 10) & 0x7F);
+      renderLedModeAnimsUI();
+    }
+    const msg = res.msg || 'Animações náuticas por modo guardadas no Rover!';
+    if (typeof showToast === 'function') showToast(msg);
+    showStatus(msg);
+  })
+  .catch(() => {});
+}
+
+function resetLedModeAnims() {
+  if (!confirm('Repor o mapeamento náutico padrão de animações para os 7 modos de operação?')) return;
+  fetch('/api/control/leds', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reset_mode_anims: true })
+  })
+  .then(r => r.json())
+  .then(res => {
+    if (Array.isArray(res.led_mode_anims)) {
+      currentLedModeAnims = res.led_mode_anims.map(v => parseInt(v, 10) & 0x7F);
+      renderLedModeAnimsUI();
+    }
+    const msg = res.msg || 'Mapeamento náutico padrão reposto!';
+    if (typeof showToast === 'function') showToast(msg);
+    showStatus(msg);
+  })
+  .catch(() => {});
+}
+setTimeout(renderLedModeAnimsUI, 50);
+
 // ----------------- Depuração e Calibração Bússola GY-BNO055 -----------------
 function degToCardinal(d) {
   const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
@@ -3519,6 +3663,12 @@ function loadConfig() {
       if (Array.isArray(data.c6_mode_colors)) {
         data.c6_mode_colors.forEach((c, idx) => updateC6ModeRowUI(idx, c));
       }
+      if (Array.isArray(data.led_mode_anims) && data.led_mode_anims.length === 7) {
+        for (let i = 0; i < 7; i++) {
+          currentLedModeAnims[i] = parseInt(data.led_mode_anims[i], 10) & 0x7F;
+        }
+        renderLedModeAnimsUI();
+      }
       if (data.motor_status !== undefined) {
         updateC6ActiveModeUI(data.motor_status, data.motor_status_str || 'IDLE');
       }
@@ -3564,7 +3714,8 @@ function saveAllConfig(e) {
       led_count: ledCnt,
       led_brightness: ledBrt,
       c6_led_brightness: c6LedBrt,
-      c6_mode_colors: c6Colors
+      c6_mode_colors: c6Colors,
+      led_mode_anims: currentLedModeAnims
     })
   })
   .then(r => r.json())
@@ -4996,7 +5147,9 @@ BASE_CONTROL_CONTENT = """
     <span><i class="fa-solid fa-anchor"></i> Guincho da Âncora & Travão</span>
   </div>
   <div class="btn-group">
-    <button onclick="sendAction(3)" class="btn btn-primary"><i class="fa-solid fa-arrow-down"></i> Lançar Âncora (Soltar)</button>
+    <button onclick="sendAction(3)" class="btn btn-primary"><i class="fa-solid fa-arrow-down"></i> Lançar Âncora (Auto-Trancar)</button>
+    <button onclick="sendAction(17)" class="btn btn-secondary" style="background:#d97706;color:#fff;"><i class="fa-solid fa-lock-open"></i> Libertar (Sem Sensor)</button>
+    <button onclick="sendAction(16)" class="btn btn-primary" style="background:#059669;color:#fff;"><i class="fa-solid fa-lock"></i> Trancar</button>
     <button onclick="sendAction(4)" class="btn btn-primary"><i class="fa-solid fa-arrow-up"></i> Recolher Âncora (Guincho)</button>
     <button onclick="sendAction(5)" class="btn btn-secondary"><i class="fa-solid fa-stop"></i> Parar Guincho</button>
   </div>
@@ -5829,6 +5982,30 @@ BASE_LCD_CARD = """
     <span id="c6LedFeedback" style="font-size:0.82rem;color:var(--green);font-weight:600;"></span>
   </div>
 </div>
+
+<!-- Card 3b: Definir Animação e Sinalização Náutica nos Rovers por Modo (0 a 6) via LoRa -->
+<div class="card" style="border-color:#a855f7;" id="roverLedAnimsCard">
+  <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+    <span><i class="fa-solid fa-wand-magic-sparkles" style="color:#a855f7;"></i> Animação e Sinalização Náutica dos Rovers por Modo (0 a 6) — Controlo Remoto LoRa</span>
+    <span class="badge" style="background:#3b0764;color:#e9d5ff;border:1px solid #7e22ce;">MULTI-SELEÇÃO &amp; ENVIO LORA</span>
+  </div>
+  <p style="color:var(--muted);font-size:0.875rem;margin-bottom:14px;">
+    Defina a partir da Estação Base qual a <strong>animação náutica</strong> (ou <strong>combinação de animações</strong>) que os Rovers devem executar na fita de LEDs WS2812B em cada modo de operação (<strong>0=IDLE</strong> a <strong>6=FAILSAFE</strong>). Pode enviar para o Rover ativo ou para todos os Rovers da frota via LoRa 433 MHz.
+  </p>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;margin-bottom:14px;" id="baseRoverLedModeGrid"></div>
+  <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
+    <button type="button" onclick="sendRoverLedModeAnims(false)" class="btn btn-primary" style="background:#7e22ce;color:#fff;">
+      <i class="fa-solid fa-satellite-dish"></i> Enviar para Rover Selecionado (LoRa)
+    </button>
+    <button type="button" onclick="sendRoverLedModeAnims(true)" class="btn btn-primary" style="background:#0284c7;color:#fff;">
+      <i class="fa-solid fa-tower-broadcast"></i> Enviar para TODOS os Rovers da Frota
+    </button>
+    <button type="button" onclick="resetRoverLedModeAnims()" class="btn btn-secondary">
+      <i class="fa-solid fa-rotate-left"></i> Repor Padrão Náutico
+    </button>
+    <span id="roverLedAnimsFeedback" style="font-size:0.82rem;color:var(--green);font-weight:600;"></span>
+  </div>
+</div>
 <script>
 let slideTimer = null;
 let c6LedSlideTimer = null;
@@ -5999,7 +6176,106 @@ fetch('/api/display').then(r=>r.json()).then(d=>{
   if (Array.isArray(d.c6_mode_colors)) {
     d.c6_mode_colors.forEach((col, idx) => applyC6ModeUiColor(idx, col));
   }
+  if (Array.isArray(d.rover_led_mode_anims) && d.rover_led_mode_anims.length === 7) {
+    for (let i = 0; i < 7; i++) baseRoverLedAnims[i] = parseInt(d.rover_led_mode_anims[i], 10) & 0x7F;
+    renderBaseRoverLedAnims();
+  }
 }).catch(()=>{});
+
+const BASE_ROVER_ANIM_DEFS = [
+  { bit: 0x01, name: 'Strobe', color: '#eab308' },
+  { bit: 0x02, name: 'NAV BB/EB', color: '#10b981' },
+  { bit: 0x04, name: 'Beacon', color: '#0284c7' },
+  { bit: 0x08, name: 'Rainbow', color: '#a855f7' },
+  { bit: 0x10, name: 'Chase', color: '#f97316' },
+  { bit: 0x20, name: 'Police', color: '#ef4444' },
+  { bit: 0x40, name: 'Boia Regata', color: '#ec4899' }
+];
+const BASE_ROVER_MODE_INFO = [
+  { id: 0, title: '0 • IDLE (Espera)', def: 0x04 },
+  { id: 1, title: '1 • MANUAL', def: 0x02 },
+  { id: 2, title: '2 • HOLDING STATION', def: 0x40 },
+  { id: 3, title: '3 • ANCHORED (Ancorado)', def: 0x04 },
+  { id: 4, title: '4 • MOVING TO TARGET', def: 0x02 },
+  { id: 5, title: '5 • RTL (Regresso)', def: 0x03 },
+  { id: 6, title: '6 • FAILSAFE / SOS', def: 0x21 }
+];
+let baseRoverLedAnims = BASE_ROVER_MODE_INFO.map(m => m.def);
+
+function describeBaseRoverAnimMask(mask) {
+  if (!mask) return 'DESLIGADO (OFF)';
+  return BASE_ROVER_ANIM_DEFS.filter(a => (mask & a.bit) !== 0).map(a => a.name).join(' + ');
+}
+
+function renderBaseRoverLedAnims() {
+  const grid = document.getElementById('baseRoverLedModeGrid');
+  if (!grid) return;
+  grid.innerHTML = BASE_ROVER_MODE_INFO.map(m => {
+    const mask = baseRoverLedAnims[m.id] || 0;
+    const isOff = (mask === 0);
+    const chips = [
+      `<button type="button" onclick="toggleBaseRoverAnimBit(${m.id}, 0)" style="padding:3px 8px;border-radius:999px;font-size:0.7rem;font-weight:700;cursor:pointer;border:1px solid ${isOff ? '#ef4444' : '#334155'};background:${isOff ? 'rgba(239,68,68,0.2)' : '#0f172a'};color:${isOff ? '#fca5a5' : '#94a3b8'};">OFF</button>`
+    ].concat(BASE_ROVER_ANIM_DEFS.map(a => {
+      const on = (mask & a.bit) !== 0;
+      return `<button type="button" onclick="toggleBaseRoverAnimBit(${m.id}, ${a.bit})" style="padding:3px 8px;border-radius:999px;font-size:0.7rem;font-weight:700;cursor:pointer;border:1px solid ${on ? a.color : '#334155'};background:${on ? a.color : '#0f172a'};color:${on ? '#fff' : '#94a3b8'};">${a.name}</button>`;
+    })).join('');
+    return `<div style="background:#0b1120;border:1px solid var(--border);border-radius:10px;padding:10px;">
+      <div style="font-weight:700;font-size:0.82rem;color:var(--text);margin-bottom:2px;">${m.title}</div>
+      <div style="font-size:0.7rem;color:#c084fc;font-weight:600;margin-bottom:6px;">Ativo: ${describeBaseRoverAnimMask(mask)}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px;">${chips}</div>
+    </div>`;
+  }).join('');
+}
+
+function toggleBaseRoverAnimBit(modeIdx, bit) {
+  if (bit === 0) {
+    baseRoverLedAnims[modeIdx] = 0;
+  } else {
+    baseRoverLedAnims[modeIdx] = (baseRoverLedAnims[modeIdx] || 0) ^ bit;
+  }
+  renderBaseRoverLedAnims();
+}
+
+function showRoverLedAnimsFeedback(msg, isErr = false) {
+  const fb = document.getElementById('roverLedAnimsFeedback');
+  if (!fb) return;
+  fb.style.color = isErr ? 'var(--red)' : 'var(--green)';
+  fb.innerText = msg;
+  setTimeout(() => { if (fb.innerText === msg) fb.innerText = ''; }, 4000);
+}
+
+function sendRoverLedModeAnims(allRovers) {
+  fetch('/api/control/rover_leds', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rover_id: allRovers ? 255 : 0, led_mode_anims: baseRoverLedAnims })
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.success) showRoverLedAnimsFeedback(d.msg || 'Animações enviadas via LoRa!');
+    else showRoverLedAnimsFeedback(d.error || 'Erro ao enviar', true);
+  })
+  .catch(() => showRoverLedAnimsFeedback('Erro de comunicação', true));
+}
+
+function resetRoverLedModeAnims() {
+  if (!confirm('Repor o mapeamento náutico padrão nos Rovers e enviar via LoRa?')) return;
+  fetch('/api/control/rover_leds', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reset_defaults: true, rover_id: 255 })
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.success && Array.isArray(d.rover_led_mode_anims)) {
+      baseRoverLedAnims = d.rover_led_mode_anims.map(v => parseInt(v, 10) & 0x7F);
+      renderBaseRoverLedAnims();
+      showRoverLedAnimsFeedback(d.msg || 'Padrão náutico reposto!');
+    }
+  })
+  .catch(() => {});
+}
+renderBaseRoverLedAnims();
 </script>
 """
 
@@ -7191,6 +7467,29 @@ BASE_MISSION_CONTENT = """
     </div>
   </div>
 
+  <!-- Animação e Sinalização Náutica do Rover por Modo de Operação (0 a 6) -->
+  <div class="card" style="border:1px solid #7e22ce;" id="missionRoverLedAnimsCard">
+    <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+      <span><i class="fa-solid fa-wand-magic-sparkles" style="color:#a855f7;"></i> Animação e Sinalização Náutica nos Rovers por Modo (0 a 6)</span>
+      <span class="badge" style="background:#3b0764;color:#e9d5ff;border:1px solid #7e22ce;">SELEÇÃO SIMPLES OU COMBINADA</span>
+    </div>
+    <p style="color:var(--muted);font-size:0.82rem;margin-bottom:12px;">
+      Defina qual a animação náutica (ou combinação de animações, ex.: <strong>NAV BB/EB + Strobe</strong> ou <strong>Boia Regata + Strobe</strong>) que o Rover executa automaticamente em cada modo de operação (0=IDLE a 6=FAILSAFE).
+    </p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(275px,1fr));gap:10px;margin-bottom:12px;" id="missionRoverLedModeGrid"></div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;">
+      <button type="button" onclick="sendMissionRoverLedAnims(false)" class="btn btn-primary" style="flex:1;min-width:200px;background:#7e22ce;color:#fff;">
+        <i class="fa-solid fa-satellite-dish"></i> Definir no Rover Selecionado (LoRa)
+      </button>
+      <button type="button" onclick="sendMissionRoverLedAnims(true)" class="btn btn-primary" style="flex:1;min-width:200px;background:#0284c7;color:#fff;">
+        <i class="fa-solid fa-tower-broadcast"></i> Definir em TODOS os Rovers (Frota)
+      </button>
+      <button type="button" onclick="resetMissionRoverLedAnims()" class="btn btn-secondary">
+        <i class="fa-solid fa-rotate-left"></i> Repor Padrão Náutico
+      </button>
+    </div>
+  </div>
+
   <!-- Guincho da Âncora -->
   <div class="card">
     <div class="card-title">
@@ -7199,6 +7498,12 @@ BASE_MISSION_CONTENT = """
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;">
       <button type="button" onclick="sendAction(3)" class="btn btn-primary" style="padding:12px 10px;">
         <i class="fa-solid fa-arrow-down"></i> Lançar Âncora
+      </button>
+      <button type="button" onclick="sendAction(17)" class="btn btn-secondary" style="background:#d97706;color:#fff;padding:12px 10px;">
+        <i class="fa-solid fa-lock-open"></i> Libertar
+      </button>
+      <button type="button" onclick="sendAction(16)" class="btn btn-primary" style="background:#059669;color:#fff;padding:12px 10px;">
+        <i class="fa-solid fa-lock"></i> Trancar
       </button>
       <button type="button" onclick="sendAction(4)" class="btn btn-primary" style="padding:12px 10px;">
         <i class="fa-solid fa-arrow-up"></i> Recolher Âncora
@@ -7658,6 +7963,97 @@ function sendEmergencyStop() {
   sendAction(2); // ACTION_STOP
   showToast('🛑 PARAGEM DE EMERGÊNCIA ENVIADA!', true);
 }
+
+// ============================================================================
+// ANIMAÇÃO E SINALIZAÇÃO NÁUTICA NOS ROVERS POR MODO (0 A 6) VIA LORA
+// ============================================================================
+const MISSION_ROVER_ANIM_DEFS = [
+  { bit: 0x01, name: 'Strobe', color: '#eab308' },
+  { bit: 0x02, name: 'NAV BB/EB', color: '#10b981' },
+  { bit: 0x04, name: 'Beacon', color: '#0284c7' },
+  { bit: 0x08, name: 'Rainbow', color: '#a855f7' },
+  { bit: 0x10, name: 'Chase', color: '#f97316' },
+  { bit: 0x20, name: 'Police', color: '#ef4444' },
+  { bit: 0x40, name: 'Boia Regata', color: '#ec4899' }
+];
+const MISSION_ROVER_MODE_INFO = [
+  { id: 0, title: '0 • IDLE (Espera)', def: 0x04 },
+  { id: 1, title: '1 • MANUAL', def: 0x02 },
+  { id: 2, title: '2 • HOLDING STATION', def: 0x40 },
+  { id: 3, title: '3 • ANCHORED (Ancorado)', def: 0x04 },
+  { id: 4, title: '4 • MOVING TO TARGET', def: 0x02 },
+  { id: 5, title: '5 • RTL (Regresso)', def: 0x03 },
+  { id: 6, title: '6 • FAILSAFE / SOS', def: 0x21 }
+];
+let missionRoverLedAnims = MISSION_ROVER_MODE_INFO.map(m => m.def);
+let missionRoverLedLoadedForId = -1;
+
+function describeMissionRoverAnimMask(mask) {
+  if (!mask) return 'DESLIGADO (OFF)';
+  return MISSION_ROVER_ANIM_DEFS.filter(a => (mask & a.bit) !== 0).map(a => a.name).join(' + ');
+}
+
+function renderMissionRoverLedAnims() {
+  const grid = document.getElementById('missionRoverLedModeGrid');
+  if (!grid) return;
+  grid.innerHTML = MISSION_ROVER_MODE_INFO.map(m => {
+    const mask = missionRoverLedAnims[m.id] || 0;
+    const isOff = (mask === 0);
+    const chips = [
+      `<button type="button" onclick="toggleMissionRoverAnimBit(${m.id}, 0)" style="padding:3px 8px;border-radius:999px;font-size:0.68rem;font-weight:700;cursor:pointer;border:1px solid ${isOff ? '#ef4444' : '#334155'};background:${isOff ? 'rgba(239,68,68,0.2)' : '#0f172a'};color:${isOff ? '#fca5a5' : '#94a3b8'};">OFF</button>`
+    ].concat(MISSION_ROVER_ANIM_DEFS.map(a => {
+      const on = (mask & a.bit) !== 0;
+      return `<button type="button" onclick="toggleMissionRoverAnimBit(${m.id}, ${a.bit})" style="padding:3px 8px;border-radius:999px;font-size:0.68rem;font-weight:700;cursor:pointer;border:1px solid ${on ? a.color : '#334155'};background:${on ? a.color : '#0f172a'};color:${on ? '#fff' : '#94a3b8'};">${a.name}</button>`;
+    })).join('');
+    return `<div style="background:#0b1120;border:1px solid var(--border);border-radius:10px;padding:9px;">
+      <div style="font-weight:700;font-size:0.8rem;color:var(--text);margin-bottom:2px;">${m.title}</div>
+      <div style="font-size:0.68rem;color:#c084fc;font-weight:600;margin-bottom:5px;">Ativo: ${describeMissionRoverAnimMask(mask)}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px;">${chips}</div>
+    </div>`;
+  }).join('');
+}
+
+function toggleMissionRoverAnimBit(modeIdx, bit) {
+  if (bit === 0) {
+    missionRoverLedAnims[modeIdx] = 0;
+  } else {
+    missionRoverLedAnims[modeIdx] = (missionRoverLedAnims[modeIdx] || 0) ^ bit;
+  }
+  renderMissionRoverLedAnims();
+}
+
+function sendMissionRoverLedAnims(allRovers) {
+  const targetId = allRovers ? 255 : (selectedRoverId || 1);
+  fetch('/api/control/rover_leds', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rover_id: targetId, led_mode_anims: missionRoverLedAnims })
+  })
+  .then(r => r.json())
+  .then(res => {
+    showToast(res.msg || 'Animações náuticas enviadas via LoRa!', !res.success);
+  })
+  .catch(() => showToast('Erro de comunicação com a Base', true));
+}
+
+function resetMissionRoverLedAnims() {
+  if (!confirm('Repor o mapeamento náutico padrão nos Rovers e enviar via LoRa?')) return;
+  fetch('/api/control/rover_leds', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reset_defaults: true, rover_id: 255 })
+  })
+  .then(r => r.json())
+  .then(res => {
+    if (res.success && Array.isArray(res.rover_led_mode_anims)) {
+      missionRoverLedAnims = res.rover_led_mode_anims.map(v => parseInt(v, 10) & 0x7F);
+      renderMissionRoverLedAnims();
+    }
+    showToast(res.msg || 'Padrão náutico reposto!', !res.success);
+  })
+  .catch(() => showToast('Erro ao repor padrão náutico', true));
+}
+setTimeout(renderMissionRoverLedAnims, 50);
 
 // --- MAPA LEAFLET ---
 function initMap() {
@@ -8525,6 +8921,17 @@ function loadAllData(forceMapCenter = false) {
         if (h) {
           h.innerText = p < 20 ? 'CRÍTICO' : (p < 40 ? 'BAIXA' : 'NORMAL');
           h.style.color = batCol;
+        }
+
+        if (missionRoverLedLoadedForId !== selectedRoverId) {
+          const animSrc = (Array.isArray(sel.led_mode_anims) && sel.led_mode_anims.length === 7)
+            ? sel.led_mode_anims
+            : (Array.isArray(data.rover_led_mode_anims) && data.rover_led_mode_anims.length === 7 ? data.rover_led_mode_anims : null);
+          if (animSrc) {
+            missionRoverLedAnims = animSrc.map(v => parseInt(v, 10) & 0x7F);
+            missionRoverLedLoadedForId = selectedRoverId;
+            renderMissionRoverLedAnims();
+          }
         }
       }
 

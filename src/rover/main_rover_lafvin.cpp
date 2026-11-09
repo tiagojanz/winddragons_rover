@@ -4,9 +4,9 @@
 #include <SD.h>
 #include <SPI.h>
 
+#include "../base/base_joystick.h"
 #include "actuators.h"
 #include "battery_monitor.h"
-#include "../base/base_joystick.h"
 #include "config_common.h"
 #include "gps_tracker.h"
 #include "lora_protocol.h"
@@ -63,6 +63,7 @@ HardwareSerial interSerial(1);
 uint32_t uartSeq = 0;
 uint32_t lastUartPingTime = 0;
 uint32_t lastUartRxTime = 0;
+uint32_t motorTestStopAtMs = 0;
 char queuedWebCommand[256] = "NONE";
 
 // Controlo do ecrã e botão de navegação
@@ -109,9 +110,7 @@ static bool calibrateLocalJoystick(int samples, int delayMs) {
 
 void printLog(const char *format, ...);
 
-static void disarmRoverNav() {
-  joystick.disarmNav();
-}
+static void disarmRoverNav() { joystick.disarmNav(); }
 
 static void handleRoverMenuInputs(uint32_t now, bool &forceDisplay) {
   (void)now;
@@ -230,6 +229,105 @@ static void handleRoverMenuInputs(uint32_t now, bool &forceDisplay) {
     return;
   }
 
+  // Wizard de Teste de Navegação / Bússola / RTL em 5 Passos + Gravação no SD
+  if (page == ROVER_PAGE_CONFIG_NAV_WIZARD) {
+    roverDisplay.updateNavWizardLiveSample(gps);
+    int8_t navX = joystick.getNavX();
+    int8_t navY = joystick.getNavY();
+    bool bootShort = joystick.wasShortClicked();
+    bool bootLong = joystick.wasLongClicked();
+    joystick.wasBootHeld3s();
+
+    uint8_t step = roverDisplay.getNavWizStep();
+    if (navX == -1 || btnModeEdge || bootLong) {
+      disarmRoverNav();
+      roverDisplay.setPage(ROVER_PAGE_CONFIG_MENU);
+      forceDisplay = true;
+      printLog("[UI] Wizard Teste Nav -> Configuracoes\n");
+    } else if (step >= 5 && navY == -1) {
+      disarmRoverNav();
+      roverDisplay.beginNavWizard();
+      roverDisplay.showFeedback("WIZARD REINICIADO!", 1500);
+      forceDisplay = true;
+      printLog("[UI] ★ Wizard Teste Nav reiniciado (Passo 1/5)\n");
+    } else if (bootShort || navX == 1) {
+      disarmRoverNav();
+      if (step < 5) {
+        if (step == 0) {
+          // Passo 1/5: Grava também o ponto HOME atual no GPS e envia para a C6
+          if (gps.setHomeToCurrent()) {
+            char cmd[64];
+            snprintf(cmd, sizeof(cmd), "CMD:SET_HOME:%ld:%ld",
+                     (long)gps.getHomeLatDeg7(), (long)gps.getHomeLngDeg7());
+            interSerial.println(cmd);
+            interSerial.flush();
+            strncpy(queuedWebCommand, cmd, sizeof(queuedWebCommand) - 1);
+            queuedWebCommand[sizeof(queuedWebCommand) - 1] = '\0';
+          } else {
+            interSerial.println("CMD:SET_HOME");
+            interSerial.flush();
+          }
+        }
+
+        roverDisplay.confirmNavWizardStep(step, gps);
+        printLog("[NAV WIZ] ★ Passo %u/5 registado (Proa=%.1f Raw=%.1f Off=%+.1f "
+                 "Lat=%.6f Lng=%.6f)\n",
+                 (unsigned)(step + 1), gps.getHeading(),
+                 gps.getCompassRawHeading(), gps.getCompassOffset(),
+                 gps.getLatitude(), gps.getLongitude());
+
+        if (step < 4) {
+          roverDisplay.setNavWizStep(step + 1);
+          char fb[40];
+          snprintf(fb, sizeof(fb), "PASSO %u/5 GRAVADO!", (unsigned)(step + 1));
+          roverDisplay.showFeedback(fb, 1200);
+        } else {
+          // Concluiu o Passo 5/5 -> Gerar Relatório Completo e Gravar no MicroSD
+          String report = roverDisplay.buildNavWizardReport(
+              roverConfig.getRoverId(), roverConfig.isMotorInverted());
+          String csvRow =
+              roverDisplay.buildNavWizardCsvRow(roverConfig.getRoverId());
+
+          Serial.println("\n" + report);
+          webConsole.log("[NAV WIZARD] Relatorio completo gerado!\n");
+
+          bool sdSaved = false;
+          if (sdCard.isReady()) {
+            sdSaved = sdCard.writeFile("/nav_test_wizard.txt", report.c_str());
+            if (!sdCard.fileExists("/nav_test_history.csv")) {
+              sdCard.writeFile(
+                  "/nav_test_history.csv",
+                  "uptime_s,rover,run_id,home_lat,home_lng,end_lat,end_lng,"
+                  "dist_m,p1_raw_deg,p1_off_deg,p1_fused_deg,p2_dyaw_deg,"
+                  "p3_dyaw_deg,p4_walk_gps_az_deg,p4_fused_deg,"
+                  "p5_course_home_deg,p5_fused_deg,p5_rtl_err_deg,"
+                  "p5_sim_rud_pct,p5_sim_thr_pct,result,diagnosis\n");
+            }
+            sdCard.appendFile("/nav_test_history.csv", csvRow.c_str());
+            printLog("[NAV WIZ] ★ Relatorio gravado no SD: /nav_test_wizard.txt "
+                     "(%s)\n",
+                     sdSaved ? "OK" : "FALHA");
+          } else {
+            printLog("[NAV WIZ] ⚠ Cartao SD indisponivel — relatorio disponivel "
+                     "em /api/nav_wizard\n");
+          }
+
+          roverDisplay.setNavWizSdSaved(sdSaved, "/nav_test_wizard.txt");
+          roverDisplay.setNavWizStep(5);
+          roverDisplay.showFeedback(
+              sdSaved ? "GUARDADO NO SD: OK!" : "CONCLUIDO (VER WEB)!", 2200);
+        }
+        forceDisplay = true;
+      } else {
+        // No ecrã de Resumo (step == 5), BOOT sai para o menu Configurações
+        roverDisplay.setPage(ROVER_PAGE_CONFIG_MENU);
+        forceDisplay = true;
+        printLog("[UI] Resumo Teste Nav -> Configuracoes\n");
+      }
+    }
+    return;
+  }
+
   // Editor Numérico de Capacidade da Bateria (mAh)
   if (page == ROVER_PAGE_CONFIG_BATT_MAH) {
     int8_t dx = joystick.getNavXRepeat();
@@ -330,8 +428,8 @@ static void handleRoverMenuInputs(uint32_t now, bool &forceDisplay) {
   switch (page) {
   case ROVER_PAGE_HOME:
     if (navY != 0) {
-      roverDisplay.setHomeMenuIdx(
-          (roverDisplay.getHomeMenuIdx() + 2 + navY) % 2);
+      roverDisplay.setHomeMenuIdx((roverDisplay.getHomeMenuIdx() + 2 + navY) %
+                                  2);
       forceDisplay = true;
     }
     if (navX == 1 || clickEnter) {
@@ -349,7 +447,7 @@ static void handleRoverMenuInputs(uint32_t now, bool &forceDisplay) {
 
   case ROVER_PAGE_OP_MENU:
     if (navY != 0) {
-      roverDisplay.setOpMenuIdx((roverDisplay.getOpMenuIdx() + 4 + navY) % 4);
+      roverDisplay.setOpMenuIdx((roverDisplay.getOpMenuIdx() + 5 + navY) % 5);
       forceDisplay = true;
     }
     if (navX == -1 || clickBack) {
@@ -371,7 +469,15 @@ static void handleRoverMenuInputs(uint32_t now, bool &forceDisplay) {
         roverDisplay.setJoyExitPromptActive(false);
         roverDisplay.setBootHoldProgressPct(0);
         roverDisplay.setPage(ROVER_PAGE_ACTUATORS);
+        if (joyHwConnected) {
+          interSerial.println("CMD:JOY_EN:1");
+          interSerial.flush();
+        }
         printLog("[UI] Operacao -> Atuadores\n");
+      } else if (idx == 3) {
+        roverDisplay.setAnchorMenuIdx(0);
+        roverDisplay.setPage(ROVER_PAGE_ANCHOR);
+        printLog("[UI] Operacao -> Ancora\n");
       } else {
         if (gps.setHomeToCurrent()) {
           char cmd[64];
@@ -395,6 +501,77 @@ static void handleRoverMenuInputs(uint32_t now, bool &forceDisplay) {
     }
     break;
 
+  case ROVER_PAGE_ANCHOR:
+    if (navY != 0) {
+      roverDisplay.setAnchorMenuIdx(
+          (roverDisplay.getAnchorMenuIdx() + 5 + navY) % 5);
+      forceDisplay = true;
+    }
+    if (navX == -1 || clickBack) {
+      disarmRoverNav();
+      roverDisplay.setPage(ROVER_PAGE_OP_MENU);
+      forceDisplay = true;
+      printLog("[UI] Ancora -> Operacao\n");
+    } else if (navX == 1 || clickEnter) {
+      disarmRoverNav();
+      uint8_t aIdx = roverDisplay.getAnchorMenuIdx();
+      if (aIdx == 0) {
+        // 1. Lançar Âncora (com sensor Hall auto-trancar ao parar)
+        actuators.commandDropAnchor(0);
+        currentMotorStatus = MOTOR_ANCHORED;
+        interSerial.println("CMD:DROP_ANCHOR");
+        interSerial.flush();
+        strncpy(queuedWebCommand, "CMD:DROP_ANCHOR",
+                sizeof(queuedWebCommand) - 1);
+        queuedWebCommand[sizeof(queuedWebCommand) - 1] = '\0';
+        roverDisplay.showFeedback("A LANCAR (AUTO-LOCK)!", 1800);
+        printLog("[UI] ★ Ancora -> LANCAR ANCORA (auto-trancar por sensor)\n");
+      } else if (aIdx == 1) {
+        // 2. Libertar Cremalheira (livre sem sensor)
+        actuators.releaseRack();
+        interSerial.println("CMD:RACK:RELEASE");
+        interSerial.flush();
+        strncpy(queuedWebCommand, "CMD:RACK:RELEASE",
+                sizeof(queuedWebCommand) - 1);
+        queuedWebCommand[sizeof(queuedWebCommand) - 1] = '\0';
+        roverDisplay.showFeedback("CREMALHEIRA LIBERTADA!", 1800);
+        printLog("[UI] ★ Ancora -> LIBERTAR (sem sensor)\n");
+      } else if (aIdx == 2) {
+        // 3. Trancar Cremalheira
+        actuators.engageRack();
+        interSerial.println("CMD:RACK:ENGAGE");
+        interSerial.flush();
+        strncpy(queuedWebCommand, "CMD:RACK:ENGAGE",
+                sizeof(queuedWebCommand) - 1);
+        queuedWebCommand[sizeof(queuedWebCommand) - 1] = '\0';
+        roverDisplay.showFeedback("CREMALHEIRA TRANCADA!", 1800);
+        printLog("[UI] ★ Ancora -> TRANCAR CREMALHEIRA\n");
+      } else if (aIdx == 3) {
+        // 4. Recolher Âncora
+        actuators.commandRetractAnchor();
+        currentMotorStatus = MOTOR_IDLE;
+        interSerial.println("CMD:RETRACT_ANCHOR");
+        interSerial.flush();
+        strncpy(queuedWebCommand, "CMD:RETRACT_ANCHOR",
+                sizeof(queuedWebCommand) - 1);
+        queuedWebCommand[sizeof(queuedWebCommand) - 1] = '\0';
+        roverDisplay.showFeedback("A RECOLHER ANCORA...", 1800);
+        printLog("[UI] ★ Ancora -> RECOLHER ANCORA\n");
+      } else {
+        // 5. Parar Guincho
+        actuators.stopWinch();
+        interSerial.println("CMD:STOP_ANCHOR");
+        interSerial.flush();
+        strncpy(queuedWebCommand, "CMD:STOP_ANCHOR",
+                sizeof(queuedWebCommand) - 1);
+        queuedWebCommand[sizeof(queuedWebCommand) - 1] = '\0';
+        roverDisplay.showFeedback("GUINCHO PARADO!", 1800);
+        printLog("[UI] ★ Ancora -> PARAR GUINCHO\n");
+      }
+      forceDisplay = true;
+    }
+    break;
+
   case ROVER_PAGE_NAV:
   case ROVER_PAGE_POWER:
     if (navX == -1 || clickBack || clickEnter) {
@@ -408,7 +585,7 @@ static void handleRoverMenuInputs(uint32_t now, bool &forceDisplay) {
   case ROVER_PAGE_CONFIG_MENU:
     if (navY != 0) {
       roverDisplay.setConfigMenuIdx(
-          (roverDisplay.getConfigMenuIdx() + 6 + navY) % 6);
+          (roverDisplay.getConfigMenuIdx() + 8 + navY) % 8);
       forceDisplay = true;
     }
     if (navX == -1 || clickBack) {
@@ -429,9 +606,20 @@ static void handleRoverMenuInputs(uint32_t now, bool &forceDisplay) {
         roverDisplay.setPage(ROVER_PAGE_CONFIG_JOY);
         printLog("[UI] Configuracoes -> JoyStick\n");
       } else if (idx == 3) {
+        roverDisplay.setMotorMenuIdx(0);
+        roverDisplay.setPage(ROVER_PAGE_CONFIG_MOTOR);
+        printLog("[UI] Configuracoes -> Motor (Sentido ESC)\n");
+      } else if (idx == 4) {
+        joystick.wasShortClicked();
+        joystick.wasLongClicked();
+        joystick.wasBootHeld3s();
+        roverDisplay.beginNavWizard();
+        roverDisplay.setPage(ROVER_PAGE_CONFIG_NAV_WIZARD);
+        printLog("[UI] Configuracoes -> Teste Nav (Wizard 1/5)\n");
+      } else if (idx == 5) {
         roverDisplay.setPage(ROVER_PAGE_CONFIG_ID);
         printLog("[UI] Configuracoes -> ID\n");
-      } else if (idx == 4) {
+      } else if (idx == 6) {
         roverDisplay.setPage(ROVER_PAGE_CONFIG_FW);
         printLog("[UI] Configuracoes -> Firmware\n");
       } else {
@@ -442,10 +630,61 @@ static void handleRoverMenuInputs(uint32_t now, bool &forceDisplay) {
     }
     break;
 
+  case ROVER_PAGE_CONFIG_MOTOR:
+    if (navY != 0) {
+      roverDisplay.setMotorMenuIdx((roverDisplay.getMotorMenuIdx() + 2 + navY) %
+                                   2);
+      forceDisplay = true;
+    }
+    if (navX == -1 || clickBack) {
+      if (motorTestStopAtMs > 0) {
+        motorTestStopAtMs = 0;
+        actuators.stopMotor();
+        interSerial.println("CMD:MOTOR:0");
+        interSerial.flush();
+      }
+      disarmRoverNav();
+      roverDisplay.setPage(ROVER_PAGE_CONFIG_MENU);
+      forceDisplay = true;
+      printLog("[UI] Motor -> Configuracoes\n");
+    } else if (navX == 1 || clickEnter) {
+      disarmRoverNav();
+      if (roverDisplay.getMotorMenuIdx() == 0) {
+        bool inv = !roverConfig.isMotorInverted();
+        roverConfig.setMotorInverted(inv, true);
+        actuators.setMotorInverted(inv);
+
+        char cmd[32];
+        snprintf(cmd, sizeof(cmd), "CMD:MOTOR_INV:%d", inv ? 1 : 0);
+        interSerial.println(cmd);
+        interSerial.flush();
+        strncpy(queuedWebCommand, cmd, sizeof(queuedWebCommand) - 1);
+        queuedWebCommand[sizeof(queuedWebCommand) - 1] = '\0';
+
+        roverDisplay.showFeedback(
+            inv ? "MOTOR: INVERTIDO (REV)" : "MOTOR: NORMAL (PADRAO)", 1800);
+        printLog("[UI] ★ Sentido do Motor ESC alterado para: %s\n",
+                 inv ? "INVERTIDO (REVERSO)" : "NORMAL (PADRAO)");
+      } else {
+        // Pulso de teste de avanço (+25% durante 1.0 segundo)
+        actuators.setThrottle(25);
+        interSerial.println("CMD:MOTOR:25");
+        interSerial.flush();
+        strncpy(queuedWebCommand, "CMD:MOTOR:25", sizeof(queuedWebCommand) - 1);
+        queuedWebCommand[sizeof(queuedWebCommand) - 1] = '\0';
+        motorTestStopAtMs = millis() + 1000UL;
+        roverDisplay.showFeedback("TESTE AVANCO +25% (1s)...", 1200);
+        printLog("[UI] ★ Teste de Avanco do Motor ESC (+25%% por 1s, Inv=%d)\n",
+                 roverConfig.isMotorInverted() ? 1 : 0);
+      }
+      forceDisplay = true;
+    }
+    break;
+
   case ROVER_PAGE_CONFIG_BATT:
     if (navY != 0) {
-      roverDisplay.setBattMenuIdx(
-          (roverDisplay.getBattMenuIdx() + 2 + navY) % 2);
+      roverDisplay.setBattMenuIdx((roverDisplay.getBattMenuIdx() + 2 + navY) %
+                                  2);
       forceDisplay = true;
     }
     if (navX == -1 || clickBack) {
@@ -745,6 +984,7 @@ void setup() {
   actuators.setRackConfig(roverConfig.getRackAngleEngaged(),
                           roverConfig.getRackAngleReleased(),
                           roverConfig.isRackInverted(), false);
+  actuators.setMotorInverted(roverConfig.isMotorInverted());
   actuators.setLedConfigState(roverConfig.getLedCount(),
                               roverConfig.getLedBrightness());
   webServer.setCommandQueueCallback([](const char *cmd) {
@@ -762,8 +1002,6 @@ void setup() {
         interSerial.flush();
         printLog("[LAFVIN] >>> COMANDO UART DIRETO: %s\n", cmd);
       }
-      strncpy(queuedWebCommand, cmd, sizeof(queuedWebCommand) - 1);
-      queuedWebCommand[sizeof(queuedWebCommand) - 1] = '\0';
     }
   });
 
@@ -814,14 +1052,6 @@ void setup() {
   }
 
   webServer.setLoraDiagnosticsPtr(&roverLoraDiag);
-  webServer.setCommandQueueCallback([](const char *cmd) {
-    if (cmd && strlen(cmd) > 0) {
-      interSerial.println(cmd);
-      interSerial.flush();
-      strncpy(queuedWebCommand, cmd, sizeof(queuedWebCommand) - 1);
-      queuedWebCommand[sizeof(queuedWebCommand) - 1] = '\0';
-    }
-  });
   webServer.begin();
 
   // 6. Configurar UART Inter-ESP (TX=GPIO 2, RX=GPIO 1)
@@ -845,9 +1075,9 @@ void setup() {
   }
   joyCenterX = joystick.getCenterX();
   joyCenterY = joystick.getCenterY();
-  joyHwConnected =
-      joystick.isAxisXConnected() || joystick.isAxisYConnected();
-  printLog("[JOYSTICK] Inicializado (X0=%d [%s], Y0=%d [%s], InvX=%d, InvY=%d, Cal=%d)\n",
+  joyHwConnected = joystick.isAxisXConnected() || joystick.isAxisYConnected();
+  printLog("[JOYSTICK] Inicializado (X0=%d [%s], Y0=%d [%s], InvX=%d, InvY=%d, "
+           "Cal=%d)\n",
            joyCenterX, joystick.isAxisXConnected() ? "OK" : "ABERTO",
            joyCenterY, joystick.isAxisYConnected() ? "OK" : "ABERTO",
            roverConfig.isJoystickInvertX() ? 1 : 0,
@@ -874,6 +1104,15 @@ void loop() {
   webServer.handleClient();
 
   // 2. Navegação de Menus (Joystick + Botões, idêntico ao firmware da Base)
+  if (motorTestStopAtMs > 0 && now >= motorTestStopAtMs) {
+    motorTestStopAtMs = 0;
+    actuators.stopMotor();
+    interSerial.println("CMD:MOTOR:0");
+    interSerial.flush();
+    strncpy(queuedWebCommand, "CMD:MOTOR:0", sizeof(queuedWebCommand) - 1);
+    queuedWebCommand[sizeof(queuedWebCommand) - 1] = '\0';
+    printLog("[UI] ★ Fim do pulso de teste do Motor ESC (0%%)\n");
+  }
   joystick.setInvertX(roverConfig.isJoystickInvertX());
   joystick.setInvertY(roverConfig.isJoystickInvertY());
   bool forceDisplay = false;
@@ -912,9 +1151,21 @@ void loop() {
     wasJoyEnabled = joyEn;
   }
 
-  // Apenas lê o joystick local se estiver ativado E o hardware físico tiver
-  // sido detetado nos pinos ADC
-  if (joyEn && joyHwConnected && (now - lastJoyReadTime >= 50)) {
+  // Apenas atua nos servos/motor quando estiver dentro da página "Atuadores"
+  // (ROVER_PAGE_ACTUATORS) e sem o modal SAIR | CONTINUAR aberto
+  bool inActuatorsPage =
+      (roverDisplay.getCurrentPage() == ROVER_PAGE_ACTUATORS &&
+       !roverDisplay.isJoyExitPromptActive());
+  static bool joyActuatorsArmed = false;
+  if (!inActuatorsPage) {
+    joyActuatorsArmed = false;
+  }
+
+  // Apenas lê o joystick local para os atuadores se estiver na página Atuadores
+  // (ou se precisar limpar joyActive ao sair) e o hardware físico estiver
+  // ligado
+  if ((inActuatorsPage || joyActive) && joyHwConnected &&
+      (now - lastJoyReadTime >= 50)) {
     lastJoyReadTime = now;
     int rawX = analogRead(PIN_JOYSTICK_X);
     int rawY = analogRead(PIN_JOYSTICK_Y);
@@ -977,22 +1228,27 @@ void loop() {
       }
     }
 
-    // Não acionar atuadores enquanto estiver nos ecrãs de teste/calibração do
-    // joystick ou com o modal SAIR | CONTINUAR aberto
-    if (roverDisplay.getCurrentPage() == ROVER_PAGE_CONFIG_JOY_TEST ||
-        roverDisplay.getCurrentPage() == ROVER_PAGE_CONFIG_JOY_CAL ||
-        roverDisplay.isJoyExitPromptActive()) {
+    // Exige passagem pelo centro neutro ao entrar em "Atuadores" (para que o
+    // movimento X-> de entrada no menu não dispare o leme) e bloqueia fora de
+    // "Atuadores"
+    if (!inActuatorsPage) {
       rud = 0;
       thr = 0;
+    } else if (!joyActuatorsArmed) {
+      if (rud == 0 && thr == 0) {
+        joyActuatorsArmed = true;
+      } else {
+        rud = 0;
+        thr = 0;
+      }
     }
 
     if (rud != 0 || thr != 0) {
       joyActive = true;
       actuators.setRudder((int8_t)rud);
       actuators.setThrottle((int8_t)thr);
-      bool hitFullScale =
-          (abs(rud) == 100 && lastSentRud != rud) ||
-          (abs(thr) == 100 && lastSentThr != thr);
+      bool hitFullScale = (abs(rud) == 100 && lastSentRud != rud) ||
+                          (abs(thr) == 100 && lastSentThr != thr);
       if (abs(rud - lastSentRud) >= 3 || abs(thr - lastSentThr) >= 3 ||
           hitFullScale) {
         lastSentRud = rud;
@@ -1072,31 +1328,51 @@ void loop() {
           // Sincronizar calibração da cremalheira, âncora, bateria e estado do
           // joystick com o Coprocessador C6
           interSerial.printf("CMD:BATT:%u\n", roverConfig.getBatteryCells());
+          interSerial.printf("CMD:ANC_CFG:%.1f:%u\n",
+                             roverConfig.getAnchorDrumDiamMm(),
+                             roverConfig.getAnchorPulsesPerRev());
           interSerial.printf("CMD:RACK_CFG:%u:%u:%d\n",
                              roverConfig.getRackAngleEngaged(),
                              roverConfig.getRackAngleReleased(),
                              roverConfig.isRackInverted() ? 1 : 0);
+          interSerial.printf("CMD:MOTOR_INV:%d\n",
+                             roverConfig.isMotorInverted() ? 1 : 0);
           interSerial.printf("CMD:JOY_EN:%d\n",
                              roverConfig.isJoystickEnabled() ? 1 : 0);
           interSerial.printf("CMD:LED:CFG:%u:%u\n", roverConfig.getLedCount(),
                              roverConfig.getLedBrightness());
+          interSerial.println(roverConfig.buildLedModeAnimsCommand());
           interSerial.println(roverConfig.buildC6LedCfgCommand());
           interSerial.flush();
+        } else if (strncmp(rxBuf, "LED_MODES:", 10) == 0) {
+          lastUartRxTime = now;
+          int m[7] = {0, 0, 0, 0, 0, 0, 0};
+          int n = sscanf(rxBuf + 10, "%d:%d:%d:%d:%d:%d:%d", &m[0], &m[1],
+                         &m[2], &m[3], &m[4], &m[5], &m[6]);
+          if (n >= 1) {
+            for (int i = 0; i < 7 && i < n; i++) {
+              roverConfig.setLedModeAnim((uint8_t)i, (uint8_t)m[i], false);
+            }
+            roverConfig.saveConfig();
+            printLog("[LAFVIN ROVER] ★ Animacoes Nauticas sincronizadas da C6 "
+                     "e gravadas no SD/NVS!\n");
+          }
         } else if (strncmp(rxBuf, "PONG:", 5) == 0) {
           lastUartRxTime = now;
           uint32_t seq = 0, batMv = 0, batPct = 0, sats = 0, fix = 0, motSt = 0,
                    depth = 0, ancSt = 0;
-          long lat7 = 0, lng7 = 0;
+          long lat7 = 0, lng7 = 0, hallPulses = -1;
           float batA = 0.0f, spd = 0.0f, head = 0.0f, rssi = 0.0f, snr = 0.0f;
           int rud = 0, thr = 0, winch = 0, rack = 0;
           char rfSt[32] = "OK";
 
-          int parsed = sscanf(rxBuf + 5,
-                              "%u:%u:%f:%u:%ld:%ld:%f:%f:%u:%u:%u:%d:%d:%d:%d:%"
-                              "u:%31[^:]:%f:%f:%u",
-                              &seq, &batMv, &batA, &batPct, &lat7, &lng7, &spd,
-                              &head, &sats, &fix, &motSt, &rud, &thr, &winch,
-                              &rack, &depth, rfSt, &rssi, &snr, &ancSt);
+          int parsed =
+              sscanf(rxBuf + 5,
+                     "%u:%u:%f:%u:%ld:%ld:%f:%f:%u:%u:%u:%d:%d:%d:%d:%"
+                     "u:%31[^:]:%f:%f:%u:%ld",
+                     &seq, &batMv, &batA, &batPct, &lat7, &lng7, &spd, &head,
+                     &sats, &fix, &motSt, &rud, &thr, &winch, &rack, &depth,
+                     rfSt, &rssi, &snr, &ancSt, &hallPulses);
           if (parsed >= 10) {
             battery.setValues(batMv, batA, (uint8_t)batPct);
             if (!gps.isHardwareLocked() && !gps.hasFix()) {
@@ -1110,8 +1386,8 @@ void loop() {
             }
             int8_t effThr = joyActive ? actuators.getThrottle() : (int8_t)thr;
             int8_t effRud = joyActive ? actuators.getRudder() : (int8_t)rud;
-            actuators.setValues(effThr, effRud, winch, rack > 0,
-                                (uint8_t)ancSt, (uint16_t)depth);
+            actuators.setValues(effThr, effRud, winch, rack > 0, (uint8_t)ancSt,
+                                (uint16_t)depth, hallPulses);
             currentMotorStatus = (uint8_t)motSt;
             currentLoraRssi = (int16_t)rssi;
             currentLoraSnr = snr;
@@ -1178,12 +1454,13 @@ void loop() {
     }
   }
 
-  // 5. Atualização do ecrã LCD ST7789 (a cada 200ms ou 60ms em Atuadores / Teste
-  // / Calibração de Joystick, se barramento SPI estiver livre)
+  // 5. Atualização do ecrã LCD ST7789 (a cada 200ms ou 60ms em Atuadores /
+  // Teste / Calibração de Joystick, se barramento SPI estiver livre)
   static uint32_t lastLcdUpdate = 0;
   uint32_t lcdInterval =
       (roverDisplay.getCurrentPage() == ROVER_PAGE_CONFIG_JOY_TEST ||
        roverDisplay.getCurrentPage() == ROVER_PAGE_CONFIG_JOY_CAL ||
+       roverDisplay.getCurrentPage() == ROVER_PAGE_CONFIG_NAV_WIZARD ||
        roverDisplay.getCurrentPage() == ROVER_PAGE_ACTUATORS)
           ? 60
           : 200;

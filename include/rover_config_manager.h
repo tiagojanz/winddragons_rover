@@ -1,6 +1,7 @@
 #pragma once
 
 #include "config_common.h"
+#include "lora_protocol.h"
 #include "sd_card_manager.h"
 #include <Arduino.h>
 #include <ArduinoJson.h>
@@ -24,6 +25,7 @@ struct RoverConfig {
       rackAngleEngaged; // Ângulo de encosto / travado da cremalheira (0-180°)
   uint8_t rackAngleReleased; // Ângulo livre / solto da cremalheira (0-180°)
   bool rackInverted;         // Inverter direção do servo da cremalheira
+  bool motorInverted;        // Inverter sentido de rotação do motor ESC principal
   bool joystickEnabled;  // Habilitar/desabilitar leitura do joystick analógico
                          // físico (GPIO 3 / GPIO 0)
   bool joystickInvertX;  // Inverter Eixo X (Horizontal / Leme) do Joystick
@@ -37,6 +39,7 @@ struct RoverConfig {
   uint16_t joyYDown;       // ADC fim de curso Baixo
   uint8_t ledCount;        // Quantidade de LEDs WS2812B na fita (GPIO 19)
   uint8_t ledBrightness; // Brilho da fita de LEDs WS2812B (5 - 100%)
+  uint8_t ledModeAnims[7]; // Bitmask de Animação e Sinalização Náutica WS2812B por MotorStatus (0=IDLE..6=FAILSAFE)
   uint8_t c6LedBrightness; // Intensidade do LED RGB onboard da C6 (GPIO 8, 0 -
                            // 100%)
   String c6ModeColors[7];  // Cores #RRGGBB para cada MotorStatus
@@ -72,6 +75,7 @@ public:
     _config.rackAngleEngaged = RACK_POS_ENGAGED;
     _config.rackAngleReleased = RACK_POS_RELEASED;
     _config.rackInverted = RACK_SERVO_INVERTED_DEFAULT;
+    _config.motorInverted = false;
     _config.joystickEnabled = false;
     _config.joystickInvertX = false;
     _config.joystickInvertY = false;
@@ -86,6 +90,7 @@ public:
     _config.ledBrightness = 100;
     _config.c6LedBrightness = 80;
     for (uint8_t i = 0; i < 7; i++) {
+      _config.ledModeAnims[i] = DEFAULT_ROVER_LED_MODE_ANIMS[i];
       _config.c6ModeColors[i] = DEFAULT_C6_MODE_COLORS[i];
     }
   }
@@ -136,6 +141,7 @@ public:
   uint8_t getRackAngleEngaged() const { return _config.rackAngleEngaged; }
   uint8_t getRackAngleReleased() const { return _config.rackAngleReleased; }
   bool isRackInverted() const { return _config.rackInverted; }
+  bool isMotorInverted() const { return _config.motorInverted; }
   bool isJoystickEnabled() const { return _config.joystickEnabled; }
   bool isJoystickInvertX() const { return _config.joystickInvertX; }
   bool isJoystickInvertY() const { return _config.joystickInvertY; }
@@ -148,6 +154,11 @@ public:
   uint16_t getJoyYDown() const { return _config.joyYDown; }
   uint8_t getLedCount() const { return _config.ledCount; }
   uint8_t getLedBrightness() const { return _config.ledBrightness; }
+  uint8_t getLedModeAnim(uint8_t idx) const {
+    if (idx >= 7)
+      return DEFAULT_ROVER_LED_MODE_ANIMS[0];
+    return _config.ledModeAnims[idx];
+  }
   uint8_t getC6LedBrightness() const { return _config.c6LedBrightness; }
   String getC6ModeColor(uint8_t idx) const {
     if (idx >= 7)
@@ -197,6 +208,12 @@ public:
     saveConfig();
   }
 
+  void setMotorInverted(bool invert, bool save = true) {
+    _config.motorInverted = invert;
+    if (save)
+      saveConfig();
+  }
+
   void setJoystickEnabled(bool enabled) {
     _config.joystickEnabled = enabled;
     saveConfig();
@@ -234,6 +251,30 @@ public:
     if (brightness <= 100)
       _config.ledBrightness = brightness;
     saveConfig();
+  }
+
+  void setLedModeAnim(uint8_t idx, uint8_t mask, bool save = false) {
+    if (idx < 7) {
+      _config.ledModeAnims[idx] = mask & 0x7F;
+      if (save)
+        saveConfig();
+    }
+  }
+
+  void resetLedModeAnimsDefault(bool save = true) {
+    for (uint8_t i = 0; i < 7; i++) {
+      _config.ledModeAnims[i] = DEFAULT_ROVER_LED_MODE_ANIMS[i];
+    }
+    if (save)
+      saveConfig();
+  }
+
+  String buildLedModeAnimsCommand() const {
+    String cmd = "CMD:LED:MODECFG";
+    for (uint8_t i = 0; i < 7; i++) {
+      cmd += ":" + String(_config.ledModeAnims[i] & 0x7F);
+    }
+    return cmd;
   }
 
   void setC6LedBrightness(uint8_t brightness, bool save = false) {
@@ -355,7 +396,13 @@ public:
         _config.rackAngleReleased = RACK_POS_RELEASED;
       _config.rackInverted =
           prefs.getBool("rck_inv", RACK_SERVO_INVERTED_DEFAULT);
+      if (_config.rackAngleEngaged == 10 && _config.rackAngleReleased == 160) {
+        _config.rackAngleEngaged = RACK_POS_ENGAGED;
+        _config.rackAngleReleased = RACK_POS_RELEASED;
+        _config.rackInverted = RACK_SERVO_INVERTED_DEFAULT;
+      }
       _config.joystickEnabled = prefs.getBool("joy_en", false);
+      _config.motorInverted = prefs.getBool("mot_inv", false);
       _config.joystickInvertX = prefs.getBool("joy_inv_x", false);
       _config.joystickInvertY = prefs.getBool("joy_inv_y", false);
       _config.joystickCalibrated = prefs.getBool("joy_cal", false);
@@ -376,6 +423,9 @@ public:
         _config.c6LedBrightness = 80;
       for (uint8_t i = 0; i < 7; i++) {
         char key[12];
+        snprintf(key, sizeof(key), "led_m%u", i);
+        _config.ledModeAnims[i] =
+            prefs.getUChar(key, DEFAULT_ROVER_LED_MODE_ANIMS[i]) & 0x7F;
         snprintf(key, sizeof(key), "c6l_m%u", i);
         String raw = prefs.getString(key, DEFAULT_C6_MODE_COLORS[i]);
         _config.c6ModeColors[i] =
@@ -420,6 +470,7 @@ public:
     prefs.putUChar("rck_eng", _config.rackAngleEngaged);
     prefs.putUChar("rck_rel", _config.rackAngleReleased);
     prefs.putBool("rck_inv", _config.rackInverted);
+    prefs.putBool("mot_inv", _config.motorInverted);
     prefs.putBool("joy_en", _config.joystickEnabled);
     prefs.putBool("joy_inv_x", _config.joystickInvertX);
     prefs.putBool("joy_inv_y", _config.joystickInvertY);
@@ -435,6 +486,8 @@ public:
     prefs.putUChar("c6l_brt", _config.c6LedBrightness);
     for (uint8_t i = 0; i < 7; i++) {
       char key[12];
+      snprintf(key, sizeof(key), "led_m%u", i);
+      prefs.putUChar(key, _config.ledModeAnims[i] & 0x7F);
       snprintf(key, sizeof(key), "c6l_m%u", i);
       prefs.putString(key, _config.c6ModeColors[i]);
     }
@@ -527,6 +580,14 @@ public:
     if (doc["rack_inverted"].is<bool>()) {
       _config.rackInverted = doc["rack_inverted"].as<bool>();
     }
+    if (doc["motor_inverted"].is<bool>()) {
+      _config.motorInverted = doc["motor_inverted"].as<bool>();
+    }
+    if (_config.rackAngleEngaged == 10 && _config.rackAngleReleased == 160) {
+      _config.rackAngleEngaged = RACK_POS_ENGAGED;
+      _config.rackAngleReleased = RACK_POS_RELEASED;
+      _config.rackInverted = RACK_SERVO_INVERTED_DEFAULT;
+    }
     if (doc["joystick_user_set"].is<bool>() &&
         doc["joystick_user_set"].as<bool>() &&
         doc["joystick_enabled"].is<bool>()) {
@@ -568,6 +629,18 @@ public:
       int lb = doc["led_brightness"].as<int>();
       if (lb >= 0 && lb <= 100)
         _config.ledBrightness = (uint8_t)lb;
+    }
+    if (doc["led_mode_anims"].is<JsonArray>()) {
+      JsonArray arr = doc["led_mode_anims"].as<JsonArray>();
+      uint8_t idx = 0;
+      for (JsonVariant v : arr) {
+        if (idx >= 7)
+          break;
+        if (v.is<int>()) {
+          _config.ledModeAnims[idx] = (uint8_t)(v.as<int>() & 0x7F);
+        }
+        idx++;
+      }
     }
     if (doc["c6_led_brightness"].is<int>()) {
       int cb = doc["c6_led_brightness"].as<int>();
@@ -619,6 +692,7 @@ public:
     doc["rack_angle_engaged"] = _config.rackAngleEngaged;
     doc["rack_angle_released"] = _config.rackAngleReleased;
     doc["rack_inverted"] = _config.rackInverted;
+    doc["motor_inverted"] = _config.motorInverted;
     doc["joystick_enabled"] = _config.joystickEnabled;
     doc["joystick_invert_x"] = _config.joystickInvertX;
     doc["joystick_invert_y"] = _config.joystickInvertY;
@@ -632,6 +706,10 @@ public:
     doc["joystick_user_set"] = true;
     doc["led_count"] = _config.ledCount;
     doc["led_brightness"] = _config.ledBrightness;
+    JsonArray ledAnims = doc["led_mode_anims"].to<JsonArray>();
+    for (uint8_t i = 0; i < 7; i++) {
+      ledAnims.add(_config.ledModeAnims[i] & 0x7F);
+    }
     doc["c6_led_brightness"] = _config.c6LedBrightness;
     JsonArray c6Colors = doc["c6_mode_colors"].to<JsonArray>();
     for (uint8_t i = 0; i < 7; i++) {

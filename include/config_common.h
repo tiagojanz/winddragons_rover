@@ -158,16 +158,21 @@
 #define PCA_CH_RACK 3   // Anchor rack/clutch servo
 
 // Posições padrão da cremalheira (configuráveis em NVS / SD)
-#define RACK_POS_ENGAGED 0   // Ângulo padrão de encosto (cremalheira engatada / travada)
+// Curso seguro moderado (60° encosto / 120° livre = ±30° em torno do centro 1500 us)
+#define RACK_POS_ENGAGED 60  // Ângulo padrão de encosto seguro (~1367 us)
 #define RACK_POS_RELEASED                                                      \
-  90 // Ângulo padrão livre (cremalheira levantada para queda da âncora por gravidade)
+  120 // Ângulo padrão livre (~1633 us, cremalheira levantada)
 #define RACK_SERVO_INVERTED_DEFAULT                                            \
-  true // Direção do servo da cremalheira invertida por defeito
+  false // Direção normal por defeito
+#define RACK_CONFIG_SAFE_VERSION                                               \
+  2 // Versão de segurança da calibração (reseta extremos antigos 10°/160° para 90° neutro)
 
-// Limites de pulso PWM
+// Limites de pulso PWM (ESC / Guincho) e limites seguros para Servos Posicionais
 #define PWM_PULSE_MIN 1000
 #define PWM_PULSE_MID 1500
 #define PWM_PULSE_MAX 2000
+#define SERVO_SAFE_MIN_US 1100 // Limite mínimo seguro anti-batente para servos (us)
+#define SERVO_SAFE_MAX_US 1900 // Limite máximo seguro anti-batente para servos (us)
 
 // ==========================================
 // BASE PIN DEFINITIONS

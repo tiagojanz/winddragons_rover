@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Configuração da Base Station - WindDragons Base Station</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <link rel="stylesheet" href="/style.css?v=2.1.8">
+  <link rel="stylesheet" href="/style.css?v=2.1.9">
   
   <script>
     (function(){
@@ -13,7 +13,7 @@
       document.documentElement.setAttribute('data-theme', t);
     })();
   </script>
-  <script src="/app.js?v=2.1.8"></script>
+  <script src="/app.js?v=2.1.9"></script>
 </head>
 <body>
   <header class="navbar">
@@ -32,7 +32,7 @@
     </nav>
     <div class="nav-actions">
       <a href="/config" id="navVersionBadge" class="badge badge-hide-mobile" style="background:rgba(6,182,212,0.12);border:1px solid rgba(6,182,212,0.3);color:var(--primary);text-decoration:none;font-size:0.75rem;display:inline-flex;align-items:center;gap:6px;" title="Ver versões das placas e atualização OTA na página de Configuração">
-        <i class="fa-solid fa-code-branch"></i> <span id="navLafvinVer">Lafvin: v2.1.8</span> &bull; <span id="navC6Ver">C6: ...</span>
+        <i class="fa-solid fa-code-branch"></i> <span id="navLafvinVer">Lafvin: v2.1.9</span> &bull; <span id="navC6Ver">C6: ...</span>
       </a>
       <span id="navOpStateBadge" class="badge" style="background:#64748b;color:#fff;font-weight:700;">
         <i class="fa-solid fa-flag"></i> <span id="navOpStateText">STORAGE</span>
@@ -352,6 +352,30 @@ setTimeout(refreshBaseLoraStatus, 300);
     <span id="c6LedFeedback" style="font-size:0.82rem;color:var(--green);font-weight:600;"></span>
   </div>
 </div>
+
+<!-- Card 3b: Definir Animação e Sinalização Náutica nos Rovers por Modo (0 a 6) via LoRa -->
+<div class="card" style="border-color:#a855f7;" id="roverLedAnimsCard">
+  <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+    <span><i class="fa-solid fa-wand-magic-sparkles" style="color:#a855f7;"></i> Animação e Sinalização Náutica dos Rovers por Modo (0 a 6) — Controlo Remoto LoRa</span>
+    <span class="badge" style="background:#3b0764;color:#e9d5ff;border:1px solid #7e22ce;">MULTI-SELEÇÃO &amp; ENVIO LORA</span>
+  </div>
+  <p style="color:var(--muted);font-size:0.875rem;margin-bottom:14px;">
+    Defina a partir da Estação Base qual a <strong>animação náutica</strong> (ou <strong>combinação de animações</strong>) que os Rovers devem executar na fita de LEDs WS2812B em cada modo de operação (<strong>0=IDLE</strong> a <strong>6=FAILSAFE</strong>). Pode enviar para o Rover ativo ou para todos os Rovers da frota via LoRa 433 MHz.
+  </p>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;margin-bottom:14px;" id="baseRoverLedModeGrid"></div>
+  <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
+    <button type="button" onclick="sendRoverLedModeAnims(false)" class="btn btn-primary" style="background:#7e22ce;color:#fff;">
+      <i class="fa-solid fa-satellite-dish"></i> Enviar para Rover Selecionado (LoRa)
+    </button>
+    <button type="button" onclick="sendRoverLedModeAnims(true)" class="btn btn-primary" style="background:#0284c7;color:#fff;">
+      <i class="fa-solid fa-tower-broadcast"></i> Enviar para TODOS os Rovers da Frota
+    </button>
+    <button type="button" onclick="resetRoverLedModeAnims()" class="btn btn-secondary">
+      <i class="fa-solid fa-rotate-left"></i> Repor Padrão Náutico
+    </button>
+    <span id="roverLedAnimsFeedback" style="font-size:0.82rem;color:var(--green);font-weight:600;"></span>
+  </div>
+</div>
 <script>
 let slideTimer = null;
 let c6LedSlideTimer = null;
@@ -522,7 +546,106 @@ fetch('/api/display').then(r=>r.json()).then(d=>{
   if (Array.isArray(d.c6_mode_colors)) {
     d.c6_mode_colors.forEach((col, idx) => applyC6ModeUiColor(idx, col));
   }
+  if (Array.isArray(d.rover_led_mode_anims) && d.rover_led_mode_anims.length === 7) {
+    for (let i = 0; i < 7; i++) baseRoverLedAnims[i] = parseInt(d.rover_led_mode_anims[i], 10) & 0x7F;
+    renderBaseRoverLedAnims();
+  }
 }).catch(()=>{});
+
+const BASE_ROVER_ANIM_DEFS = [
+  { bit: 0x01, name: 'Strobe', color: '#eab308' },
+  { bit: 0x02, name: 'NAV BB/EB', color: '#10b981' },
+  { bit: 0x04, name: 'Beacon', color: '#0284c7' },
+  { bit: 0x08, name: 'Rainbow', color: '#a855f7' },
+  { bit: 0x10, name: 'Chase', color: '#f97316' },
+  { bit: 0x20, name: 'Police', color: '#ef4444' },
+  { bit: 0x40, name: 'Boia Regata', color: '#ec4899' }
+];
+const BASE_ROVER_MODE_INFO = [
+  { id: 0, title: '0 • IDLE (Espera)', def: 0x04 },
+  { id: 1, title: '1 • MANUAL', def: 0x02 },
+  { id: 2, title: '2 • HOLDING STATION', def: 0x40 },
+  { id: 3, title: '3 • ANCHORED (Ancorado)', def: 0x04 },
+  { id: 4, title: '4 • MOVING TO TARGET', def: 0x02 },
+  { id: 5, title: '5 • RTL (Regresso)', def: 0x03 },
+  { id: 6, title: '6 • FAILSAFE / SOS', def: 0x21 }
+];
+let baseRoverLedAnims = BASE_ROVER_MODE_INFO.map(m => m.def);
+
+function describeBaseRoverAnimMask(mask) {
+  if (!mask) return 'DESLIGADO (OFF)';
+  return BASE_ROVER_ANIM_DEFS.filter(a => (mask & a.bit) !== 0).map(a => a.name).join(' + ');
+}
+
+function renderBaseRoverLedAnims() {
+  const grid = document.getElementById('baseRoverLedModeGrid');
+  if (!grid) return;
+  grid.innerHTML = BASE_ROVER_MODE_INFO.map(m => {
+    const mask = baseRoverLedAnims[m.id] || 0;
+    const isOff = (mask === 0);
+    const chips = [
+      `<button type="button" onclick="toggleBaseRoverAnimBit(${m.id}, 0)" style="padding:3px 8px;border-radius:999px;font-size:0.7rem;font-weight:700;cursor:pointer;border:1px solid ${isOff ? '#ef4444' : '#334155'};background:${isOff ? 'rgba(239,68,68,0.2)' : '#0f172a'};color:${isOff ? '#fca5a5' : '#94a3b8'};">OFF</button>`
+    ].concat(BASE_ROVER_ANIM_DEFS.map(a => {
+      const on = (mask & a.bit) !== 0;
+      return `<button type="button" onclick="toggleBaseRoverAnimBit(${m.id}, ${a.bit})" style="padding:3px 8px;border-radius:999px;font-size:0.7rem;font-weight:700;cursor:pointer;border:1px solid ${on ? a.color : '#334155'};background:${on ? a.color : '#0f172a'};color:${on ? '#fff' : '#94a3b8'};">${a.name}</button>`;
+    })).join('');
+    return `<div style="background:#0b1120;border:1px solid var(--border);border-radius:10px;padding:10px;">
+      <div style="font-weight:700;font-size:0.82rem;color:var(--text);margin-bottom:2px;">${m.title}</div>
+      <div style="font-size:0.7rem;color:#c084fc;font-weight:600;margin-bottom:6px;">Ativo: ${describeBaseRoverAnimMask(mask)}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px;">${chips}</div>
+    </div>`;
+  }).join('');
+}
+
+function toggleBaseRoverAnimBit(modeIdx, bit) {
+  if (bit === 0) {
+    baseRoverLedAnims[modeIdx] = 0;
+  } else {
+    baseRoverLedAnims[modeIdx] = (baseRoverLedAnims[modeIdx] || 0) ^ bit;
+  }
+  renderBaseRoverLedAnims();
+}
+
+function showRoverLedAnimsFeedback(msg, isErr = false) {
+  const fb = document.getElementById('roverLedAnimsFeedback');
+  if (!fb) return;
+  fb.style.color = isErr ? 'var(--red)' : 'var(--green)';
+  fb.innerText = msg;
+  setTimeout(() => { if (fb.innerText === msg) fb.innerText = ''; }, 4000);
+}
+
+function sendRoverLedModeAnims(allRovers) {
+  fetch('/api/control/rover_leds', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rover_id: allRovers ? 255 : 0, led_mode_anims: baseRoverLedAnims })
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.success) showRoverLedAnimsFeedback(d.msg || 'Animações enviadas via LoRa!');
+    else showRoverLedAnimsFeedback(d.error || 'Erro ao enviar', true);
+  })
+  .catch(() => showRoverLedAnimsFeedback('Erro de comunicação', true));
+}
+
+function resetRoverLedModeAnims() {
+  if (!confirm('Repor o mapeamento náutico padrão nos Rovers e enviar via LoRa?')) return;
+  fetch('/api/control/rover_leds', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reset_defaults: true, rover_id: 255 })
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.success && Array.isArray(d.rover_led_mode_anims)) {
+      baseRoverLedAnims = d.rover_led_mode_anims.map(v => parseInt(v, 10) & 0x7F);
+      renderBaseRoverLedAnims();
+      showRoverLedAnimsFeedback(d.msg || 'Padrão náutico reposto!');
+    }
+  })
+  .catch(() => {});
+}
+renderBaseRoverLedAnims();
 </script>
 
 <!-- Consola de Sistema & Monitor Série em Tempo Real -->
@@ -770,7 +893,7 @@ function escapeConsoleHtml(s) {
       <div style="color:var(--muted);font-size:0.75rem;text-transform:uppercase;font-weight:600;margin-bottom:4px;">
         <i class="fa-solid fa-microchip" style="color:var(--primary);margin-right:6px;"></i>Master Lafvin (LCD+SD+WiFi)
       </div>
-      <div id="fwLafvinVer" style="font-size:1.3rem;font-weight:700;color:var(--green);">v2.1.8</div>
+      <div id="fwLafvinVer" style="font-size:1.3rem;font-weight:700;color:var(--green);">v2.1.9</div>
       <div style="color:var(--muted);font-size:0.7rem;margin-top:2px;">ST7789 Display, MicroSD, Web & Gestão</div>
     </div>
     <div style="background:rgba(15,23,42,0.7);padding:14px;border-radius:8px;border:1px solid var(--card-border);">
@@ -1178,11 +1301,11 @@ function performLafvinOta(blob) {
   <footer style="text-align:center;color:var(--muted);font-size:0.75rem;margin-top:24px;display:flex;justify-content:center;align-items:center;gap:12px;flex-wrap:wrap;padding:0 16px;">
     <span>WindDragons Telemetry Base Station &copy; 2026</span>
     <span>&bull;</span>
-    <span>Master Lafvin: <b style="color:var(--green);" id="footerLafvinVer">v2.1.8</b></span>
+    <span>Master Lafvin: <b style="color:var(--green);" id="footerLafvinVer">v2.1.9</b></span>
     <span>&bull;</span>
     <span>Coprocessador C6: <b style="color:var(--yellow);" id="footerC6Ver">--</b></span>
     <span>&bull;</span>
-    <span>Pacote Bundle: <b style="color:var(--primary);" id="footerBundleVer">v2.1.8</b></span>
+    <span>Pacote Bundle: <b style="color:var(--primary);" id="footerBundleVer">v2.1.9</b></span>
   </footer>
 </body>
 </html>

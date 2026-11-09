@@ -61,9 +61,16 @@ enum LedStripTestMode : uint8_t {
   LED_MODE_NAV = 4,
   LED_MODE_BEACON = 5,
   LED_MODE_POLICE = 6,
-  LED_MODE_SOLID = 7
+  LED_MODE_SOLID = 7,
+  LED_MODE_MASK = 8
 };
 static LedStripTestMode ledTestMode = LED_MODE_OFF;
+static uint8_t ledTestMask = 0;
+static uint8_t ledModeAnims[7] = {
+    DEFAULT_ROVER_LED_MODE_ANIMS[0], DEFAULT_ROVER_LED_MODE_ANIMS[1],
+    DEFAULT_ROVER_LED_MODE_ANIMS[2], DEFAULT_ROVER_LED_MODE_ANIMS[3],
+    DEFAULT_ROVER_LED_MODE_ANIMS[4], DEFAULT_ROVER_LED_MODE_ANIMS[5],
+    DEFAULT_ROVER_LED_MODE_ANIMS[6]};
 static uint8_t ledSolidR = 255, ledSolidG = 255, ledSolidB = 255;
 static uint8_t ledStripCount = NUM_STROBE_LEDS;
 static uint8_t ledStripBrightPct = 100;
@@ -257,6 +264,251 @@ void updateC6StatusLed(uint32_t now) {
   }
 }
 
+#if defined(PIN_STROBE_LEDS) && (PIN_STROBE_LEDS >= 0)
+static void renderNauticalAnimMask(uint8_t mask, uint32_t now, uint16_t nLeds,
+                                   bool &wasLit) {
+  static uint8_t lastMask = 0xFF;
+  static uint8_t lastActiveBit = 0xFF;
+  static uint8_t lastBuoyRole = 0xFF;
+  static bool lastPhaseLit = false;
+
+  mask &= 0x7F;
+  if (mask == NAV_ANIM_OFF) {
+    if (wasLit || lastMask != 0 || ledForceRefresh) {
+      wasLit = false;
+      lastMask = 0;
+      lastActiveBit = 0;
+      ledForceRefresh = false;
+      strobeLeds.clear();
+      strobeLeds.show();
+    }
+    return;
+  }
+
+  // Se Strobe Náutico (Bit 0) estiver selecionado:
+  // - Quando isolado: duplo-flash branco (40ms ON, 60ms OFF, 40ms ON, 460ms OFF)
+  // - Quando combinado com outras animações: sobrepõe o duplo-flash branco na janela ativa (0..40ms e 100..140ms)
+  //   e executa as restantes animações nos 460ms restantes do ciclo!
+  if (mask & NAV_ANIM_STROBE) {
+    uint32_t strobePhase = now % 600;
+    bool strobeFlash =
+        (strobePhase < 40) || (strobePhase >= 100 && strobePhase < 140);
+    uint8_t baseMask = mask & ~NAV_ANIM_STROBE;
+    if (baseMask == 0) {
+      if (strobeFlash != lastPhaseLit || lastMask != mask ||
+          lastActiveBit != NAV_ANIM_STROBE || ledForceRefresh) {
+        lastPhaseLit = strobeFlash;
+        wasLit = strobeFlash;
+        lastMask = mask;
+        lastActiveBit = NAV_ANIM_STROBE;
+        ledForceRefresh = false;
+        uint32_t color = strobeFlash ? strobeLeds.Color(255, 255, 255) : 0;
+        for (uint16_t i = 0; i < nLeds; i++) {
+          strobeLeds.setPixelColor(i, color);
+        }
+        strobeLeds.show();
+      }
+      return;
+    } else if (strobeFlash) {
+      if (!lastPhaseLit || lastActiveBit != NAV_ANIM_STROBE ||
+          lastMask != mask || ledForceRefresh) {
+        lastPhaseLit = true;
+        wasLit = true;
+        lastMask = mask;
+        lastActiveBit = NAV_ANIM_STROBE;
+        ledForceRefresh = false;
+        uint32_t color = strobeLeds.Color(255, 255, 255);
+        for (uint16_t i = 0; i < nLeds; i++) {
+          strobeLeds.setPixelColor(i, color);
+        }
+        strobeLeds.show();
+      }
+      return;
+    } else if (lastActiveBit == NAV_ANIM_STROBE) {
+      // Saiu da janela do flash Strobe -> forçar atualização da animação base
+      ledForceRefresh = true;
+    }
+  }
+
+  uint8_t baseMask = mask & ~NAV_ANIM_STROBE;
+  uint8_t activeBits[6];
+  uint8_t bitCount = 0;
+  const uint8_t candidateBits[6] = {NAV_ANIM_NAV,     NAV_ANIM_BEACON,
+                                    NAV_ANIM_RAINBOW, NAV_ANIM_CHASE,
+                                    NAV_ANIM_POLICE,  NAV_ANIM_BUOY};
+  for (uint8_t b = 0; b < 6; b++) {
+    if (baseMask & candidateBits[b]) {
+      // Se Boia estiver combinada com outra animação mas buoyLightRole for NONE,
+      // ignorar o slot da boia para não criar pausa apagada
+      if (candidateBits[b] == NAV_ANIM_BUOY && buoyLightRole == BUOY_ROLE_NONE &&
+          baseMask != NAV_ANIM_BUOY) {
+        continue;
+      }
+      activeBits[bitCount++] = candidateBits[b];
+    }
+  }
+
+  if (bitCount == 0) {
+    if (wasLit || lastMask != mask || ledForceRefresh) {
+      wasLit = false;
+      lastMask = mask;
+      lastActiveBit = 0;
+      ledForceRefresh = false;
+      strobeLeds.clear();
+      strobeLeds.show();
+    }
+    return;
+  }
+
+  uint8_t chosenBit =
+      (bitCount == 1) ? activeBits[0] : activeBits[(now / 1800) % bitCount];
+  if (chosenBit != lastActiveBit || lastMask != mask) {
+    ledForceRefresh = true;
+  }
+  lastMask = mask;
+  lastActiveBit = chosenBit;
+
+  if (chosenBit == NAV_ANIM_NAV) {
+    if (ledForceRefresh || !wasLit) {
+      wasLit = true;
+      lastPhaseLit = true;
+      ledForceRefresh = false;
+      uint16_t half = nLeds / 2;
+      for (uint16_t i = 0; i < nLeds; i++) {
+        strobeLeds.setPixelColor(i, (i < half)
+                                        ? strobeLeds.Color(255, 0, 0)
+                                        : strobeLeds.Color(0, 255, 0));
+      }
+      strobeLeds.show();
+    }
+  } else if (chosenBit == NAV_ANIM_BEACON) {
+    uint32_t phase = now % 500;
+    bool isOn = (phase < 250);
+    if (isOn != lastPhaseLit || ledForceRefresh) {
+      lastPhaseLit = isOn;
+      wasLit = isOn;
+      ledForceRefresh = false;
+      uint32_t color = isOn ? strobeLeds.Color(255, 80, 0) : 0;
+      for (uint16_t i = 0; i < nLeds; i++) {
+        strobeLeds.setPixelColor(i, color);
+      }
+      strobeLeds.show();
+    }
+  } else if (chosenBit == NAV_ANIM_RAINBOW) {
+    wasLit = true;
+    lastPhaseLit = true;
+    ledForceRefresh = false;
+    uint16_t baseHue = (uint16_t)((now * 24UL) & 0xFFFF);
+    for (uint16_t i = 0; i < nLeds; i++) {
+      uint16_t pixelHue = baseHue + (i * 65536UL / (nLeds > 0 ? nLeds : 1));
+      strobeLeds.setPixelColor(
+          i, strobeLeds.gamma32(strobeLeds.ColorHSV(pixelHue)));
+    }
+    strobeLeds.show();
+  } else if (chosenBit == NAV_ANIM_CHASE) {
+    wasLit = true;
+    lastPhaseLit = true;
+    ledForceRefresh = false;
+    uint8_t cR = (ledSolidR == 0 && ledSolidG == 0 && ledSolidB == 0)
+                     ? 6
+                     : ledSolidR;
+    uint8_t cG = (ledSolidR == 0 && ledSolidG == 0 && ledSolidB == 0)
+                     ? 182
+                     : ledSolidG;
+    uint8_t cB = (ledSolidR == 0 && ledSolidG == 0 && ledSolidB == 0)
+                     ? 212
+                     : ledSolidB;
+    uint16_t periodSteps = (nLeds > 1) ? ((nLeds - 1) * 2) : 1;
+    uint16_t step = (now / 70) % periodSteps;
+    int head = (step < nLeds) ? step : (periodSteps - step);
+    for (uint16_t i = 0; i < nLeds; i++) {
+      int dist = abs((int)i - head);
+      if (dist == 0) {
+        strobeLeds.setPixelColor(i, strobeLeds.Color(cR, cG, cB));
+      } else if (dist == 1) {
+        strobeLeds.setPixelColor(i, strobeLeds.Color(cR / 4, cG / 4, cB / 4));
+      } else if (dist == 2) {
+        strobeLeds.setPixelColor(i,
+                                 strobeLeds.Color(cR / 16, cG / 16, cB / 16));
+      } else {
+        strobeLeds.setPixelColor(i, 0);
+      }
+    }
+    strobeLeds.show();
+  } else if (chosenBit == NAV_ANIM_POLICE) {
+    wasLit = true;
+    lastPhaseLit = true;
+    ledForceRefresh = false;
+    bool side = ((now / 120) % 2) == 0;
+    uint16_t half = nLeds / 2;
+    if (half == 0)
+      half = 1;
+    for (uint16_t i = 0; i < nLeds; i++) {
+      bool firstHalf = (i < half);
+      strobeLeds.setPixelColor(i, (firstHalf == side)
+                                      ? strobeLeds.Color(255, 0, 0)
+                                      : strobeLeds.Color(0, 40, 255));
+    }
+    strobeLeds.show();
+  } else if (chosenBit == NAV_ANIM_BUOY) {
+    if (buoyLightRole == BUOY_ROLE_NONE) {
+      if (wasLit || lastBuoyRole != buoyLightRole || ledForceRefresh) {
+        wasLit = false;
+        lastPhaseLit = false;
+        lastBuoyRole = buoyLightRole;
+        ledForceRefresh = false;
+        strobeLeds.clear();
+        strobeLeds.show();
+      }
+    } else {
+      bool isOn = ((now % 2000) < 1600);
+      if (isOn != lastPhaseLit || lastBuoyRole != buoyLightRole ||
+          ledForceRefresh) {
+        lastPhaseLit = isOn;
+        wasLit = isOn;
+        lastBuoyRole = buoyLightRole;
+        ledForceRefresh = false;
+        if (!isOn) {
+          strobeLeds.clear();
+        } else if (buoyLightRole == BUOY_ROLE_GATE) {
+          uint16_t half = nLeds / 2;
+          if (half == 0)
+            half = 1;
+          for (uint16_t i = 0; i < nLeds; i++) {
+            strobeLeds.setPixelColor(
+                i, (i < half) ? strobeLeds.Color(255, 0, 0)
+                              : strobeLeds.Color(0, 255, 0));
+          }
+        } else {
+          uint32_t color = 0;
+          switch (buoyLightRole) {
+          case BUOY_ROLE_PORT:
+            color = strobeLeds.Color(255, 0, 0);
+            break;
+          case BUOY_ROLE_STARBOARD:
+            color = strobeLeds.Color(0, 255, 0);
+            break;
+          case BUOY_ROLE_START:
+            color = strobeLeds.Color(255, 180, 0);
+            break;
+          case BUOY_ROLE_FINISH:
+            color = strobeLeds.Color(0, 140, 255);
+            break;
+          default:
+            color = 0;
+            break;
+          }
+          for (uint16_t i = 0; i < nLeds; i++) {
+            strobeLeds.setPixelColor(i, color);
+          }
+        }
+        strobeLeds.show();
+      }
+    }
+  }
+}
+#endif
+
 void updateStrobeLeds(uint32_t now) {
 #if defined(PIN_STROBE_LEDS) && (PIN_STROBE_LEDS >= 0)
   static uint32_t lastStrobeRender = 0;
@@ -283,21 +535,11 @@ void updateStrobeLeds(uint32_t now) {
   // Prioridade 1: Alarme ativo (manual ou comando) ou Teste Strobe Náutico ->
   // Estroboscópio náutico branco duplo-flash
   if (actuators.isAlarmActive() || ledTestMode == LED_MODE_STROBE) {
-    // Padrão náutico duplo-flash a cada 600ms (40ms ON, 60ms OFF, 40ms ON,
-    // 460ms OFF)
-    uint32_t phase = now % 600;
-    bool isOn = (phase < 40) || (phase >= 100 && phase < 140);
-    if (isOn != wasLit || lastRenderedMode != LED_MODE_STROBE ||
-        ledForceRefresh) {
-      wasLit = isOn;
+    if (lastRenderedMode != LED_MODE_STROBE) {
       lastRenderedMode = LED_MODE_STROBE;
-      ledForceRefresh = false;
-      uint32_t color = isOn ? strobeLeds.Color(255, 255, 255) : 0;
-      for (uint16_t i = 0; i < nLeds; i++) {
-        strobeLeds.setPixelColor(i, color);
-      }
-      strobeLeds.show();
+      ledForceRefresh = true;
     }
+    renderNauticalAnimMask(NAV_ANIM_STROBE, now, nLeds, wasLit);
   }
   // Prioridade 2: Modos de Teste e Sinalização Interativos
   else if (ledTestMode == LED_MODE_SOLID) {
@@ -312,164 +554,52 @@ void updateStrobeLeds(uint32_t now) {
       strobeLeds.show();
     }
   } else if (ledTestMode == LED_MODE_RAINBOW) {
-    wasLit = true;
-    lastRenderedMode = LED_MODE_RAINBOW;
-    ledForceRefresh = false;
-    uint16_t baseHue = (uint16_t)((now * 24UL) & 0xFFFF);
-    for (uint16_t i = 0; i < nLeds; i++) {
-      uint16_t pixelHue = baseHue + (i * 65536UL / (nLeds > 0 ? nLeds : 1));
-      strobeLeds.setPixelColor(
-          i, strobeLeds.gamma32(strobeLeds.ColorHSV(pixelHue)));
+    if (lastRenderedMode != LED_MODE_RAINBOW) {
+      lastRenderedMode = LED_MODE_RAINBOW;
+      ledForceRefresh = true;
     }
-    strobeLeds.show();
+    renderNauticalAnimMask(NAV_ANIM_RAINBOW, now, nLeds, wasLit);
   } else if (ledTestMode == LED_MODE_CHASE) {
-    // Scanner bidirecional (Knight Rider) com cauda suave para testar cada LED
-    wasLit = true;
-    lastRenderedMode = LED_MODE_CHASE;
-    ledForceRefresh = false;
-    uint16_t periodSteps = (nLeds > 1) ? ((nLeds - 1) * 2) : 1;
-    uint16_t step = (now / 70) % periodSteps;
-    int head = (step < nLeds) ? step : (periodSteps - step);
-    for (uint16_t i = 0; i < nLeds; i++) {
-      int dist = abs((int)i - head);
-      if (dist == 0) {
-        strobeLeds.setPixelColor(
-            i, strobeLeds.Color(ledSolidR, ledSolidG, ledSolidB));
-      } else if (dist == 1) {
-        strobeLeds.setPixelColor(
-            i, strobeLeds.Color(ledSolidR / 4, ledSolidG / 4, ledSolidB / 4));
-      } else if (dist == 2) {
-        strobeLeds.setPixelColor(
-            i,
-            strobeLeds.Color(ledSolidR / 16, ledSolidG / 16, ledSolidB / 16));
-      } else {
-        strobeLeds.setPixelColor(i, 0);
-      }
+    if (lastRenderedMode != LED_MODE_CHASE) {
+      lastRenderedMode = LED_MODE_CHASE;
+      ledForceRefresh = true;
     }
-    strobeLeds.show();
+    renderNauticalAnimMask(NAV_ANIM_CHASE, now, nLeds, wasLit);
   } else if (ledTestMode == LED_MODE_NAV) {
-    // Luzes de Navegação Náutica: Bombordo (Vermelho) + Estibordo (Verde)
-    if (lastRenderedMode != LED_MODE_NAV || ledForceRefresh || !wasLit) {
-      wasLit = true;
+    if (lastRenderedMode != LED_MODE_NAV) {
       lastRenderedMode = LED_MODE_NAV;
-      ledForceRefresh = false;
-      uint16_t half = nLeds / 2;
-      for (uint16_t i = 0; i < nLeds; i++) {
-        if (i < half) {
-          strobeLeds.setPixelColor(i, strobeLeds.Color(255, 0, 0)); // Bombordo
-        } else {
-          strobeLeds.setPixelColor(i, strobeLeds.Color(0, 255, 0)); // Estibordo
-        }
-      }
-      strobeLeds.show();
+      ledForceRefresh = true;
     }
+    renderNauticalAnimMask(NAV_ANIM_NAV, now, nLeds, wasLit);
   } else if (ledTestMode == LED_MODE_BEACON) {
-    // Flash Âmbar / Laranja de aviso a 2 Hz
-    uint32_t phase = now % 500;
-    bool isOn = (phase < 250);
-    if (isOn != wasLit || lastRenderedMode != LED_MODE_BEACON ||
-        ledForceRefresh) {
-      wasLit = isOn;
+    if (lastRenderedMode != LED_MODE_BEACON) {
       lastRenderedMode = LED_MODE_BEACON;
-      ledForceRefresh = false;
-      uint32_t color = isOn ? strobeLeds.Color(255, 80, 0) : 0;
-      for (uint16_t i = 0; i < nLeds; i++) {
-        strobeLeds.setPixelColor(i, color);
-      }
-      strobeLeds.show();
+      ledForceRefresh = true;
     }
+    renderNauticalAnimMask(NAV_ANIM_BEACON, now, nLeds, wasLit);
   } else if (ledTestMode == LED_MODE_POLICE) {
-    // Emergência Vermelho / Azul alternado
-    wasLit = true;
-    lastRenderedMode = LED_MODE_POLICE;
-    ledForceRefresh = false;
-    bool side = ((now / 120) % 2) == 0;
-    uint16_t half = nLeds / 2;
-    if (half == 0)
-      half = 1;
-    for (uint16_t i = 0; i < nLeds; i++) {
-      bool firstHalf = (i < half);
-      if (firstHalf == side) {
-        strobeLeds.setPixelColor(i, strobeLeds.Color(255, 0, 0));
-      } else {
-        strobeLeds.setPixelColor(i, strobeLeds.Color(0, 40, 255));
-      }
+    if (lastRenderedMode != LED_MODE_POLICE) {
+      lastRenderedMode = LED_MODE_POLICE;
+      ledForceRefresh = true;
     }
-    strobeLeds.show();
-  }
-  // Prioridade 3: Modo Failsafe -> Flashing Âmbar/Vermelho a 2 Hz (250ms ON,
-  // 250ms OFF)
-  else if (currentMotorStatus == MOTOR_FAILSAFE) {
-    uint32_t phase = now % 500;
-    bool isOn = (phase < 250);
-    if (isOn != wasLit || lastRenderedMode != LED_MODE_OFF || ledForceRefresh) {
-      wasLit = isOn;
-      lastRenderedMode = LED_MODE_OFF;
-      ledForceRefresh = false;
-      uint32_t color = isOn ? strobeLeds.Color(255, 60, 0) : 0;
-      for (uint16_t i = 0; i < nLeds; i++) {
-        strobeLeds.setPixelColor(i, color);
-      }
-      strobeLeds.show();
+    renderNauticalAnimMask(NAV_ANIM_POLICE, now, nLeds, wasLit);
+  } else if (ledTestMode == LED_MODE_MASK) {
+    if (lastRenderedMode != LED_MODE_MASK) {
+      lastRenderedMode = LED_MODE_MASK;
+      ledForceRefresh = true;
     }
+    renderNauticalAnimMask(ledTestMask, now, nLeds, wasLit);
   }
-  // Prioridade 4: Sinalização de Função da Boia na Regata (Bombordo / Estibordo / Largada / Chegada / Porta)
-  else if (buoyLightRole != BUOY_ROLE_NONE) {
-    static uint8_t lastRenderedBuoyRole = BUOY_ROLE_NONE;
-    // Farol náutico de regata: 1600ms ON / 400ms OFF (ciclo de 2 segundos)
-    bool isOn = ((now % 2000) < 1600);
-    if (isOn != wasLit || lastRenderedMode != LED_MODE_OFF ||
-        lastRenderedBuoyRole != buoyLightRole || ledForceRefresh) {
-      wasLit = isOn;
-      lastRenderedMode = LED_MODE_OFF;
-      lastRenderedBuoyRole = buoyLightRole;
-      ledForceRefresh = false;
-      if (!isOn) {
-        strobeLeds.clear();
-      } else if (buoyLightRole == BUOY_ROLE_GATE) {
-        uint16_t half = nLeds / 2;
-        if (half == 0)
-          half = 1;
-        for (uint16_t i = 0; i < nLeds; i++) {
-          strobeLeds.setPixelColor(
-              i, (i < half) ? strobeLeds.Color(255, 0, 0)
-                            : strobeLeds.Color(0, 255, 0));
-        }
-      } else {
-        uint32_t color = 0;
-        switch (buoyLightRole) {
-        case BUOY_ROLE_PORT: // Bombordo (BB) -> Vermelho
-          color = strobeLeds.Color(255, 0, 0);
-          break;
-        case BUOY_ROLE_STARBOARD: // Estibordo (EB) -> Verde
-          color = strobeLeds.Color(0, 255, 0);
-          break;
-        case BUOY_ROLE_START: // Largada -> Amarelo / Âmbar
-          color = strobeLeds.Color(255, 180, 0);
-          break;
-        case BUOY_ROLE_FINISH: // Chegada / Meta -> Azul / Ciano
-          color = strobeLeds.Color(0, 140, 255);
-          break;
-        default:
-          color = 0;
-          break;
-        }
-        for (uint16_t i = 0; i < nLeds; i++) {
-          strobeLeds.setPixelColor(i, color);
-        }
-      }
-      strobeLeds.show();
-    }
-  }
-  // Estado Normal: LEDs apagados (standby silencioso)
+  // Prioridade 3: Execução Automática por Modo de Operação (0=IDLE .. 6=FAILSAFE)
+  // Permite executar qualquer animação ou combinação de animações configurada para o modo atual!
   else {
-    if (wasLit || lastRenderedMode != LED_MODE_OFF || ledForceRefresh) {
-      wasLit = false;
+    if (lastRenderedMode != LED_MODE_OFF) {
       lastRenderedMode = LED_MODE_OFF;
-      ledForceRefresh = false;
-      strobeLeds.clear();
-      strobeLeds.show();
+      ledForceRefresh = true;
     }
+    uint8_t modeIdx = (currentMotorStatus < 7) ? currentMotorStatus : 0;
+    uint8_t activeMask = ledModeAnims[modeIdx];
+    renderNauticalAnimMask(activeMask, now, nLeds, wasLit);
   }
 #endif
 }
@@ -612,8 +742,7 @@ void processIncomingLoRa(uint8_t *buffer, int len) {
       currentMotorStatus = MOTOR_IDLE;
       break;
     case ACTION_DROP_ANCHOR:
-      actuators.commandDropAnchor(
-          cmd->target_depth_cm > 0 ? cmd->target_depth_cm : 300);
+      actuators.commandDropAnchor(cmd->target_depth_cm);
       currentMotorStatus = MOTOR_ANCHORED;
       break;
     case ACTION_RETRIEVE_ANCHOR:
@@ -694,6 +823,41 @@ void processIncomingLoRa(uint8_t *buffer, int len) {
       printLog("[C6 ROVER] ★ Funcao de Boia nos LEDs definida via LoRa: %u "
                "(%s)\n",
                buoyLightRole, get_buoy_light_role_str(buoyLightRole));
+#endif
+      break;
+    }
+    case ACTION_SET_LED_ANIMS: { // 20: SET LED MODE ANIMATIONS (0..6)
+#if defined(PIN_STROBE_LEDS) && (PIN_STROBE_LEDS >= 0)
+      uint8_t unpacked[7];
+      if (unpack_led_mode_anims(cmd->target_lat_deg7, cmd->target_lng_deg7,
+                                unpacked)) {
+        for (uint8_t i = 0; i < 7; i++) {
+          ledModeAnims[i] = unpacked[i] & 0x7F;
+          char key[12];
+          snprintf(key, sizeof(key), "led_m%u", i);
+          c6Prefs.putUChar(key, ledModeAnims[i]);
+        }
+      } else if (cmd->target_depth_cm < 7) {
+        uint8_t mIdx = (uint8_t)cmd->target_depth_cm;
+        ledModeAnims[mIdx] = (uint8_t)(cmd->duration_s & 0x7F);
+        char key[12];
+        snprintf(key, sizeof(key), "led_m%u", mIdx);
+        c6Prefs.putUChar(key, ledModeAnims[mIdx]);
+      }
+      ledTestMode = LED_MODE_OFF;
+      ledForceRefresh = true;
+      updateStrobeLeds(millis());
+      char syncMsg[96];
+      snprintf(syncMsg, sizeof(syncMsg),
+               "LED_MODES:%u:%u:%u:%u:%u:%u:%u\n", ledModeAnims[0],
+               ledModeAnims[1], ledModeAnims[2], ledModeAnims[3],
+               ledModeAnims[4], ledModeAnims[5], ledModeAnims[6]);
+      interSerial.print(syncMsg);
+      printLog("[C6 ROVER] ★ Animacoes Nauticas por Modo definidas via LoRa: "
+               "[%u, %u, %u, %u, %u, %u, %u]\n",
+               ledModeAnims[0], ledModeAnims[1], ledModeAnims[2],
+               ledModeAnims[3], ledModeAnims[4], ledModeAnims[5],
+               ledModeAnims[6]);
 #endif
       break;
     }
@@ -1003,10 +1167,28 @@ void setup() {
   // 5. Atuadores (Direct PWM / PCA9685)
   float ancDiam = c6Prefs.getFloat("anc_diam", 30.0f);
   uint8_t ancPulses = c6Prefs.getUChar("anc_pulses", 1);
+  uint8_t rckVer = c6Prefs.getUChar("rck_ver", 0);
+  if (rckVer < RACK_CONFIG_SAFE_VERSION) {
+    c6Prefs.putUChar("rck_eng", RACK_POS_ENGAGED);
+    c6Prefs.putUChar("rck_rel", RACK_POS_RELEASED);
+    c6Prefs.putBool("rck_inv", RACK_SERVO_INVERTED_DEFAULT);
+    c6Prefs.putUChar("rck_ver", RACK_CONFIG_SAFE_VERSION);
+    Serial.println("[ACT ] Calibracao antiga da cremalheira limpa -> Iniciado em neutro seguro (90° / 1500 us)");
+  }
   uint8_t rckEng = c6Prefs.getUChar("rck_eng", RACK_POS_ENGAGED);
   uint8_t rckRel = c6Prefs.getUChar("rck_rel", RACK_POS_RELEASED);
   bool rckInv = c6Prefs.getBool("rck_inv", RACK_SERVO_INVERTED_DEFAULT);
+  bool motInv = c6Prefs.getBool("mot_inv", false);
+  if (rckEng == 10 && rckRel == 160) {
+    rckEng = RACK_POS_ENGAGED;
+    rckRel = RACK_POS_RELEASED;
+    rckInv = RACK_SERVO_INVERTED_DEFAULT;
+    c6Prefs.putUChar("rck_eng", rckEng);
+    c6Prefs.putUChar("rck_rel", rckRel);
+    c6Prefs.putBool("rck_inv", rckInv);
+  }
   actuators.setRackConfig(rckEng, rckRel, rckInv, false);
+  actuators.setMotorInverted(motInv);
   actuators.begin();
   actuators.setAnchorCalibration(ancDiam, ancPulses);
   Serial.printf("[ACT ] Atuadores inicializados (ESC=GPIO%d, Leme=GPIO%d, "
@@ -1028,6 +1210,12 @@ void setup() {
   buoyLightRole = c6Prefs.getUChar("buoy_role", BUOY_ROLE_NONE);
   if (buoyLightRole > BUOY_ROLE_GATE)
     buoyLightRole = BUOY_ROLE_NONE;
+  for (uint8_t i = 0; i < 7; i++) {
+    char key[12];
+    snprintf(key, sizeof(key), "led_m%u", i);
+    ledModeAnims[i] =
+        c6Prefs.getUChar(key, DEFAULT_ROVER_LED_MODE_ANIMS[i]) & 0x7F;
+  }
   strobeLeds.begin();
   if (ledStripCount != strobeLeds.numPixels()) {
     strobeLeds.updateLength(ledStripCount);
@@ -1174,6 +1362,13 @@ void handleIncomingCommand(const char *cmdStr) {
     int val = atoi(cmdStr + 10);
     actuators.setThrottle(val);
     lastControlReceivedTime = now;
+  } else if (strncmp(cmdStr, "CMD:MOTOR_INV:", 14) == 0) {
+    int inv = atoi(cmdStr + 14);
+    bool invBool = (inv != 0);
+    actuators.setMotorInverted(invBool);
+    c6Prefs.putBool("mot_inv", invBool);
+    printLog("[C6 ROVER] ★ Sentido do Motor ESC gravado em NVS: %s\n",
+             invBool ? "INVERTIDO (REVERSO)" : "NORMAL (PADRAO)");
   } else if (strncmp(cmdStr, "CMD:WINCH:", 10) == 0) {
     int pulse = atoi(cmdStr + 10);
     if (pulse <= 0) {
@@ -1197,21 +1392,32 @@ void handleIncomingCommand(const char *cmdStr) {
       eng = constrain(eng, 0, 180);
       rel = constrain(rel, 0, 180);
       bool invBool = (inv != 0);
-      actuators.setRackConfig((uint8_t)eng, (uint8_t)rel, invBool, true);
-      c6Prefs.putUChar("rck_eng", (uint8_t)eng);
-      c6Prefs.putUChar("rck_rel", (uint8_t)rel);
-      c6Prefs.putBool("rck_inv", invBool);
-      printLog("[C6 ROVER] Config Cremalheira gravada: "
-               "Encosto=%d°, Livre=%d°, "
-               "Invertido=%s\n",
-               eng, rel, invBool ? "SIM" : "NAO");
+      if (eng == 10 && rel == 160) {
+        printLog("[C6 ROVER] ⚠ Ignorada config legada extrema (10°/160°) vinda do Master; mantido neutro seguro 90°\n");
+      } else {
+        actuators.setRackConfig((uint8_t)eng, (uint8_t)rel, invBool, true);
+        c6Prefs.putUChar("rck_eng", (uint8_t)eng);
+        c6Prefs.putUChar("rck_rel", (uint8_t)rel);
+        c6Prefs.putBool("rck_inv", invBool);
+        c6Prefs.putUChar("rck_ver", RACK_CONFIG_SAFE_VERSION);
+        printLog("[C6 ROVER] Config Cremalheira gravada: "
+                 "Encosto=%d°, Livre=%d°, "
+                 "Invertido=%s\n",
+                 eng, rel, invBool ? "SIM" : "NAO");
+      }
     }
   } else if (strcmp(cmdStr, "CMD:EMERGENCY_STOP") == 0) {
     actuators.emergencyStop();
     currentMotorStatus = MOTOR_IDLE;
   } else if (strcmp(cmdStr, "CMD:DROP_ANCHOR") == 0) {
-    actuators.commandDropAnchor(300);
+    actuators.commandDropAnchor(0);
     currentMotorStatus = MOTOR_ANCHORED;
+  } else if (strncmp(cmdStr, "CMD:DROP_ANCHOR:", 16) == 0) {
+    int dep = atoi(cmdStr + 16);
+    actuators.commandDropAnchor(dep > 0 ? (uint16_t)dep : 0);
+    currentMotorStatus = MOTOR_ANCHORED;
+  } else if (strcmp(cmdStr, "CMD:RELEASE_ANCHOR") == 0) {
+    actuators.releaseRack();
   } else if (strcmp(cmdStr, "CMD:RETRACT_ANCHOR") == 0) {
     actuators.commandRetractAnchor();
     currentMotorStatus = MOTOR_IDLE;
@@ -1395,6 +1601,39 @@ void handleIncomingCommand(const char *cmdStr) {
                "Brilho=%u%%\n",
                ledStripCount, ledStripBrightPct);
     }
+  } else if (strncmp(cmdStr, "CMD:LED:MODECFG:", 16) == 0) {
+    int m[7] = {0, 0, 0, 0, 0, 0, 0};
+    int n = sscanf(cmdStr + 16, "%d:%d:%d:%d:%d:%d:%d", &m[0], &m[1], &m[2],
+                   &m[3], &m[4], &m[5], &m[6]);
+    if (n >= 1) {
+      for (int i = 0; i < 7 && i < n; i++) {
+        ledModeAnims[i] = (uint8_t)(m[i] & 0x7F);
+        char key[12];
+        snprintf(key, sizeof(key), "led_m%d", i);
+        c6Prefs.putUChar(key, ledModeAnims[i]);
+      }
+      ledTestMode = LED_MODE_OFF;
+      ledForceRefresh = true;
+      updateStrobeLeds(now);
+      printLog("[C6 ROVER] ★ Config Animacoes Nauticas por Modo gravada: "
+               "[%u, %u, %u, %u, %u, %u, %u]\n",
+               ledModeAnims[0], ledModeAnims[1], ledModeAnims[2],
+               ledModeAnims[3], ledModeAnims[4], ledModeAnims[5],
+               ledModeAnims[6]);
+    }
+  } else if (strncmp(cmdStr, "CMD:LED:TESTMASK:", 17) == 0) {
+    int mask = atoi(cmdStr + 17);
+    actuators.stopAlarm();
+    ledTestMask = (uint8_t)(mask & 0x7F);
+    if (ledTestMask == 0) {
+      ledTestMode = LED_MODE_OFF;
+    } else {
+      ledTestMode = LED_MODE_MASK;
+    }
+    ledForceRefresh = true;
+    updateStrobeLeds(now);
+    printLog("[C6 ROVER] ★ Teste Combinacao Animacoes WS2812B Mask=0x%02X (%u)\n",
+             ledTestMask, ledTestMask);
 #endif
   } else if (strncmp(cmdStr, "CMD:C6LED:BRIGHT:", 17) == 0) {
     int brt = atoi(cmdStr + 17);
@@ -1673,12 +1912,12 @@ void loop() {
           }
 
           // Resposta rica de telemetria para o Lafvin Master:
-          // PONG:<seq>:<batMv>:<batA>:<batPct>:<lat7>:<lng7>:<spd>:<head>:<sats>:<fix>:<motSt>:<rud>:<thr>:<winch>:<rack>:<depth>:<loraSt>:<rssi>:<snr>:<ancSt>
+          // PONG:<seq>:<batMv>:<batA>:<batPct>:<lat7>:<lng7>:<spd>:<head>:<sats>:<fix>:<motSt>:<rud>:<thr>:<winch>:<rack>:<depth>:<loraSt>:<rssi>:<snr>:<ancSt>:<pulses>
           char pong[256];
           snprintf(pong, sizeof(pong),
                    "PONG:%u:%u:%.2f:%u:%ld:%ld:%.1f:%.1f:%u:%u:%u:%"
                    "d:%d:%d:%d:%"
-                   "u:%s:%.1f:%.1f:%u\n",
+                   "u:%s:%.1f:%.1f:%u:%ld\n",
                    seq, battery.getVoltageMv(), battery.getCurrentAmps(),
                    battery.getPercentage(), (long)gps.getLatDeg7(),
                    (long)gps.getLngDeg7(), gps.getSpeedKnots(),
@@ -1687,7 +1926,8 @@ void loop() {
                    actuators.getThrottle(), actuators.getWinchPulseUs(),
                    actuators.isRackReleased() ? 1 : 0,
                    actuators.getAnchorDepthCm(), loraReady ? "RF_OK" : "RF_ERR",
-                   lastRssi, lastSnr, actuators.getAnchorStatus());
+                   lastRssi, lastSnr, actuators.getAnchorStatus(),
+                   actuators.getAnchorHallPulses());
           interSerial.print(pong);
           sendLoraStatToMaster();
           sendCompassStatToMaster();

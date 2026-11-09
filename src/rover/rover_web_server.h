@@ -453,6 +453,26 @@ private:
     _server.on("/api/sd/delete_dir", [this]() { handleApiSdDeleteDir(); });
     _server.on("/api/sd/mkdir", [this]() { handleApiSdMkdir(); });
 
+    // Relatório do Wizard de Teste de Navegação / Bússola / RTL
+    _server.on("/api/nav_wizard", HTTP_GET, [this]() {
+      _server.sendHeader("Access-Control-Allow-Origin", "*");
+      if (_sd.isReady() && _sd.fileExists("/nav_test_wizard.txt")) {
+        String txt = _sd.readFile("/nav_test_wizard.txt", 16384);
+        if (txt.length() > 0) {
+          _server.send(200, "text/plain; charset=utf-8", txt);
+          return;
+        }
+      }
+      if (_display && _display->getLastNavWizardReport().length() > 0) {
+        _server.send(200, "text/plain; charset=utf-8",
+                     _display->getLastNavWizardReport());
+        return;
+      }
+      _server.send(404, "text/plain; charset=utf-8",
+                   "Ainda nao existe relatorio do Wizard de Navegacao.\n"
+                   "Execute em: Configuracoes -> TESTE NAV no ecra do Rover.");
+    });
+
     // Upload de ficheiros para o SD
     _server.on(
         "/api/sd/upload", HTTP_POST, [this]() { handleApiSdUploadFinish(); },
@@ -1543,10 +1563,8 @@ private:
     html += "<button type='button' onclick='saveLedConfig()' class='btn "
             "btn-primary' style='background:#9333ea;color:#fff;'><i "
             "class='fa-solid fa-floppy-disk'></i> Guardar Config LEDs</button>";
-    html += "</div></div>";
+    html += "</div>";
 
-    // Card 4.3b: Controlo da Cor por Modo e Intensidade do LED RGB da C6 (GPIO
-    // 8)
     static const char *modeNamesPt[7] = {
         "0 • IDLE (Standby)",           "1 • MANUAL (Comando)",
         "2 • HOLD STATION (Manter)",    "3 • ANCHORED (Ancorado)",
@@ -1561,6 +1579,38 @@ private:
         "Retorno automático ao ponto de partida",
         "Perda de sinal / paragem de segurança (pisca a 2 Hz)"};
     uint8_t curSt = (_motorStatus < 7) ? _motorStatus : 0;
+
+    // Linha 4: Animação e Sinalização Náutica por Modo de Operação (0..6) com Suporte a Combinações
+    html += "<div style='margin-top:14px;background:rgba(15,23,42,0.65);border:1px solid #4c1d95;border-radius:10px;padding:14px;'>";
+    html += "<div style='display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;'>";
+    html += "<div class='stat-label' style='color:#e9d5ff;font-size:0.86rem;'><i class='fa-solid fa-wand-magic-sparkles' style='color:#a855f7;'></i> Animação e Sinalização Náutica por Modo de Operação (0 a 6) — Seleção Simples ou Combinada:</div>";
+    html += "<span class='badge' style='background:#3b0764;color:#e9d5ff;border:1px solid #7e22ce;'>MULTI-SELEÇÃO POR MODO</span>";
+    html += "</div>";
+    html += "<p style='color:var(--muted);font-size:0.8rem;margin:0 0 12px 0;'>Para cada modo de operação do Rover, selecione <b>uma animação</b>, <b>OFF</b>, ou <b>combine várias animações</b> (ex.: <i>Luzes NAV + Strobe</i> sobrepõe o duplo-flash branco sobre Bombordo/Estibordo; múltiplas animações base alternam ciclicamente). A Base Station também pode configurar estes modos remotamente via LoRa.</p>";
+    html += "<div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:10px;' id='ledModeAnimsGrid'>";
+    for (uint8_t m = 0; m < 7; m++) {
+      uint8_t mask = _config.getLedModeAnim(m);
+      bool isCur = (m == curSt);
+      html += "<div id='ledModeAnimCard_" + String(m) + "' style='background:rgba(2,6,23,0.65);border:1px solid " + String(isCur ? "#a855f7" : "#334155") + ";border-radius:8px;padding:10px;'>";
+      html += "<div style='display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:4px;'>";
+      html += "<div style='font-weight:700;font-size:0.82rem;color:var(--text);'>" + String(modeNamesPt[m]) + "</div>";
+      html += "<div style='display:flex;align-items:center;gap:6px;'>";
+      html += "<span id='ledModeAnimSummary_" + String(m) + "' class='badge' style='background:#1e1b4b;color:#c4b5fd;font-size:0.68rem;'>MASK " + String(mask) + "</span>";
+      html += "<button type='button' class='btn btn-secondary' style='padding:4px 8px;font-size:0.72rem;' onclick='testLedModeMask(" + String(m) + ")' title='Testar esta combinação na fita WS2812B'><i class='fa-solid fa-play'></i> Testar</button>";
+      html += "</div></div>";
+      html += "<div style='font-size:0.71rem;color:var(--muted);margin-bottom:8px;'>" + String(modeDescsPt[m]) + "</div>";
+      html += "<div style='display:flex;flex-wrap:wrap;gap:5px;' id='ledModeAnimChips_" + String(m) + "'></div>";
+      html += "</div>";
+    }
+    html += "</div>";
+    html += "<div style='display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;'>";
+    html += "<button type='button' class='btn btn-primary' style='flex:1;min-width:210px;background:#7e22ce;color:#fff;' onclick='saveLedModeAnims()'><i class='fa-solid fa-floppy-disk'></i> Guardar Animações por Modo</button>";
+    html += "<button type='button' class='btn btn-secondary' onclick='resetLedModeAnims()'><i class='fa-solid fa-rotate-left'></i> Repor Padrão Náutico</button>";
+    html += "</div></div>";
+    html += "</div>";
+
+    // Card 4.3b: Controlo da Cor por Modo e Intensidade do LED RGB da C6 (GPIO
+    // 8)
     String curCol = _config.getC6ModeColor(curSt);
 
     html +=
@@ -2127,9 +2177,25 @@ private:
             "brt=parsePct(document.getElementById('cfg_led_bright')?.value,"
             "100);fetch('/api/control/leds',{method:'POST',headers:{'Content-"
             "Type':'application/json'},body:JSON.stringify({count:cnt,"
-            "brightness:brt,save:true})}).then(r=>r.json()).then(res=>"
+            "brightness:brt,save:true,led_mode_anims:ledModeAnims})}).then(r=>r.json()).then(res=>"
             "showStatus(res.msg||'Configuração dos LEDs guardada!')).catch(()=>"
             "{});}";
+    html += "const LED_ANIM_DEFS=[{bit:0,label:'OFF',color:'#475569'},{bit:1,label:'Strobe',color:'#64748b'},{bit:2,label:'NAV BB/EB',color:'#059669'},{bit:4,label:'Beacon',color:'#d97706'},{bit:8,label:'Rainbow',color:'#9333ea'},{bit:16,label:'Chase',color:'#0284c7'},{bit:32,label:'Police',color:'#dc2626'},{bit:64,label:'Boia Regata',color:'#0d9488'}];";
+    html += "let ledModeAnims=[" + String(_config.getLedModeAnim(0)) + "," +
+            String(_config.getLedModeAnim(1)) + "," +
+            String(_config.getLedModeAnim(2)) + "," +
+            String(_config.getLedModeAnim(3)) + "," +
+            String(_config.getLedModeAnim(4)) + "," +
+            String(_config.getLedModeAnim(5)) + "," +
+            String(_config.getLedModeAnim(6)) + "];";
+    html += "function formatLedAnimMask(mask){if(!mask)return 'OFF';const names=[];LED_ANIM_DEFS.forEach(d=>{if(d.bit&&((mask&d.bit)===d.bit))names.push(d.label);});return names.join(' + ')||'OFF';}";
+    html += "function renderLedModeAnimRow(m){const box=document.getElementById('ledModeAnimChips_'+m);if(!box)return;const mask=ledModeAnims[m]||0;const sum=document.getElementById('ledModeAnimSummary_'+m);if(sum){sum.innerText=formatLedAnimMask(mask);sum.style.background=mask?'#3b0764':'#1e293b';sum.style.color=mask?'#e9d5ff':'var(--muted)';}box.innerHTML=LED_ANIM_DEFS.map(d=>{const active=(d.bit===0)?(mask===0):((mask&d.bit)===d.bit);const bg=active?d.color:'rgba(15,23,42,0.8)';const bd=active?'#f8fafc':'#334155';const col=active?'#fff':'#94a3b8';return `<button type=\"button\" onclick=\"toggleLedModeAnimBit(${m},${d.bit})\" style=\"padding:4px 9px;font-size:0.72rem;border-radius:6px;border:1px solid ${bd};background:${bg};color:${col};cursor:pointer;font-weight:${active?700:500};\">${active?'✓ ':''}${d.label}</button>`;}).join('');}";
+    html += "function renderAllLedModeAnims(){for(let m=0;m<7;m++)renderLedModeAnimRow(m);}";
+    html += "function toggleLedModeAnimBit(m,bit){if(bit===0){ledModeAnims[m]=0;}else{ledModeAnims[m]=(ledModeAnims[m]^bit)&0x7F;}renderLedModeAnimRow(m);}";
+    html += "function testLedModeMask(m){const mask=ledModeAnims[m]||0;updateLedBadge('TESTE M'+m+': '+formatLedAnimMask(mask));fetch('/api/control/leds',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({test_mask:mask})}).then(r=>r.json()).then(res=>showStatus(res.msg||('A testar: '+formatLedAnimMask(mask)))).catch(()=>{});}";
+    html += "function saveLedModeAnims(){fetch('/api/control/leds',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({led_mode_anims:ledModeAnims,save:true})}).then(r=>r.json()).then(res=>{if(Array.isArray(res.led_mode_anims)){ledModeAnims=res.led_mode_anims;renderAllLedModeAnims();}showStatus(res.msg||'Animações náuticas por modo guardadas!');}).catch(()=>{});}";
+    html += "function resetLedModeAnims(){fetch('/api/control/leds',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reset_mode_anims:true})}).then(r=>r.json()).then(res=>{if(Array.isArray(res.led_mode_anims)){ledModeAnims=res.led_mode_anims;renderAllLedModeAnims();}showStatus(res.msg||'Animações náuticas padrão repostas!');}).catch(()=>{});}";
+    html += "setTimeout(renderAllLedModeAnims,50);";
     html += "let c6LedBrightTimer=null;";
     html += "function onC6LedBrightSlide(v){const pct=parsePct(v,80);const "
             "el=document.getElementById('c6LedBrightVal');if(el)el.innerText="
@@ -2319,7 +2385,7 @@ private:
             "screen_brightness:bright,rack_angle_engaged:rEng,rack_angle_"
             "released:rRel,rack_inverted:rInv,anchor_drum_diam_mm:dDiam,anchor_"
             "pulses_per_rev:pRev,joystick_enabled:joyEn,led_count:ledCnt,led_"
-            "brightness:ledBrt,c6_led_brightness:c6LedBrt,c6_mode_colors:"
+            "brightness:ledBrt,led_mode_anims:ledModeAnims,c6_led_brightness:c6LedBrt,c6_mode_colors:"
             "c6Colors})";
     html += "  }).then(r=>r.json()).then(res=>{";
     html += "    if(res.success){";
@@ -3016,6 +3082,14 @@ private:
         "<div class='card-title'><i class='fa-solid fa-anchor'></i> Guincho da "
         "Âncora (GPIO 23) & Travão da Cremalheira (GPIO 21)</div>";
     html += "<div class='btn-group'>";
+    html += "<button onclick='sendAction(3)' class='btn btn-primary'><i "
+            "class='fa-solid fa-anchor'></i> Lançar Âncora (Auto-Trancar)</button>";
+    html += "<button onclick='sendAction(17)' class='btn btn-secondary' "
+            "style='background:#d97706;color:#fff;'><i class='fa-solid "
+            "fa-lock-open'></i> Libertar (Sem Sensor)</button>";
+    html += "<button onclick='sendAction(16)' class='btn btn-primary' "
+            "style='background:#059669;color:#fff;'><i class='fa-solid "
+            "fa-lock'></i> Trancar Cremalheira (Encosto)</button>";
     html += "<button onclick='sendAction(4)' class='btn btn-primary'><i "
             "class='fa-solid fa-play'></i> LIGAR Puxar (1800 µs)</button>";
     html +=
@@ -3024,12 +3098,6 @@ private:
     html += "<button onclick='cutWinchSignal()' class='btn btn-danger' "
             "style='background:#dc2626;font-weight:700;'><i class='fa-solid "
             "fa-power-off'></i> CORTAR SINAL (OFF / 0V)</button>";
-    html += "<button onclick='sendAction(16)' class='btn btn-primary' "
-            "style='background:#059669;color:#fff;'><i class='fa-solid "
-            "fa-lock'></i> Travar Cremalheira (Encosto)</button>";
-    html += "<button onclick='sendAction(17)' class='btn btn-secondary' "
-            "style='background:#d97706;color:#fff;'><i class='fa-solid "
-            "fa-lock-open'></i> Libertar Cremalheira (Livre)</button>";
     html += "<button onclick='sendAction(6)' class='btn btn-secondary'><i "
             "class='fa-solid fa-rotate'></i> Alternar Travão</button>";
     html += "<button onclick='sendAction(13)' class='btn btn-secondary' "
@@ -4297,6 +4365,10 @@ private:
     doc["joystick_enabled"] = _config.isJoystickEnabled();
     doc["led_count"] = _config.getLedCount();
     doc["led_brightness"] = _config.getLedBrightness();
+    JsonArray ledAnims = doc["led_mode_anims"].to<JsonArray>();
+    for (uint8_t i = 0; i < 7; i++) {
+      ledAnims.add(_config.getLedModeAnim(i));
+    }
     doc["led_mode"] = _actuators.getLedMode();
     doc["led_r"] = _actuators.getLedR();
     doc["led_g"] = _actuators.getLedG();
@@ -4425,6 +4497,23 @@ private:
         _commandQueueCb(lCmd);
       }
     }
+    if (doc["led_mode_anims"].is<JsonArray>()) {
+      JsonArray arr = doc["led_mode_anims"].as<JsonArray>();
+      uint8_t idx = 0;
+      for (JsonVariant v : arr) {
+        if (idx >= 7)
+          break;
+        if (v.is<int>()) {
+          _config.setLedModeAnim(idx, (uint8_t)(v.as<int>() & 0x7F), false);
+        }
+        idx++;
+      }
+      _config.saveConfig();
+      if (_commandQueueCb) {
+        String animCmd = _config.buildLedModeAnimsCommand();
+        _commandQueueCb(animCmd.c_str());
+      }
+    }
     bool c6LedUpdated = false;
     if (!doc["c6_led_brightness"].isNull()) {
       int cb = constrain(doc["c6_led_brightness"].as<int>(), 0, 100);
@@ -4478,6 +4567,10 @@ private:
     res["joystick_enabled"] = _config.isJoystickEnabled();
     res["led_count"] = _config.getLedCount();
     res["led_brightness"] = _config.getLedBrightness();
+    JsonArray resLedAnims = res["led_mode_anims"].to<JsonArray>();
+    for (uint8_t i = 0; i < 7; i++) {
+      resLedAnims.add(_config.getLedModeAnim(i));
+    }
     res["c6_led_brightness"] = _config.getC6LedBrightness();
     JsonArray resC6Cols = res["c6_mode_colors"].to<JsonArray>();
     for (uint8_t i = 0; i < 7; i++) {
@@ -4611,6 +4704,8 @@ private:
       snprintf(lCmd, sizeof(lCmd), "CMD:LED:CFG:%u:%u", _config.getLedCount(),
                _config.getLedBrightness());
       _commandQueueCb(lCmd);
+      String animCmd = _config.buildLedModeAnimsCommand();
+      _commandQueueCb(animCmd.c_str());
       String c6Cmd = _config.buildC6LedCfgCommand();
       _commandQueueCb(c6Cmd.c_str());
     }
@@ -4626,6 +4721,10 @@ private:
     res["joystick_enabled"] = _config.isJoystickEnabled();
     res["led_count"] = _config.getLedCount();
     res["led_brightness"] = _config.getLedBrightness();
+    JsonArray resLedAnims = res["led_mode_anims"].to<JsonArray>();
+    for (uint8_t i = 0; i < 7; i++) {
+      resLedAnims.add(_config.getLedModeAnim(i));
+    }
     res["c6_led_brightness"] = _config.getC6LedBrightness();
     JsonArray resC6Cols = res["c6_mode_colors"].to<JsonArray>();
     for (uint8_t i = 0; i < 7; i++) {
@@ -4935,11 +5034,11 @@ private:
         _commandQueueCb("CMD:EMERGENCY_STOP");
       msg = "PARAGEM DE EMERGÊNCIA ACIONADA!";
       break;
-    case 3:                              // Drop Anchor
-      _actuators.commandDropAnchor(200); // 2 metros
+    case 3:                            // Drop Anchor (watches sensor & auto-locks on stop)
+      _actuators.commandDropAnchor(0); // 0 = monitoriza sensor Hall e tranca assim que parar
       if (_commandQueueCb)
         _commandQueueCb("CMD:DROP_ANCHOR");
-      msg = "Comando Lançar Âncora enviado (2.0m)";
+      msg = "Lançar Âncora ativado (atento ao sensor Hall — tranca logo que pare)";
       break;
     case 4: // Raise / Winch Hoist
       _actuators.jogWinch(1);
@@ -4981,12 +5080,12 @@ private:
       msg = String("Travão da cremalheira TRAVADO (encosto: ") +
             _config.getRackAngleEngaged() + "°)";
       break;
-    case 17: // Explicitly Release Rack (Livre / Soltar)
+    case 17: // Explicitly Release Rack ("Libertar" - sem sensor)
       _actuators.releaseRack();
       if (_commandQueueCb)
         _commandQueueCb("CMD:RACK:RELEASE");
-      msg = String("Travão da cremalheira LIVRE (solto: ") +
-            _config.getRackAngleReleased() + "°)";
+      msg = String("Comando Libertar ativo: Cremalheira LIVRE (") +
+            _config.getRackAngleReleased() + "°, sem monitorizar sensor)";
       break;
     case 7: // RTL
       if (_gps.hasHome()) {
@@ -5213,6 +5312,10 @@ private:
       res["led_b"] = _actuators.getLedB();
       res["led_brightness"] = _config.getLedBrightness();
       res["led_count"] = _config.getLedCount();
+      JsonArray getLedAnims = res["led_mode_anims"].to<JsonArray>();
+      for (uint8_t i = 0; i < 7; i++) {
+        getLedAnims.add(_config.getLedModeAnim(i));
+      }
       String out;
       serializeJson(res, out);
       _server.send(200, "application/json", out);
@@ -5225,6 +5328,53 @@ private:
     }
 
     String msg = "Comando de LEDs enviado com sucesso!";
+
+    // 0. Repor animações por modo, atualizar tabela de animações por modo ou testar combinação (mask)
+    if (doc["reset_mode_anims"].as<bool>()) {
+      _config.resetLedModeAnimsDefault(true);
+      if (_commandQueueCb) {
+        String animCmd = _config.buildLedModeAnimsCommand();
+        _commandQueueCb(animCmd.c_str());
+      }
+      msg = "Animações e sinalização náutica padrão por modo repostas!";
+    } else if (!doc["test_mask"].isNull()) {
+      uint8_t tMask = (uint8_t)(doc["test_mask"].as<int>() & 0x7F);
+      if (_commandQueueCb) {
+        char tCmd[32];
+        snprintf(tCmd, sizeof(tCmd), "CMD:LED:TESTMASK:%u", tMask);
+        _commandQueueCb(tCmd);
+      }
+      msg = String("A testar combinação de animações náuticas (Mask=") + tMask + ")!";
+    } else if (!doc["mode_index"].isNull() && !doc["anim_mask"].isNull()) {
+      int mIdx = doc["mode_index"].as<int>();
+      uint8_t aMask = (uint8_t)(doc["anim_mask"].as<int>() & 0x7F);
+      if (mIdx >= 0 && mIdx < 7) {
+        _config.setLedModeAnim((uint8_t)mIdx, aMask, true);
+        if (_commandQueueCb) {
+          String animCmd = _config.buildLedModeAnimsCommand();
+          _commandQueueCb(animCmd.c_str());
+        }
+        msg = String("Animação do modo ") + get_motor_status_str((uint8_t)mIdx) + " atualizada!";
+      }
+    }
+    if (doc["led_mode_anims"].is<JsonArray>()) {
+      JsonArray arr = doc["led_mode_anims"].as<JsonArray>();
+      uint8_t idx = 0;
+      for (JsonVariant v : arr) {
+        if (idx >= 7)
+          break;
+        if (v.is<int>()) {
+          _config.setLedModeAnim(idx, (uint8_t)(v.as<int>() & 0x7F), false);
+        }
+        idx++;
+      }
+      _config.saveConfig();
+      if (_commandQueueCb) {
+        String animCmd = _config.buildLedModeAnimsCommand();
+        _commandQueueCb(animCmd.c_str());
+      }
+      msg = "Animações e Sinalização Náutica por modo guardadas na NVS e MicroSD!";
+    }
 
     // 1. Configuração de número de LEDs e/ou brilho
     bool hasCount = doc["count"].is<int>() || doc["led_count"].is<int>() ||
@@ -5332,6 +5482,10 @@ private:
     res["led_b"] = _actuators.getLedB();
     res["led_brightness"] = _actuators.getLedBrightness();
     res["led_count"] = _actuators.getLedCount();
+    JsonArray outLedAnims = res["led_mode_anims"].to<JsonArray>();
+    for (uint8_t i = 0; i < 7; i++) {
+      outLedAnims.add(_config.getLedModeAnim(i));
+    }
     String out;
     serializeJson(res, out);
     _server.send(200, "application/json", out);

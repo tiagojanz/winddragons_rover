@@ -336,6 +336,10 @@ private:
             action = ACTION_STOP;
         } else if (strcmp(actionStr, "DROP_ANCHOR") == 0) {
             action = ACTION_DROP_ANCHOR;
+        } else if (strcmp(actionStr, "RELEASE_ANCHOR") == 0 || strcmp(actionStr, "LIBERTAR") == 0 || strcmp(actionStr, "LIBERTAR_ANCORA") == 0 || strcmp(actionStr, "RELEASE_RACK") == 0) {
+            action = ACTION_RELEASE_ANCHOR;
+        } else if (strcmp(actionStr, "LOCK_ANCHOR") == 0 || strcmp(actionStr, "ENGAGE_RACK") == 0 || strcmp(actionStr, "TRANCAR_ANCORA") == 0) {
+            action = ACTION_ENGAGE_RACK;
         } else if (strcmp(actionStr, "RETRIEVE_ANCHOR") == 0 || strcmp(actionStr, "RETRACT_ANCHOR") == 0) {
             action = ACTION_RETRIEVE_ANCHOR;
         } else if (strcmp(actionStr, "STOP_ANCHOR") == 0) {

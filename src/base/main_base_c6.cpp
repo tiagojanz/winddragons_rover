@@ -354,14 +354,16 @@ void handleIncomingCommand(const char *cmdStr) {
         packet.action = (uint8_t)action;
         packet.command_id = (uint16_t)cmdId;
         packet.target_depth_cm = (uint16_t)depth;
-        packet.duration_s = (uint8_t)dur;
+        packet.duration_s = (uint16_t)dur;
         packet.target_lat_deg7 = lat7;
         packet.target_lng_deg7 = lng7;
         packet.checksum =
             calculate_checksum(reinterpret_cast<const uint8_t *>(&packet),
                                sizeof(packet) - sizeof(packet.checksum));
 
-        selectedRoverTarget = (uint8_t)targetId;
+        if (targetId != BROADCAST_ROVER_ID) {
+          selectedRoverTarget = (uint8_t)targetId;
+        }
         lastAutoPollMs =
             millis(); // Evita colisão de Poll logo após enviar comando de ação
         radio.standby();

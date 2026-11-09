@@ -161,6 +161,7 @@ struct FleetRover {
   char role[24];     // "start", "mark", "finish", "gate"
   char rounding[16]; // "port", "starboard", "gate", "none"
   uint8_t buoy_light_role;
+  uint8_t led_mode_anims[7]; // Bitmask de animação náutica por modo (0=IDLE..6=FAILSAFE)
   double target_lat;
   double target_lng;
 
@@ -210,6 +211,7 @@ public:
     strncpy(_raceId, "REGATA-DEFAULT", sizeof(_raceId) - 1);
     strncpy(_missionName, "Percurso de Regata", sizeof(_missionName) - 1);
     resetC6ModeColorsDefault();
+    resetRoverLedModeAnimsDefault();
     rovers.reserve(MAX_FLEET_ROVERS);
     circuitBuoys.reserve(MAX_CIRCUIT_BUOYS);
     _removedRoverIds.reserve(MAX_FLEET_ROVERS);
@@ -326,6 +328,61 @@ public:
     return cmd;
   }
 
+  // --- Configuração de Animação e Sinalização Náutica dos Rovers por Modo (0..6) ---
+  void resetRoverLedModeAnimsDefault(uint8_t roverId = 0xFF) {
+    if (roverId == 0xFF || roverId == 0) {
+      for (uint8_t i = 0; i < 7; i++) {
+        _roverLedModeAnims[i] = DEFAULT_ROVER_LED_MODE_ANIMS[i];
+      }
+    }
+    for (auto &r : rovers) {
+      if (roverId == 0xFF || r.id == roverId) {
+        for (uint8_t i = 0; i < 7; i++) {
+          r.led_mode_anims[i] = DEFAULT_ROVER_LED_MODE_ANIMS[i];
+        }
+      }
+    }
+  }
+
+  uint8_t getRoverLedModeAnim(uint8_t modeIdx, uint8_t roverId = 0) const {
+    if (modeIdx >= 7)
+      return DEFAULT_ROVER_LED_MODE_ANIMS[0];
+    if (roverId > 0 && roverId != 0xFF) {
+      for (const auto &r : rovers) {
+        if (r.id == roverId) {
+          return r.led_mode_anims[modeIdx] & 0x7F;
+        }
+      }
+    }
+    return _roverLedModeAnims[modeIdx] & 0x7F;
+  }
+
+  void setRoverLedModeAnims(const uint8_t masks[7], uint8_t roverId = 0xFF,
+                            bool save = true) {
+    if (roverId == 0xFF || roverId == 0) {
+      for (uint8_t i = 0; i < 7; i++) {
+        _roverLedModeAnims[i] = masks[i] & 0x7F;
+      }
+    }
+    for (auto &r : rovers) {
+      if (roverId == 0xFF || r.id == roverId) {
+        for (uint8_t i = 0; i < 7; i++) {
+          r.led_mode_anims[i] = masks[i] & 0x7F;
+        }
+      }
+    }
+    if (save) {
+      saveMissionConfig();
+    }
+  }
+
+  void queueRoverLedModeAnims(uint8_t targetRoverId, const uint8_t masks[7]) {
+    int32_t lat7 = 0, lng7 = 0;
+    pack_led_mode_anims(masks, lat7, lng7);
+    uint16_t cmdId = (uint16_t)((millis() & 0x7FFF) + 500);
+    queueCommand(targetRoverId, cmdId, ACTION_SET_LED_ANIMS, 0, 0, lat7, lng7);
+  }
+
   void begin(SDCardManager *sd = nullptr) {
     _sd = sd;
     loadMissionConfig();
@@ -350,6 +407,9 @@ public:
       snprintf(r.mac, sizeof(r.mac), "00:00:00:00:00:%02X", i);
       r.battery_voltage = 12.0f;
       r.is_online = false;
+      for (uint8_t m = 0; m < 7; m++) {
+        r.led_mode_anims[m] = _roverLedModeAnims[m];
+      }
 
       // Sugestão de papéis iniciais para teste
       if (i == 1)
@@ -935,10 +995,16 @@ public:
         r.target_lng = tLng;
         r.battery_voltage = 12.0f;
         r.is_online = false;
+        for (uint8_t m = 0; m < 7; m++) {
+          r.led_mode_anims[m] = _roverLedModeAnims[m];
+        }
 
         // Manter telemetria anterior se já existia
         FleetRover *prev = getRoverById(r.id);
         if (prev) {
+          for (uint8_t m = 0; m < 7; m++) {
+            r.led_mode_anims[m] = prev->led_mode_anims[m];
+          }
           r.lat = prev->lat;
           r.lng = prev->lng;
           r.speed_knots = prev->speed_knots;
@@ -1028,6 +1094,12 @@ public:
           String c = prefs.getString(key, getDefaultC6ModeColor(i));
           _c6ModeColors[i] = normalizeHexColor(c, getDefaultC6ModeColor(i));
         }
+        for (uint8_t i = 0; i < 7; i++) {
+          char key[12];
+          snprintf(key, sizeof(key), "rled_m%u", i);
+          _roverLedModeAnims[i] =
+              prefs.getUChar(key, DEFAULT_ROVER_LED_MODE_ANIMS[i]) & 0x7F;
+        }
         prefs.end();
       }
     }
@@ -1098,6 +1170,18 @@ public:
                 if (v.is<const char *>()) {
                   _c6ModeColors[idx] = normalizeHexColor(
                       String(v.as<const char *>()), getDefaultC6ModeColor(idx));
+                }
+                idx++;
+              }
+            }
+            if (doc["rover_led_mode_anims"].is<JsonArray>()) {
+              JsonArray rlArr = doc["rover_led_mode_anims"].as<JsonArray>();
+              uint8_t idx = 0;
+              for (JsonVariant v : rlArr) {
+                if (idx >= 7)
+                  break;
+                if (v.is<int>()) {
+                  _roverLedModeAnims[idx] = (uint8_t)(v.as<int>() & 0x7F);
                 }
                 idx++;
               }
@@ -1182,6 +1266,21 @@ public:
                 r.target_lng = rLng;
                 r.battery_voltage = 12.0f;
                 r.is_online = false;
+                for (uint8_t m = 0; m < 7; m++) {
+                  r.led_mode_anims[m] = _roverLedModeAnims[m];
+                }
+                if (rObj["led_mode_anims"].is<JsonArray>()) {
+                  JsonArray mArr = rObj["led_mode_anims"].as<JsonArray>();
+                  uint8_t mIdx = 0;
+                  for (JsonVariant mv : mArr) {
+                    if (mIdx >= 7)
+                      break;
+                    if (mv.is<int>()) {
+                      r.led_mode_anims[mIdx] = (uint8_t)(mv.as<int>() & 0x7F);
+                    }
+                    mIdx++;
+                  }
+                }
                 rovers.push_back(r);
               }
             }
@@ -1245,6 +1344,9 @@ public:
             r.buoy_light_role = resolve_buoy_light_role(r.role, r.rounding);
             r.battery_voltage = 12.0f;
             r.is_online = false;
+            for (uint8_t m = 0; m < 7; m++) {
+              r.led_mode_anims[m] = _roverLedModeAnims[m];
+            }
             if (isAssignedRoverMac(r.mac)) {
               rovers.push_back(r);
             }
@@ -1291,6 +1393,11 @@ public:
         snprintf(key, sizeof(key), "c6l_m%u", i);
         prefs.putString(key, _c6ModeColors[i]);
       }
+      for (uint8_t i = 0; i < 7; i++) {
+        char key[12];
+        snprintf(key, sizeof(key), "rled_m%u", i);
+        prefs.putUChar(key, _roverLedModeAnims[i] & 0x7F);
+      }
       prefs.putUChar("r_count", static_cast<uint8_t>(rovers.size()));
       for (size_t i = 0; i < rovers.size(); ++i) {
         char prefix[16];
@@ -1324,6 +1431,10 @@ public:
       for (uint8_t i = 0; i < C6_LED_MODE_COUNT; i++) {
         cArr.add(_c6ModeColors[i]);
       }
+      JsonArray rlArr = doc["rover_led_mode_anims"].to<JsonArray>();
+      for (uint8_t i = 0; i < 7; i++) {
+        rlArr.add(_roverLedModeAnims[i] & 0x7F);
+      }
       doc["updated_at"] = millis();
 
       JsonArray arr = doc["rovers"].to<JsonArray>();
@@ -1339,6 +1450,10 @@ public:
         rObj["target_lng"] = r.target_lng;
         rObj["lat"] = r.target_lat;
         rObj["lng"] = r.target_lng;
+        JsonArray rAnims = rObj["led_mode_anims"].to<JsonArray>();
+        for (uint8_t m = 0; m < 7; m++) {
+          rAnims.add(r.led_mode_anims[m] & 0x7F);
+        }
       }
 
       JsonArray bArr = doc["circuit_buoys"].to<JsonArray>();
@@ -1393,4 +1508,5 @@ private:
   bool _roversFromPortal;
   uint8_t _c6LedBrightness;
   String _c6ModeColors[C6_LED_MODE_COUNT];
+  uint8_t _roverLedModeAnims[7];
 };

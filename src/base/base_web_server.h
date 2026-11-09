@@ -535,6 +535,8 @@ private:
     _server.on("/api/display/brightness",
                [this]() { handleApiDisplayBrightness(); });
     _server.on("/api/control/c6_led", [this]() { handleApiC6LedControl(); });
+    _server.on("/api/control/rover_leds",
+               [this]() { handleApiRoverLedAnims(); });
 
     // Controle de atuadores e comandos
     _server.on("/api/control/actuator", [this]() { handleApiActuator(); });
@@ -1237,6 +1239,21 @@ private:
         "style='font-size:0.82rem;color:var(--green);font-weight:600;'></span>";
     html += "</div></div>";
 
+    // Card 3b: Definir Animação e Sinalização Náutica nos Rovers por Modo (0..6) via LoRa
+    html += "<div class='card' style='border-color:#a855f7;' id='roverLedAnimsCard'>";
+    html += "<div class='card-title' style='display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;'>";
+    html += "<span><i class='fa-solid fa-wand-magic-sparkles' style='color:#a855f7;'></i> Animação e Sinalização Náutica dos Rovers por Modo (0 a 6) — Controlo Remoto LoRa</span>";
+    html += "<span class='badge' style='background:#3b0764;color:#e9d5ff;border:1px solid #7e22ce;'>MULTI-SELEÇÃO &amp; ENVIO LORA</span>";
+    html += "</div>";
+    html += "<p style='color:var(--muted);font-size:0.85rem;margin-bottom:12px;'>Defina a partir da Estação Base qual a <b>animação náutica</b> (ou <b>combinação de animações</b>) que os Rovers devem executar na fita WS2812B em cada modo de operação (0=IDLE a 6=FAILSAFE). Pode aplicar ao Rover ativo ou transmitir para todos os Rovers da frota.</p>";
+    html += "<div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;margin-bottom:14px;' id='baseRoverLedModeGrid'></div>";
+    html += "<div style='display:flex;flex-wrap:wrap;gap:10px;align-items:center;'>";
+    html += "<button type='button' onclick='sendRoverLedModeAnims(false)' class='btn btn-primary' style='background:#7e22ce;color:#fff;'><i class='fa-solid fa-satellite-dish'></i> Enviar para Rover Selecionado</button>";
+    html += "<button type='button' onclick='sendRoverLedModeAnims(true)' class='btn btn-primary' style='background:#0284c7;color:#fff;'><i class='fa-solid fa-tower-broadcast'></i> Enviar para TODOS os Rovers (Frota)</button>";
+    html += "<button type='button' onclick='resetRoverLedModeAnims()' class='btn btn-secondary'><i class='fa-solid fa-rotate-left'></i> Repor Padrão Náutico</button>";
+    html += "<span id='roverLedAnimsFeedback' style='font-size:0.82rem;color:var(--green);font-weight:600;'></span>";
+    html += "</div></div>";
+
     // Card 4: Versão das Placas & Atualização de Firmware Over-The-Air (OTA)
     html += "<div class='card' style='border-color:var(--primary);'>";
     html += "<div class='card-title'><span><i class='fa-solid "
@@ -1329,8 +1346,18 @@ private:
             "cval.innerText=cb+'%';const "
             "cbg=document.getElementById('c6LedBrightBadge');if(cbg)cbg."
             "innerText=cb+'%';}if(Array.isArray(d.c6_mode_colors)){d.c6_mode_"
-            "colors.forEach((col,idx)=>applyC6ModeUiColor(idx,col));}}).catch(("
+            "colors.forEach((col,idx)=>applyC6ModeUiColor(idx,col));}if(Array.isArray(d.rover_led_mode_anims)&&d.rover_led_mode_anims.length===7){baseRoverLedAnims=d.rover_led_mode_anims;renderBaseRoverLedAnims();}}).catch(("
             ")=>{});";
+    html += "const BASE_LED_ANIM_DEFS=[{bit:0,label:'OFF',color:'#475569'},{bit:1,label:'Strobe',color:'#64748b'},{bit:2,label:'NAV BB/EB',color:'#059669'},{bit:4,label:'Beacon',color:'#d97706'},{bit:8,label:'Rainbow',color:'#9333ea'},{bit:16,label:'Chase',color:'#0284c7'},{bit:32,label:'Police',color:'#dc2626'},{bit:64,label:'Boia Regata',color:'#0d9488'}];";
+    html += "const BASE_ROVER_MODES=[{name:'0 • IDLE (Standby)',desc:'Aguardando missão / motores parados'},{name:'1 • MANUAL (Comando)',desc:'Controlo manual ativo'},{name:'2 • HOLD STATION (Manter)',desc:'Manutenção autónoma de posição'},{name:'3 • ANCHORED (Ancorado)',desc:'Âncora lançada no fundo'},{name:'4 • GOTO TARGET (Navegar)',desc:'Navegação para Waypoint'},{name:'5 • RTL (Regresso Home)',desc:'Retorno ao ponto de partida'},{name:'6 • FAILSAFE (Emergência)',desc:'Perda de sinal / segurança'}];";
+    html += "let baseRoverLedAnims=[64,2,64,64,2,4,4];";
+    html += "function fmtBaseRoverAnim(mask){if(!mask)return 'OFF';const n=[];BASE_LED_ANIM_DEFS.forEach(d=>{if(d.bit&&((mask&d.bit)===d.bit))n.push(d.label);});return n.join(' + ')||'OFF';}";
+    html += "function renderBaseRoverLedAnims(){const g=document.getElementById('baseRoverLedModeGrid');if(!g)return;g.innerHTML=BASE_ROVER_MODES.map((mm,m)=>{const mask=baseRoverLedAnims[m]||0;const chips=BASE_LED_ANIM_DEFS.map(d=>{const act=(d.bit===0)?(mask===0):((mask&d.bit)===d.bit);return `<button type=\"button\" onclick=\"toggleBaseRoverAnimBit(${m},${d.bit})\" style=\"padding:4px 8px;font-size:0.72rem;border-radius:6px;border:1px solid ${act?'#f8fafc':'#334155'};background:${act?d.color:'rgba(15,23,42,0.8)'};color:${act?'#fff':'#94a3b8'};cursor:pointer;font-weight:${act?700:500};\">${act?'✓ ':''}${d.label}</button>`;}).join('');return `<div style=\"background:rgba(2,6,23,0.65);border:1px solid #334155;border-radius:8px;padding:10px;\"><div style=\"display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;\"><strong style=\"font-size:0.82rem;\">${mm.name}</strong><span class=\"badge\" style=\"background:${mask?'#3b0764':'#1e293b'};color:${mask?'#e9d5ff':'var(--muted)'};font-size:0.68rem;\">${fmtBaseRoverAnim(mask)}</span></div><div style=\"font-size:0.71rem;color:var(--muted);margin-bottom:8px;\">${mm.desc}</div><div style=\"display:flex;flex-wrap:wrap;gap:5px;\">${chips}</div></div>`;}).join('');}";
+    html += "function toggleBaseRoverAnimBit(m,bit){if(bit===0)baseRoverLedAnims[m]=0;else baseRoverLedAnims[m]=((baseRoverLedAnims[m]||0)^bit)&0x7F;renderBaseRoverLedAnims();}";
+    html += "function showRoverAnimFb(msg,isErr){const fb=document.getElementById('roverLedAnimsFeedback');if(!fb)return;fb.style.color=isErr?'var(--red)':'var(--green)';fb.innerText=msg;setTimeout(()=>{if(fb.innerText===msg)fb.innerText='';},4000);}";
+    html += "function sendRoverLedModeAnims(allRovers){fetch('/api/control/rover_leds',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({broadcast:!!allRovers,led_mode_anims:baseRoverLedAnims,send_lora:true})}).then(r=>r.json()).then(d=>{if(Array.isArray(d.rover_led_mode_anims)){baseRoverLedAnims=d.rover_led_mode_anims;renderBaseRoverLedAnims();}showRoverAnimFb(d.msg||'Enviado via LoRa!');}).catch(()=>showRoverAnimFb('Erro ao enviar',true));}";
+    html += "function resetRoverLedModeAnims(){fetch('/api/control/rover_leds',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({broadcast:true,reset_defaults:true,send_lora:true})}).then(r=>r.json()).then(d=>{if(Array.isArray(d.rover_led_mode_anims)){baseRoverLedAnims=d.rover_led_mode_anims;renderBaseRoverLedAnims();}showRoverAnimFb(d.msg||'Padrão reposto!');}).catch(()=>showRoverAnimFb('Erro ao repor',true));}";
+    html += "setTimeout(renderBaseRoverLedAnims,50);";
     html += "let c6LedSlideTimer=null;";
     html += "function parseC6Brt(v,def=80){const "
             "n=parseInt(v,10);return "
@@ -1898,6 +1925,10 @@ private:
     for (uint8_t i = 0; i < FleetManager::C6_LED_MODE_COUNT; i++) {
       c6Cols.add(_fleet.getC6ModeColor(i));
     }
+    JsonArray rLedAnims = doc["rover_led_mode_anims"].to<JsonArray>();
+    for (uint8_t i = 0; i < 7; i++) {
+      rLedAnims.add(_fleet.getRoverLedModeAnim(i));
+    }
     doc["lora_ready"] = _loraReady ? *_loraReady : false;
     doc["lora_enabled"] = (bool)ENABLE_LORA;
 
@@ -1970,6 +2001,10 @@ private:
       sObj["anchor_depth_m"] = sel->anchor_depth_m;
       sObj["rssi"] = sel->rssi;
       sObj["is_online"] = sel->is_online;
+      JsonArray sLedAnims = sObj["led_mode_anims"].to<JsonArray>();
+      for (uint8_t m = 0; m < 7; m++) {
+        sLedAnims.add(sel->led_mode_anims[m] & 0x7F);
+      }
     }
 
     JsonArray roversArr = doc["rovers"].to<JsonArray>();
@@ -1983,6 +2018,10 @@ private:
       rObj["rounding"] = r.rounding;
       rObj["rounding_side"] = r.rounding;
       rObj["buoy_light_role"] = r.buoy_light_role;
+      JsonArray rAnims = rObj["led_mode_anims"].to<JsonArray>();
+      for (uint8_t m = 0; m < 7; m++) {
+        rAnims.add(r.led_mode_anims[m] & 0x7F);
+      }
       rObj["target_lat"] = r.target_lat;
       rObj["target_lng"] = r.target_lng;
       rObj["lat"] = r.lat;
@@ -2043,6 +2082,10 @@ private:
     doc["mission_name"] = _fleet.getMissionName();
     doc["selected_rover_id"] = _fleet.getSelectedRoverId();
     doc["portal_rovers_received"] = _fleet.hasReceivedRoversFromPortal();
+    JsonArray mRLedAnims = doc["rover_led_mode_anims"].to<JsonArray>();
+    for (uint8_t i = 0; i < 7; i++) {
+      mRLedAnims.add(_fleet.getRoverLedModeAnim(i));
+    }
 
     JsonArray roversArr = doc["rovers"].to<JsonArray>();
     for (const auto &r : _fleet.getRovers()) {
@@ -2056,6 +2099,10 @@ private:
       rObj["rounding"] = r.rounding;
       rObj["rounding_side"] = r.rounding;
       rObj["buoy_light_role"] = r.buoy_light_role;
+      JsonArray rAnims = rObj["led_mode_anims"].to<JsonArray>();
+      for (uint8_t m = 0; m < 7; m++) {
+        rAnims.add(r.led_mode_anims[m] & 0x7F);
+      }
       rObj["target_lat"] = r.target_lat;
       rObj["target_lng"] = r.target_lng;
       rObj["lat"] = r.lat;
@@ -2294,6 +2341,10 @@ private:
     for (uint8_t i = 0; i < FleetManager::C6_LED_MODE_COUNT; i++) {
       c6Cols.add(_fleet.getC6ModeColor(i));
     }
+    JsonArray rLedAnims = doc["rover_led_mode_anims"].to<JsonArray>();
+    for (uint8_t i = 0; i < 7; i++) {
+      rLedAnims.add(_fleet.getRoverLedModeAnim(i));
+    }
     String out;
     serializeJson(doc, out);
     _server.send(200, "application/json", out);
@@ -2438,6 +2489,101 @@ private:
       cols.add(_fleet.getC6ModeColor(i));
     }
     res["msg"] = msg;
+    String out;
+    serializeJson(res, out);
+    _server.send(200, "application/json", out);
+  }
+
+  void handleApiRoverLedAnims() {
+    uint8_t selId = _fleet.getSelectedRoverId();
+    if (_server.method() == HTTP_GET && !_server.hasArg("plain")) {
+      uint8_t qRid = _server.hasArg("rover_id")
+                         ? (uint8_t)_server.arg("rover_id").toInt()
+                         : selId;
+      JsonDocument res;
+      res["success"] = true;
+      res["rover_id"] = qRid;
+      JsonArray arr = res["rover_led_mode_anims"].to<JsonArray>();
+      for (uint8_t i = 0; i < 7; i++) {
+        arr.add(_fleet.getRoverLedModeAnim(i, qRid));
+      }
+      String out;
+      serializeJson(res, out);
+      _server.send(200, "application/json", out);
+      return;
+    }
+
+    JsonDocument doc;
+    if (_server.hasArg("plain")) {
+      DeserializationError err = deserializeJson(doc, _server.arg("plain"));
+      if (err) {
+        _server.send(400, "application/json",
+                     "{\"success\":false,\"msg\":\"JSON inválido\"}");
+        return;
+      }
+    }
+
+    bool broadcast = doc["broadcast"] | false;
+    int rawRid = doc["rover_id"] | (broadcast ? 255 : (selId > 0 ? selId : 255));
+    uint8_t targetId = (rawRid <= 0 || rawRid >= 255 || broadcast)
+                           ? 0xFF
+                           : (uint8_t)rawRid;
+    bool sendLora = doc["send_lora"].isNull() ? true : doc["send_lora"].as<bool>();
+
+    uint8_t masks[7];
+    for (uint8_t i = 0; i < 7; i++) {
+      masks[i] = _fleet.getRoverLedModeAnim(i, targetId);
+    }
+
+    String msg = "Configuração de animações náuticas enviada!";
+    if (doc["reset_defaults"] | false) {
+      _fleet.resetRoverLedModeAnimsDefault(targetId);
+      for (uint8_t i = 0; i < 7; i++) {
+        masks[i] = DEFAULT_ROVER_LED_MODE_ANIMS[i];
+      }
+      _fleet.saveMissionConfig();
+      msg = (targetId == 0xFF)
+                ? "Animações náuticas padrão repostas e enviadas via LoRa para TODOS os Rovers!"
+                : ("Animações náuticas padrão repostas e enviadas via LoRa para ROVER-" +
+                   String(targetId) + "!");
+    } else if (doc["led_mode_anims"].is<JsonArray>() ||
+               doc["rover_led_mode_anims"].is<JsonArray>()) {
+      JsonArray arr = doc["led_mode_anims"].is<JsonArray>()
+                          ? doc["led_mode_anims"].as<JsonArray>()
+                          : doc["rover_led_mode_anims"].as<JsonArray>();
+      uint8_t idx = 0;
+      for (JsonVariant v : arr) {
+        if (idx >= 7)
+          break;
+        if (v.is<int>()) {
+          masks[idx] = (uint8_t)(v.as<int>() & 0x7F);
+        }
+        idx++;
+      }
+      _fleet.setRoverLedModeAnims(masks, targetId, true);
+      msg = (targetId == 0xFF)
+                ? "Animações náuticas por modo guardadas e colocadas na fila LoRa para TODOS os Rovers!"
+                : ("Animações náuticas por modo guardadas e colocadas na fila LoRa para ROVER-" +
+                   String(targetId) + "!");
+    }
+
+    if (sendLora) {
+      _fleet.queueRoverLedModeAnims(targetId, masks);
+      if (targetId == 0xFF) {
+        for (const auto &r : _fleet.getRovers()) {
+          _fleet.queueRoverLedModeAnims(r.id, masks);
+        }
+      }
+    }
+
+    JsonDocument res;
+    res["success"] = true;
+    res["rover_id"] = targetId;
+    res["msg"] = msg;
+    JsonArray outArr = res["rover_led_mode_anims"].to<JsonArray>();
+    for (uint8_t i = 0; i < 7; i++) {
+      outArr.add(masks[i]);
+    }
     String out;
     serializeJson(res, out);
     _server.send(200, "application/json", out);

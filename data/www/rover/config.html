@@ -5,14 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Configuração do Rover - WindDragons Rover</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <link rel="stylesheet" href="/style.css?v=2.1.10">
+  <link rel="stylesheet" href="/style.css?v=2.1.16">
   <script>
     (function(){
       var t = localStorage.getItem('wd_theme') || 'dark';
       document.documentElement.setAttribute('data-theme', t);
     })();
   </script>
-  <script src="/app.js?v=2.1.10"></script>
+  <script src="/app.js?v=2.1.16"></script>
 </head>
 <body>
   <header class="navbar">
@@ -32,7 +32,7 @@
     </nav>
     <div class="nav-actions">
       <a href="/config" id="navVersionBadge" class="badge" style="background:rgba(6,182,212,0.12);border:1px solid rgba(6,182,212,0.3);color:var(--primary);text-decoration:none;font-size:0.75rem;display:inline-flex;align-items:center;gap:6px;" title="Ver detalhes de firmware nas Configurações">
-        <i class="fa-solid fa-code-branch"></i> <span id="navLafvinVer">Lafvin: v2.1.10</span> &bull; <span id="navC6Ver">C6: ...</span>
+        <i class="fa-solid fa-code-branch"></i> <span id="navLafvinVer">Lafvin: v2.1.16</span> &bull; <span id="navC6Ver">C6: ...</span>
       </a>
       <span id="navWifiBadge" class="badge badge-sta">
         <i class="fa-solid fa-wifi"></i> A carregar...
@@ -292,6 +292,28 @@
       <button type="button" onclick="saveLedConfig()" class="btn btn-primary" style="background:#9333ea;color:#fff;">
         <i class="fa-solid fa-floppy-disk"></i> Guardar Config LEDs
       </button>
+    </div>
+
+    <!-- Animação e Sinalização Náutica por Modo de Operação (0 a 6) — Seleção Simples ou Combinada -->
+    <div style="margin-top:14px;background:rgba(15,23,42,0.65);border:1px solid #4c1d95;border-radius:10px;padding:14px;" id="roverModeLedAnimsSection">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
+        <div class="stat-label" style="color:#e9d5ff;font-size:0.86rem;">
+          <i class="fa-solid fa-wand-magic-sparkles" style="color:#a855f7;"></i> Animação e Sinalização Náutica por Modo de Operação (0 a 6) — Seleção Simples ou Combinada:
+        </div>
+        <span class="badge" style="background:#3b0764;color:#e9d5ff;border:1px solid #7e22ce;">MULTI-SELEÇÃO POR MODO</span>
+      </div>
+      <p style="color:var(--muted);font-size:0.8rem;margin:0 0 12px 0;">
+        Para cada modo de operação do Rover, selecione <strong>uma animação</strong>, <strong>OFF</strong>, ou <strong>combine várias animações</strong> (ex.: <em>Luzes NAV + Strobe</em> sobrepõe o duplo-flash branco sobre Bombordo/Estibordo; múltiplas animações base alternam ciclicamente). A Estação Base também pode configurar estes modos remotamente via LoRa.
+      </p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:10px;" id="ledModeAnimsGrid"></div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;">
+        <button type="button" class="btn btn-primary" style="flex:1;min-width:210px;background:#7e22ce;color:#fff;" onclick="saveLedModeAnims()">
+          <i class="fa-solid fa-floppy-disk"></i> Guardar Animações por Modo
+        </button>
+        <button type="button" class="btn btn-secondary" onclick="resetLedModeAnims()">
+          <i class="fa-solid fa-rotate-left"></i> Repor Padrão Náutico
+        </button>
+      </div>
     </div>
   </div>
 
@@ -1032,7 +1054,7 @@ function escapeConsoleHtml(s) {
       <div style="color:var(--muted);font-size:0.75rem;text-transform:uppercase;font-weight:600;margin-bottom:4px;">
         <i class="fa-solid fa-microchip" style="color:var(--primary);margin-right:6px;"></i>Master Lafvin (LCD+SD+WiFi)
       </div>
-      <div id="fwLafvinVer" style="font-size:1.3rem;font-weight:700;color:var(--green);">v2.1.10</div>
+      <div id="fwLafvinVer" style="font-size:1.3rem;font-weight:700;color:var(--green);">v2.1.16</div>
       <div style="color:var(--muted);font-size:0.7rem;margin-top:2px;">ST7789 Display & Servidor Web</div>
     </div>
     <div style="background:rgba(15,23,42,0.7);padding:14px;border-radius:8px;border:1px solid var(--card-border);">
@@ -1491,6 +1513,128 @@ function resetC6LedDefaults() {
   .catch(() => {});
 }
 
+// ----------------- Animação e Sinalização Náutica por Modo (0..6) com Suporte a Combinações -----------------
+const NAUTICAL_ANIM_DEFS = [
+  { bit: 0x01, key: 'STROBE',  name: 'Strobe (2x Flash)', color: '#eab308' },
+  { bit: 0x02, key: 'NAV',     name: 'NAV BB/EB',         color: '#10b981' },
+  { bit: 0x04, key: 'BEACON',  name: 'Farol Âmbar',       color: '#0284c7' },
+  { bit: 0x08, key: 'RAINBOW', name: 'Arco-Íris',         color: '#a855f7' },
+  { bit: 0x10, key: 'CHASE',   name: 'Scanner Chase',     color: '#f97316' },
+  { bit: 0x20, key: 'POLICE',  name: 'Emergência Pol.',   color: '#ef4444' },
+  { bit: 0x40, key: 'BUOY',    name: 'Boia Regata',       color: '#ec4899' }
+];
+const ROVER_MODE_META = [
+  { id: 0, title: '0 • IDLE (Standby)',           desc: 'Aguardando missão / motores parados',                 defMask: 0x04 },
+  { id: 1, title: '1 • MANUAL (Comando)',         desc: 'Controlo manual ativo (Web / LoRa / Joystick)',      defMask: 0x02 },
+  { id: 2, title: '2 • HOLD STATION (Manter)',    desc: 'Manutenção autónoma de posição GPS',                 defMask: 0x40 },
+  { id: 3, title: '3 • ANCHORED (Ancorado)',      desc: 'Âncora lançada no fundo',                            defMask: 0x04 },
+  { id: 4, title: '4 • GOTO TARGET (Navegar)',    desc: 'Navegação autónoma para Waypoint',                   defMask: 0x02 },
+  { id: 5, title: '5 • RTL (Regresso Home)',      desc: 'Retorno automático ao ponto de partida',             defMask: 0x03 },
+  { id: 6, title: '6 • FAILSAFE (Emergência)',    desc: 'Perda de sinal / paragem de segurança',              defMask: 0x21 }
+];
+let currentLedModeAnims = ROVER_MODE_META.map(m => m.defMask);
+
+function describeAnimMask(mask) {
+  if (!mask || mask === 0) return 'OFF (Desligado)';
+  const parts = [];
+  NAUTICAL_ANIM_DEFS.forEach(a => {
+    if ((mask & a.bit) !== 0) parts.push(a.name);
+  });
+  return parts.length ? parts.join(' + ') : 'OFF';
+}
+
+function renderLedModeAnimsUI() {
+  const grid = document.getElementById('ledModeAnimsGrid');
+  if (!grid) return;
+  grid.innerHTML = ROVER_MODE_META.map(m => {
+    const mask = currentLedModeAnims[m.id] || 0;
+    const isOff = (mask === 0);
+    const chipsHtml = [
+      `<button type="button" onclick="toggleLedModeAnimBit(${m.id}, 0)" style="padding:4px 9px;border-radius:999px;font-size:0.72rem;font-weight:700;cursor:pointer;border:1px solid ${isOff ? '#ef4444' : '#334155'};background:${isOff ? 'rgba(239,68,68,0.22)' : '#0f172a'};color:${isOff ? '#fca5a5' : '#94a3b8'};">OFF</button>`
+    ].concat(NAUTICAL_ANIM_DEFS.map(a => {
+      const active = (mask & a.bit) !== 0;
+      return `<button type="button" onclick="toggleLedModeAnimBit(${m.id}, ${a.bit})" style="padding:4px 9px;border-radius:999px;font-size:0.72rem;font-weight:700;cursor:pointer;border:1px solid ${active ? a.color : '#334155'};background:${active ? a.color : '#0f172a'};color:${active ? '#ffffff' : '#94a3b8'};box-shadow:${active ? '0 0 8px ' + a.color + '66' : 'none'};">${a.name}</button>`;
+    })).join('');
+    return `
+      <div id="ledModeAnimCard_${m.id}" style="background:rgba(2,6,23,0.65);border:1px solid #334155;border-radius:8px;padding:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:4px;">
+          <div style="font-weight:700;font-size:0.82rem;color:var(--text);">${m.title}</div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span id="ledModeAnimSummary_${m.id}" class="badge" style="background:#1e1b4b;color:#c4b5fd;font-size:0.68rem;">${describeAnimMask(mask)}</span>
+            <button type="button" class="btn btn-secondary" style="padding:4px 8px;font-size:0.72rem;" onclick="testLedModeMask(${m.id})" title="Testar esta combinação na fita WS2812B"><i class="fa-solid fa-play"></i> Testar</button>
+          </div>
+        </div>
+        <div style="font-size:0.71rem;color:var(--muted);margin-bottom:8px;">${m.desc}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;" id="ledModeAnimChips_${m.id}">${chipsHtml}</div>
+      </div>`;
+  }).join('');
+}
+
+function toggleLedModeAnimBit(modeIdx, bit) {
+  if (bit === 0) {
+    currentLedModeAnims[modeIdx] = 0;
+  } else {
+    currentLedModeAnims[modeIdx] = (currentLedModeAnims[modeIdx] || 0) ^ bit;
+  }
+  renderLedModeAnimsUI();
+}
+
+function testLedModeMask(modeIdx) {
+  const mask = currentLedModeAnims[modeIdx] || 0;
+  fetch('/api/control/leds', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ test_mask: mask })
+  })
+  .then(r => r.json())
+  .then(res => {
+    const msg = res.msg || ('A testar combinação (' + describeAnimMask(mask) + ') na fita WS2812B!');
+    if (typeof showToast === 'function') showToast(msg);
+    showStatus(msg);
+  })
+  .catch(() => {});
+}
+
+function saveLedModeAnims() {
+  fetch('/api/control/leds', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ led_mode_anims: currentLedModeAnims, save: true })
+  })
+  .then(r => r.json())
+  .then(res => {
+    if (Array.isArray(res.led_mode_anims)) {
+      currentLedModeAnims = res.led_mode_anims.map(v => parseInt(v, 10) & 0x7F);
+      renderLedModeAnimsUI();
+    }
+    const msg = res.msg || 'Animações náuticas por modo guardadas no Rover!';
+    if (typeof showToast === 'function') showToast(msg);
+    showStatus(msg);
+  })
+  .catch(() => {});
+}
+
+function resetLedModeAnims() {
+  if (!confirm('Repor o mapeamento náutico padrão de animações para os 7 modos de operação?')) return;
+  fetch('/api/control/leds', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reset_mode_anims: true })
+  })
+  .then(r => r.json())
+  .then(res => {
+    if (Array.isArray(res.led_mode_anims)) {
+      currentLedModeAnims = res.led_mode_anims.map(v => parseInt(v, 10) & 0x7F);
+      renderLedModeAnimsUI();
+    }
+    const msg = res.msg || 'Mapeamento náutico padrão reposto!';
+    if (typeof showToast === 'function') showToast(msg);
+    showStatus(msg);
+  })
+  .catch(() => {});
+}
+setTimeout(renderLedModeAnimsUI, 50);
+
 // ----------------- Depuração e Calibração Bússola GY-BNO055 -----------------
 function degToCardinal(d) {
   const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
@@ -1730,6 +1874,12 @@ function loadConfig() {
       if (Array.isArray(data.c6_mode_colors)) {
         data.c6_mode_colors.forEach((c, idx) => updateC6ModeRowUI(idx, c));
       }
+      if (Array.isArray(data.led_mode_anims) && data.led_mode_anims.length === 7) {
+        for (let i = 0; i < 7; i++) {
+          currentLedModeAnims[i] = parseInt(data.led_mode_anims[i], 10) & 0x7F;
+        }
+        renderLedModeAnimsUI();
+      }
       if (data.motor_status !== undefined) {
         updateC6ActiveModeUI(data.motor_status, data.motor_status_str || 'IDLE');
       }
@@ -1775,7 +1925,8 @@ function saveAllConfig(e) {
       led_count: ledCnt,
       led_brightness: ledBrt,
       c6_led_brightness: c6LedBrt,
-      c6_mode_colors: c6Colors
+      c6_mode_colors: c6Colors,
+      led_mode_anims: currentLedModeAnims
     })
   })
   .then(r => r.json())
@@ -2156,11 +2307,11 @@ document.addEventListener('DOMContentLoaded', loadConfig);
   <footer style="text-align:center;color:var(--muted);font-size:0.75rem;margin-top:24px;display:flex;justify-content:center;align-items:center;gap:12px;flex-wrap:wrap;padding:0 16px;">
     <span>WindDragons Autonomous Surface Rover / Buoy &copy; 2026</span>
     <span>&bull;</span>
-    <span>Master Lafvin: <b style="color:var(--green);" id="footerLafvinVer">v2.1.10</b></span>
+    <span>Master Lafvin: <b style="color:var(--green);" id="footerLafvinVer">v2.1.16</b></span>
     <span>&bull;</span>
     <span>Coprocessador C6: <b style="color:var(--yellow);" id="footerC6Ver">--</b></span>
     <span>&bull;</span>
-    <span>Pacote Bundle: <b style="color:var(--primary);" id="footerBundleVer">v2.1.10</b></span>
+    <span>Pacote Bundle: <b style="color:var(--primary);" id="footerBundleVer">v2.1.16</b></span>
   </footer>
 </body>
 </html>

@@ -39,20 +39,26 @@ public:
         lastWinchUpdate(0), isRackLifted(false),
         rackAngleEngaged(RACK_POS_ENGAGED),
         rackAngleReleased(RACK_POS_RELEASED),
-        rackInverted(RACK_SERVO_INVERTED_DEFAULT),
+        rackInverted(RACK_SERVO_INVERTED_DEFAULT), motorInverted(false),
         currentRackAngle(RACK_POS_ENGAGED), anchorDrumDiamMm(30.0f),
         anchorPulsesPerRev(1), anchorHallPulses(0), anchorRevolutions(0.0f),
-        _lastProcessedHallPulseCount(0), alarmActive(false), alarmEndTimeMs(0),
+        _lastProcessedHallPulseCount(0), _anchorDropStartMs(0),
+        _anchorDropLastPulseMs(0), _anchorDropLastIntervalMs(0),
+        _anchorDropStartDepthCm(0.0f), _anchorDropHadPulses(false),
+        alarmActive(false), alarmEndTimeMs(0),
         lastAlarmToggleMs(0), alarmStrobeState(false), pwmAvailable(false),
         _isInitialized(false), _throttleApplied(false), _rudderApplied(false),
-  _rackMoveTimeMs(0), _rackRelaxed(false), _ledMode("OFF"), _ledR(255),
-      _ledG(255), _ledB(255), _ledBrightness(100), _ledCount(NUM_STROBE_LEDS) {}
+        _rackApplied(false), _lastRackPulseUs(0), _rackMoveTimeMs(0),
+        _rackRelaxed(false), _ledMode("OFF"), _ledR(255), _ledG(255),
+        _ledB(255), _ledBrightness(100), _ledCount(NUM_STROBE_LEDS) {}
 
   int rackAngleToPulseUs(uint8_t angle) const {
     if (angle > 180)
       angle = 180;
     uint8_t effectiveAngle = rackInverted ? (180 - angle) : angle;
-    return map(effectiveAngle, 0, 180, PWM_PULSE_MIN, PWM_PULSE_MAX);
+    int pulseUs =
+        map(effectiveAngle, 0, 180, SERVO_SAFE_MIN_US, SERVO_SAFE_MAX_US);
+    return constrain(pulseUs, SERVO_SAFE_MIN_US, SERVO_SAFE_MAX_US);
   }
 
   void begin() {
@@ -76,8 +82,12 @@ public:
 
 #if defined(PIN_C6_SERVO_RACK) && (PIN_C6_SERVO_RACK >= 0)
     ledcAttach(PIN_C6_SERVO_RACK, ACT_PWM_FREQ, ACT_PWM_RES);
-    ledcWrite(PIN_C6_SERVO_RACK,
-              actUsToDuty(rackAngleToPulseUs(rackAngleEngaged)));
+    {
+      int initRackUs = rackAngleToPulseUs(rackAngleEngaged);
+      ledcWrite(PIN_C6_SERVO_RACK, actUsToDuty(initRackUs));
+      _lastRackPulseUs = initRackUs;
+      _rackApplied = true;
+    }
 #endif
 
 #if defined(PIN_C6_SERVO_RUD) && (PIN_C6_SERVO_RUD >= 0)
@@ -87,7 +97,7 @@ public:
 
 #if defined(PIN_C6_MOTOR_ESC) && (PIN_C6_MOTOR_ESC >= 0)
     ledcAttach(PIN_C6_MOTOR_ESC, ACT_PWM_FREQ, ACT_PWM_RES);
-    ledcWrite(PIN_C6_MOTOR_ESC, actUsToDuty(PWM_PULSE_MIN));
+    ledcWrite(PIN_C6_MOTOR_ESC, actUsToDuty(PWM_PULSE_MID));
 #endif
 
     // 2. Inicializa o sensor de fim de curso do içamento da âncora (se
@@ -135,11 +145,32 @@ public:
                   PCA_CH_RACK, PIN_C6_SERVO_RACK, rackAngleReleased,
                   rackInverted ? 1 : 0, rackAngleToPulseUs(rackAngleReleased));
   }
-  void releaseRack() { liftRack(); }
+
+  // Comando "Libertar": apenas liberta a cremalheira sem monitorizar o sensor
+  // para auto-trancar
+  void releaseRack() {
+    _anchorDropHadPulses = false;
+    if (anchorState == ANCHOR_DEPLOYING) {
+      anchorState =
+          (currentDepthCm > 10.0f) ? ANCHOR_DEPLOYED : ANCHOR_RETRACTED;
+    }
+    liftRack();
+    if (_isInitialized) {
+      Serial.printf("[ACT-ANCORA] LIBERTAR (SEM SENSOR) -> Cremalheira aberta "
+                    "em modo livre continuo.\n");
+      Serial0.printf("[ACT-ANCORA] LIBERTAR (SEM SENSOR) -> Cremalheira aberta "
+                     "em modo livre continuo.\n");
+    }
+  }
 
   // Baixa a cremalheira travando/engatando o carretel para travar a
   // profundidade ou recolher
   void engageRack() {
+    _anchorDropHadPulses = false;
+    if (anchorState == ANCHOR_DEPLOYING) {
+      anchorState =
+          (currentDepthCm > 10.0f) ? ANCHOR_DEPLOYED : ANCHOR_RETRACTED;
+    }
     setRackAngle(rackAngleEngaged);
     isRackLifted = false;
     Serial.printf("[ACT-SERVO] ENGAGE RACK (TRAVAR / ENCOSTO) -> PCA CH %d / "
@@ -155,13 +186,20 @@ public:
     currentRackAngle = angle;
     _rackMoveTimeMs = millis();
     _rackRelaxed = false;
+    // Se estivesse em simulação de queda por gravidade sem comando explícito de âncora,
+    // cancela para evitar que update() chame engageRack() 3.75s depois durante calibração
+    if (anchorState == ANCHOR_DEPLOYING && angle != rackAngleReleased) {
+      anchorState = ANCHOR_RETRACTED;
+    }
     int pulseUs = rackAngleToPulseUs(angle);
     if (pwmAvailable) {
       pwm.writeMicroseconds(PCA_CH_RACK, pulseUs);
     }
 #if defined(PIN_C6_SERVO_RACK) && (PIN_C6_SERVO_RACK >= 0)
-    if (_isInitialized) {
+    if (_isInitialized && (!_rackApplied || pulseUs != _lastRackPulseUs)) {
       ledcWrite(PIN_C6_SERVO_RACK, actUsToDuty(pulseUs));
+      _lastRackPulseUs = pulseUs;
+      _rackApplied = true;
     }
 #endif
     isRackLifted = (abs((int)angle - (int)rackAngleReleased) <
@@ -186,45 +224,65 @@ public:
       engagedAngle = 180;
     if (releasedAngle > 180)
       releasedAngle = 180;
+    bool prevInverted = rackInverted;
     rackAngleEngaged = engagedAngle;
     rackAngleReleased = releasedAngle;
     rackInverted = inverted;
-    if (applyNow && _isInitialized) {
-      if (isRackLifted) {
-        liftRack();
-      } else {
-        engageRack();
-      }
-    } else if (!_isInitialized) {
+    if (!_isInitialized) {
       currentRackAngle = isRackLifted ? rackAngleReleased : rackAngleEngaged;
+    } else if (applyNow && prevInverted != rackInverted) {
+      // Apenas recalcula o pulso do ângulo atual se a inversão mudou,
+      // sem nunca saltar bruscamente para o batente durante a calibração!
+      setRackAngle(currentRackAngle);
     }
   }
 
   uint8_t getRackAngleEngaged() const { return rackAngleEngaged; }
   uint8_t getRackAngleReleased() const { return rackAngleReleased; }
   bool isRackInverted() const { return rackInverted; }
+  bool isMotorInverted() const { return motorInverted; }
+  void setMotorInverted(bool inverted) {
+    bool prev = motorInverted;
+    motorInverted = inverted;
+    if (_isInitialized && _throttleApplied && prev != motorInverted &&
+        currentThrottle != 0) {
+      _throttleApplied = false;
+      setThrottle(currentThrottle);
+    }
+  }
   uint8_t getCurrentRackAngle() const { return currentRackAngle; }
   int getCurrentRackPulseUs() const {
     return rackAngleToPulseUs(currentRackAngle);
   }
 
-  // Desativa o pulso do servo para relaxar o motor e evitar aquecimento em
-  // stall
+  // Alívio mecânico ativo (sem cortar a portadora PWM de 50 Hz para evitar
+  // ruído na pista GPIO 21 ou bloqueio de servos digitais)
   void relaxRack() {
     _rackRelaxed = true;
+    int midAngle = ((int)rackAngleEngaged + (int)rackAngleReleased) / 2;
+    int reliefAngle = (int)currentRackAngle;
+    if (abs(reliefAngle - midAngle) > 3) {
+      reliefAngle += (midAngle > reliefAngle) ? 2 : -2;
+    }
+    reliefAngle = constrain(reliefAngle, 0, 180);
+    int pulseUs = rackAngleToPulseUs((uint8_t)reliefAngle);
     if (pwmAvailable) {
-      pwm.setPin(PCA_CH_RACK, 0, false); // 0V flat
+      pwm.writeMicroseconds(PCA_CH_RACK, pulseUs);
     }
 #if defined(PIN_C6_SERVO_RACK) && (PIN_C6_SERVO_RACK >= 0)
-    if (_isInitialized) {
-      ledcWrite(PIN_C6_SERVO_RACK, 0);
+    if (_isInitialized && (!_rackApplied || pulseUs != _lastRackPulseUs)) {
+      ledcWrite(PIN_C6_SERVO_RACK, actUsToDuty(pulseUs));
+      _lastRackPulseUs = pulseUs;
+      _rackApplied = true;
     }
 #endif
     if (_isInitialized) {
       Serial.printf(
-          "[ACT-SERVO] RELAX -> pulso PWM desligado (motor solto/frio)\n");
+          "[ACT-SERVO] RELAX ATIVO -> recuo suave para %d° (%d us, PWM 50Hz mantido)\n",
+          reliefAngle, pulseUs);
       Serial0.printf(
-          "[ACT-SERVO] RELAX -> pulso PWM desligado (motor solto/frio)\n");
+          "[ACT-SERVO] RELAX ATIVO -> recuo suave para %d° (%d us, PWM 50Hz mantido)\n",
+          reliefAngle, pulseUs);
     }
   }
 
@@ -292,7 +350,9 @@ public:
     }
     currentThrottle = clamped;
     _throttleApplied = true;
-    int pulseUs = map(currentThrottle, -100, 100, PWM_PULSE_MIN, PWM_PULSE_MAX);
+    int effThrottle =
+        motorInverted ? -(int)currentThrottle : (int)currentThrottle;
+    int pulseUs = map(effThrottle, -100, 100, PWM_PULSE_MIN, PWM_PULSE_MAX);
     if (pwmAvailable) {
       pwm.writeMicroseconds(PCA_CH_MOTOR, pulseUs);
     }
@@ -302,10 +362,14 @@ public:
     }
 #endif
     if (_isInitialized) {
-      Serial.printf("[ACT-MOTOR] ESC Throttle: %d%% (%d us no GPIO %d)\n",
-                    currentThrottle, pulseUs, PIN_C6_MOTOR_ESC);
-      Serial0.printf("[ACT-MOTOR] ESC Throttle: %d%% (%d us no GPIO %d)\n",
-                     currentThrottle, pulseUs, PIN_C6_MOTOR_ESC);
+      Serial.printf("[ACT-MOTOR] ESC Throttle: %d%% (efetivo=%d%%, inv=%d, %d "
+                    "us no GPIO %d)\n",
+                    currentThrottle, effThrottle, motorInverted ? 1 : 0,
+                    pulseUs, PIN_C6_MOTOR_ESC);
+      Serial0.printf("[ACT-MOTOR] ESC Throttle: %d%% (efetivo=%d%%, inv=%d, %d "
+                     "us no GPIO %d)\n",
+                     currentThrottle, effThrottle, motorInverted ? 1 : 0,
+                     pulseUs, PIN_C6_MOTOR_ESC);
     }
   }
 
@@ -317,7 +381,9 @@ public:
     }
     currentRudder = clamped;
     _rudderApplied = true;
-    int pulseUs = map(currentRudder, -100, 100, PWM_PULSE_MIN, PWM_PULSE_MAX);
+    int pulseUs =
+        map(currentRudder, -100, 100, SERVO_SAFE_MIN_US, SERVO_SAFE_MAX_US);
+    pulseUs = constrain(pulseUs, SERVO_SAFE_MIN_US, SERVO_SAFE_MAX_US);
     if (pwmAvailable) {
       pwm.writeMicroseconds(PCA_CH_RUDDER, pulseUs);
     }
@@ -338,35 +404,35 @@ public:
 
   void centerRudder() { setRudder(0); }
 
-  // Corta por completo o sinal PWM no canal do guincho (0V flat / sem pulsos)
+  // Mantém o guincho em ponto neutro ativo (1500us) em vez de cortar o sinal PWM a 0V
   void releaseWinch() {
-    currentWinchPulseUs = 0;
+    currentWinchPulseUs = winchNeutralUs;
     if (pwmAvailable) {
-      pwm.setPin(PCA_CH_WINCH, 0, false);
+      pwm.writeMicroseconds(PCA_CH_WINCH, winchNeutralUs);
     }
 #if defined(PIN_C6_WINCH) && (PIN_C6_WINCH >= 0)
     if (_isInitialized) {
-      ledcWrite(PIN_C6_WINCH, 0); // 0V plano, sinal totalmente cortado
+      ledcWrite(PIN_C6_WINCH, actUsToDuty(winchNeutralUs));
     }
 #endif
 #if defined(PIN_C6_WINCH_ALT) && (PIN_C6_WINCH_ALT >= 0)
     if (_isInitialized) {
-      ledcWrite(PIN_C6_WINCH_ALT, 0);
+      ledcWrite(PIN_C6_WINCH_ALT, actUsToDuty(winchNeutralUs));
     }
     if (_isInitialized) {
       Serial.printf(
-          "[ACT-GUINCHO] SINAL TOTALMENTE CORTADO (0V nos GPIOs %d e %d)\n",
-          PIN_C6_WINCH, PIN_C6_WINCH_ALT);
+          "[ACT-GUINCHO] NEUTRO SEGURO (%d us nos GPIOs %d e %d)\n",
+          winchNeutralUs, PIN_C6_WINCH, PIN_C6_WINCH_ALT);
       Serial0.printf(
-          "[ACT-GUINCHO] SINAL TOTALMENTE CORTADO (0V nos GPIOs %d e %d)\n",
-          PIN_C6_WINCH, PIN_C6_WINCH_ALT);
+          "[ACT-GUINCHO] NEUTRO SEGURO (%d us nos GPIOs %d e %d)\n",
+          winchNeutralUs, PIN_C6_WINCH, PIN_C6_WINCH_ALT);
     }
 #else
     if (_isInitialized) {
-      Serial.printf("[ACT-GUINCHO] SINAL TOTALMENTE CORTADO (0V no GPIO %d)\n",
-                    PIN_C6_WINCH);
-      Serial0.printf("[ACT-GUINCHO] SINAL TOTALMENTE CORTADO (0V no GPIO %d)\n",
-                     PIN_C6_WINCH);
+      Serial.printf("[ACT-GUINCHO] NEUTRO SEGURO (%d us no GPIO %d)\n",
+                    winchNeutralUs, PIN_C6_WINCH);
+      Serial0.printf("[ACT-GUINCHO] NEUTRO SEGURO (%d us no GPIO %d)\n",
+                     winchNeutralUs, PIN_C6_WINCH);
     }
 #endif
   }
@@ -455,19 +521,30 @@ public:
     }
   }
 
-  // Lança a âncora levantando a cremalheira para queda por gravidade
-  void commandDropAnchor(uint16_t depthCm) {
-    targetDepthCm = (depthCm > 0) ? depthCm : 300; // default 3 meters
-    currentDepthCm = 0; // Reinicia para permitir descida completa
-    anchorState = ANCHOR_DEPLOYING;
+  // Lança a âncora levantando a cremalheira e monitorizando o sensor Hall do tambor:
+  // assim que o tambor parar de rodar (ou atingir depthCm se > 0), tranca logo a cremalheira.
+  void commandDropAnchor(uint16_t depthCm = 0) {
+    targetDepthCm = depthCm; // 0 = livre até parar no fundo (detetado pelo sensor Hall)
+    if (isAnchorAtTopLimit()) {
+      zeroAnchorCounter();
+    }
+    uint32_t now = millis();
+    _anchorDropStartMs = now;
+    _anchorDropLastPulseMs = now;
+    _anchorDropLastIntervalMs = 0;
+    _anchorDropStartDepthCm = currentDepthCm;
+    _anchorDropHadPulses = false;
+    _lastProcessedHallPulseCount = _anchorHallPulseCount;
     if (pwmAvailable) {
       pwm.writeMicroseconds(PCA_CH_WINCH, PWM_PULSE_MID);
     }
     liftRack(); // Levanta a cremalheira para soltar o carretel
-    lastWinchUpdate = millis();
-    Serial.printf("[ACT-ANCORA] DROP ANCHOR -> Alvo: %u cm | Cremalheira "
-                  "ABERTA no PCA CH %d\n",
-                  targetDepthCm, PCA_CH_RACK);
+    anchorState = ANCHOR_DEPLOYING;
+    lastWinchUpdate = now;
+    Serial.printf("[ACT-ANCORA] DROP ANCHOR (ATENTO AO SENSOR) -> Alvo: %u cm (0=Auto-Stop Sensor) | Cremalheira ABERTA no GPIO %d\n",
+                  targetDepthCm, PIN_C6_SERVO_RACK);
+    Serial0.printf("[ACT-ANCORA] DROP ANCHOR (ATENTO AO SENSOR) -> Alvo: %u cm (0=Auto-Stop Sensor) | Cremalheira ABERTA no GPIO %d\n",
+                   targetDepthCm, PIN_C6_SERVO_RACK);
   }
 
   // Recolhe a âncora: engata a cremalheira e enrola o cabo
@@ -532,23 +609,66 @@ public:
           (float)anchorHallPulses /
           (float)(anchorPulsesPerRev > 0 ? anchorPulsesPerRev : 1);
 
-      if (anchorState == ANCHOR_RETRACTED && currentDepthCm > 5.0f) {
+      if (anchorState == ANCHOR_DEPLOYING) {
+        if (_anchorDropHadPulses) {
+          uint32_t interval = now - _anchorDropLastPulseMs;
+          if (diff > 1) {
+            interval /= (uint32_t)diff;
+          }
+          _anchorDropLastIntervalMs = interval;
+        }
+        _anchorDropHadPulses = true;
+        _anchorDropLastPulseMs = now;
+      } else if (anchorState == ANCHOR_RETRACTED && currentDepthCm > 5.0f) {
         anchorState = ANCHOR_DEPLOYED;
       }
     }
 
-    // Queda por gravidade (cremalheira levantada)
+    // Queda por gravidade com monitorização ativa do sensor Hall (Lançar Âncora)
     if (anchorState == ANCHOR_DEPLOYING) {
-      if (_anchorHallPulseCount == 0 && targetDepthCm > 0) {
-        currentDepthCm += (gravityDropSpeedCmPerSec * dt);
-      }
-      if (currentDepthCm >= targetDepthCm) {
-        currentDepthCm = targetDepthCm;
-        Serial.printf("[ACT-ANCORA] DROP CONCLUIDO -> Profundidade %u cm "
-                      "atingida. A travar cremalheira.\n",
-                      targetDepthCm);
-        engageRack(); // Baixa e engata a cremalheira para travar na
-                      // profundidade atingida
+      bool reachedTargetDepth =
+          (targetDepthCm > 0) &&
+          ((currentDepthCm - _anchorDropStartDepthCm) >= (float)targetDepthCm);
+
+      // Deteção de paragem do tambor pelo sensor Hall:
+      // Assim que o tambor tiver rodado (_anchorDropHadPulses) e os pulsos pararem,
+      // tranca imediatamente a cremalheira.
+      uint32_t stopTimeoutMs =
+          (_anchorDropLastIntervalMs > 0)
+              ? constrain(_anchorDropLastIntervalMs * 2UL + 120UL, 300UL, 700UL)
+              : 500UL;
+      bool sensorStoppedAfterSpin =
+          _anchorDropHadPulses &&
+          ((now - _anchorDropLastPulseMs) >= stopTimeoutMs);
+
+      // Timeout de segurança caso o tambor nunca chegue a rodar (ex: âncora já no fundo ou presa)
+      bool noSpinTimeout =
+          !_anchorDropHadPulses && ((now - _anchorDropStartMs) >= 3500UL);
+
+      if (sensorStoppedAfterSpin || reachedTargetDepth || noSpinTimeout) {
+        if (sensorStoppedAfterSpin) {
+          Serial.printf(
+              "[ACT-ANCORA] ★ SENSOR PAROU -> Tambor imobilizado (%ld pulsos, "
+              "%.1f cm). A TRANCAR cremalheira imediatamente!\n",
+              anchorHallPulses, currentDepthCm);
+          Serial0.printf(
+              "[ACT-ANCORA] ★ SENSOR PAROU -> Tambor imobilizado (%ld pulsos, "
+              "%.1f cm). A TRANCAR cremalheira imediatamente!\n",
+              anchorHallPulses, currentDepthCm);
+        } else if (reachedTargetDepth) {
+          Serial.printf("[ACT-ANCORA] DROP CONCLUIDO -> Profundidade alvo %u cm "
+                        "atingida. A trancar cremalheira.\n",
+                        targetDepthCm);
+          Serial0.printf("[ACT-ANCORA] DROP CONCLUIDO -> Profundidade alvo %u cm "
+                         "atingida. A trancar cremalheira.\n",
+                         targetDepthCm);
+        } else {
+          Serial.printf("[ACT-ANCORA] DROP TIMEOUT SEM ROTACAO -> Nenhum pulso "
+                        "no sensor Hall em 3.5s. A trancar cremalheira.\n");
+          Serial0.printf("[ACT-ANCORA] DROP TIMEOUT SEM ROTACAO -> Nenhum pulso "
+                         "no sensor Hall em 3.5s. A trancar cremalheira.\n");
+        }
+        engageRack(); // Baixa e tranca a cremalheira imediatamente
         stopWinch();
         anchorState = ANCHOR_DEPLOYED;
       }
@@ -596,13 +716,6 @@ public:
         alarmStrobeState = !alarmStrobeState;
       }
     }
-
-    // Auto-relaxar o servo da cremalheira 800ms após atingir a posição alvo
-    // para evitar corrente de stall na linha +5V_SERVO
-    if (_isInitialized && !_rackRelaxed && _rackMoveTimeMs > 0 &&
-        (now - _rackMoveTimeMs >= 800)) {
-      relaxRack();
-    }
   }
 
   void zeroAnchorCounter() {
@@ -632,7 +745,7 @@ public:
   uint8_t getAnchorStatus() const { return anchorState; }
 
   uint16_t getAnchorDepthCm() const {
-    return static_cast<uint16_t>(currentDepthCm);
+    return static_cast<uint16_t>(roundf(currentDepthCm));
   }
 
   int8_t getThrottle() const { return currentThrottle; }
@@ -640,18 +753,28 @@ public:
   bool isDriverReady() const { return pwmAvailable; }
 
   void setValues(int8_t thr, int8_t rud, int winchUs, bool rackLifted,
-                 uint8_t anchorSt, uint16_t depth) {
+                 uint8_t anchorSt, uint16_t depth, long hallPulses = -1) {
     currentThrottle = thr;
     currentRudder = rud;
     currentWinchPulseUs = winchUs;
-    isRackLifted = rackLifted;
-    currentRackAngle = rackLifted ? rackAngleReleased : rackAngleEngaged;
+    if (isRackLifted != rackLifted) {
+      isRackLifted = rackLifted;
+      currentRackAngle = rackLifted ? rackAngleReleased : rackAngleEngaged;
+    }
     anchorState = anchorSt;
     currentDepthCm = depth;
     float cmPerPulse = (3.14159265f * (anchorDrumDiamMm / 10.0f)) /
                        (float)(anchorPulsesPerRev > 0 ? anchorPulsesPerRev : 1);
-    if (cmPerPulse > 0.001f) {
-      anchorHallPulses = (long)(currentDepthCm / cmPerPulse);
+    if (hallPulses >= 0) {
+      anchorHallPulses = hallPulses;
+      if (hallPulses > 0 && cmPerPulse > 0.001f) {
+        currentDepthCm = hallPulses * cmPerPulse;
+      }
+      anchorRevolutions =
+          (float)anchorHallPulses /
+          (float)(anchorPulsesPerRev > 0 ? anchorPulsesPerRev : 1);
+    } else if (cmPerPulse > 0.001f) {
+      anchorHallPulses = (long)roundf(currentDepthCm / cmPerPulse);
       anchorRevolutions =
           (float)anchorHallPulses /
           (float)(anchorPulsesPerRev > 0 ? anchorPulsesPerRev : 1);
@@ -676,6 +799,7 @@ private:
   uint8_t rackAngleEngaged;
   uint8_t rackAngleReleased;
   bool rackInverted;
+  bool motorInverted;
   uint8_t currentRackAngle;
 
   float anchorDrumDiamMm;
@@ -683,6 +807,11 @@ private:
   long anchorHallPulses;
   float anchorRevolutions;
   long _lastProcessedHallPulseCount;
+  uint32_t _anchorDropStartMs;
+  uint32_t _anchorDropLastPulseMs;
+  uint32_t _anchorDropLastIntervalMs;
+  float _anchorDropStartDepthCm;
+  bool _anchorDropHadPulses;
 
   bool alarmActive;
   uint32_t alarmEndTimeMs;
@@ -692,6 +821,8 @@ private:
   bool _isInitialized;
   bool _throttleApplied;
   bool _rudderApplied;
+  bool _rackApplied;
+  int _lastRackPulseUs;
   uint32_t _rackMoveTimeMs;
   bool _rackRelaxed;
 

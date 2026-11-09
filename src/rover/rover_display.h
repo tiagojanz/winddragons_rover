@@ -63,18 +63,71 @@ enum RoverScreenPage : uint8_t {
       14, // Configurações -> Bateria -> Opções (3S, 4S, 6S)
   ROVER_PAGE_CONFIG_BATT_MAH =
       15, // Configurações -> Bateria -> mAh (Teclado Numérico)
-  ROVER_PAGE_CONFIG_JOY =
-      16, // Configurações -> JoyStick (X: Inverter, Y: Inverter, Calibrar, Testar)
+  ROVER_PAGE_CONFIG_JOY = 16, // Configurações -> JoyStick (X: Inverter, Y:
+                              // Inverter, Calibrar, Testar)
   ROVER_PAGE_CONFIG_JOY_TEST =
       17, // Configurações -> JoyStick -> Testar (Mira 2D, ADC & Botões)
   ROVER_PAGE_CONFIG_JOY_CAL =
       18, // Configurações -> JoyStick -> Calibrar (Wizard 5 passos)
-  ROVER_PAGE_COUNT = 19,
+  ROVER_PAGE_ANCHOR = 19, // Operação -> Âncora (Lançar c/ sensor, Libertar,
+                          // Trancar, Recolher, Parar)
+  ROVER_PAGE_CONFIG_NAV_WIZARD =
+      20, // Configurações -> Teste Nav (Wizard 5 passos Bússola/GPS/RTL -> SD)
+  ROVER_PAGE_CONFIG_MOTOR =
+      21, // Configurações -> Motor (Sentido Normal / Invertido + Teste Pulso)
+  ROVER_PAGE_COUNT = 22,
 
   // Aliases de compatibilidade
   ROVER_PAGE_NETWORK = ROVER_PAGE_CONFIG_WIFI,
   ROVER_PAGE_MAC = ROVER_PAGE_CONFIG_ID
 };
+
+struct NavWizardStepSample {
+  bool recorded = false;
+  uint32_t timestampMs = 0;
+  bool gpsFix = false;
+  uint8_t sats = 0;
+  double lat = 0.0;
+  double lng = 0.0;
+  float gpsSpeedKnots = 0.0f;
+  float gpsCourseDeg = 0.0f;
+  bool compassActive = false;
+  uint8_t i2cAddr = 0x28;
+  float rawHeadingDeg = 0.0f;
+  float offsetDeg = 0.0f;
+  float fusedHeadingDeg = 0.0f;
+  float rollDeg = 0.0f;
+  float pitchDeg = 0.0f;
+  uint8_t calSys = 0;
+  uint8_t calGyro = 0;
+  uint8_t calAccel = 0;
+  uint8_t calMag = 0;
+  float expectedHeadingDeg = 0.0f;
+  float errorVsExpectedDeg = 0.0f;
+  float deltaFromStep1Deg = 0.0f;
+  double distFromHomeM = 0.0;
+  float courseToHomeDeg = 0.0f;
+  float gpsWalkAzimuthDeg = 0.0f;
+  float rtlHeadingErrorDeg = 0.0f;
+  int8_t simRudderPct = 0;
+  int8_t simThrottlePct = 0;
+  bool stepPass = false;
+  char verdict[56];
+};
+
+struct NavWizardTrackPoint {
+  uint32_t elapsedMs = 0;
+  double lat = 0.0;
+  double lng = 0.0;
+  float distFromHomeM = 0.0f;
+  float walkAzimuthDeg = 0.0f;
+  float fusedHeadingDeg = 0.0f;
+  float rawHeadingDeg = 0.0f;
+  float gpsCogDeg = 0.0f;
+  float speedKnots = 0.0f;
+};
+
+static const uint8_t NAV_WIZ_MAX_TRACK_PTS = 24;
 
 struct BootLogItem {
   char text[34];
@@ -89,9 +142,9 @@ public:
   RoverDisplay()
       : canvas(nullptr), currentPage(ROVER_PAGE_HOME), lastRender(0),
         _bootLogCount(0), _bootProgress(0), _brightness(85), _roverId(1),
-        _otaActive(false), _homeMenuIdx(0), _opMenuIdx(0), _configMenuIdx(0),
-        _wifiListIdx(0), _wifiScanIdx(0), _wifiKbRow(0), _wifiKbCol(0),
-        _wifiKbMode(0), _wifiTextCursorPos(0), _battMenuIdx(0),
+        _otaActive(false), _homeMenuIdx(0), _opMenuIdx(0), _anchorMenuIdx(0),
+        _configMenuIdx(0), _wifiListIdx(0), _wifiScanIdx(0), _wifiKbRow(0),
+        _wifiKbCol(0), _wifiKbMode(0), _wifiTextCursorPos(0), _battMenuIdx(0),
         _battCellsCursorIdx(1), _battMahKbRow(0), _battMahKbCol(0),
         _joyMenuIdx(0), _joyExitPromptActive(false), _joyExitCursorIdx(0),
         _joyCalStep(0), _joyCalCenterX(1600), _joyCalCenterY(1600),
@@ -99,12 +152,21 @@ public:
         _joyCalYDown(3200), _joyCalPeakDist(0), _bootHoldPct(0),
         _wifiConfig(nullptr), _feedbackUntilMs(0), _loraTxTelems(0),
         _loraRxPolls(0), _loraLastRxSecAgo(999999), _loraSnr(0.0f),
-        _loraHasContact(false) {
+        _loraHasContact(false), _motorMenuIdx(0), _navWizStep(0),
+        _navWizStartMs(0), _navWizLastSampleMs(0), _navWizTrackCount(0),
+        _navWizRunId(0), _navWizSdSaved(false), _navWizRecommendedOffset(0.0f),
+        _navWizOverallPass(false) {
     strncpy(_c6Version, "--", sizeof(_c6Version));
     strncpy(_battMahBuf, "3000", sizeof(_battMahBuf));
     _wifiTargetSsid[0] = '\0';
     _wifiPassBuf[0] = '\0';
     _feedbackMsg[0] = '\0';
+    _navWizDiagLine1[0] = '\0';
+    _navWizDiagLine2[0] = '\0';
+    _navWizSdPath[0] = '\0';
+    for (uint8_t i = 0; i < 5; ++i) {
+      _navWizSteps[i].verdict[0] = '\0';
+    }
   }
 
   void begin(uint8_t initialBrightness = 85) {
@@ -289,13 +351,25 @@ public:
 
   uint8_t getOpMenuIdx() const { return _opMenuIdx; }
   void setOpMenuIdx(uint8_t idx) {
-    _opMenuIdx = idx % 4;
+    _opMenuIdx = idx % 5;
+    lastRender = 0;
+  }
+
+  uint8_t getAnchorMenuIdx() const { return _anchorMenuIdx; }
+  void setAnchorMenuIdx(uint8_t idx) {
+    _anchorMenuIdx = idx % 5;
     lastRender = 0;
   }
 
   uint8_t getConfigMenuIdx() const { return _configMenuIdx; }
   void setConfigMenuIdx(uint8_t idx) {
-    _configMenuIdx = idx % 6;
+    _configMenuIdx = idx % 8;
+    lastRender = 0;
+  }
+
+  uint8_t getMotorMenuIdx() const { return _motorMenuIdx; }
+  void setMotorMenuIdx(uint8_t idx) {
+    _motorMenuIdx = idx % 2;
     lastRender = 0;
   }
 
@@ -482,12 +556,24 @@ public:
     lastRender = 0;
   }
 
-  uint16_t getJoyCalCenterX() const { return (uint16_t)constrain(_joyCalCenterX, 0, 4095); }
-  uint16_t getJoyCalCenterY() const { return (uint16_t)constrain(_joyCalCenterY, 0, 4095); }
-  uint16_t getJoyCalXLeft() const { return (uint16_t)constrain(_joyCalXLeft, 0, 4095); }
-  uint16_t getJoyCalXRight() const { return (uint16_t)constrain(_joyCalXRight, 0, 4095); }
-  uint16_t getJoyCalYUp() const { return (uint16_t)constrain(_joyCalYUp, 0, 4095); }
-  uint16_t getJoyCalYDown() const { return (uint16_t)constrain(_joyCalYDown, 0, 4095); }
+  uint16_t getJoyCalCenterX() const {
+    return (uint16_t)constrain(_joyCalCenterX, 0, 4095);
+  }
+  uint16_t getJoyCalCenterY() const {
+    return (uint16_t)constrain(_joyCalCenterY, 0, 4095);
+  }
+  uint16_t getJoyCalXLeft() const {
+    return (uint16_t)constrain(_joyCalXLeft, 0, 4095);
+  }
+  uint16_t getJoyCalXRight() const {
+    return (uint16_t)constrain(_joyCalXRight, 0, 4095);
+  }
+  uint16_t getJoyCalYUp() const {
+    return (uint16_t)constrain(_joyCalYUp, 0, 4095);
+  }
+  uint16_t getJoyCalYDown() const {
+    return (uint16_t)constrain(_joyCalYDown, 0, 4095);
+  }
 
   bool isJoyExitPromptActive() const { return _joyExitPromptActive; }
   void setJoyExitPromptActive(bool active) {
@@ -509,6 +595,496 @@ public:
       _bootHoldPct = pct;
       lastRender = 0;
     }
+  }
+
+  // =========================================================================
+  // WIZARD DE TESTE DE NAVEGAÇÃO / BÚSSOLA / RTL (5 PASSOS + RELATÓRIO SD)
+  // =========================================================================
+  static float wrapNavAngle180(float angle) {
+    while (angle > 180.0f)
+      angle -= 360.0f;
+    while (angle < -180.0f)
+      angle += 360.0f;
+    return angle;
+  }
+
+  static float wrapNavAngle360(float angle) {
+    angle = fmodf(angle, 360.0f);
+    if (angle < 0.0f)
+      angle += 360.0f;
+    return angle;
+  }
+
+  void beginNavWizard() {
+    _navWizStep = 0;
+    _navWizStartMs = millis();
+    _navWizLastSampleMs = 0;
+    _navWizTrackCount = 0;
+    _navWizRunId++;
+    _navWizSdSaved = false;
+    _navWizRecommendedOffset = 0.0f;
+    _navWizOverallPass = false;
+    _navWizDiagLine1[0] = '\0';
+    _navWizDiagLine2[0] = '\0';
+    strncpy(_navWizSdPath, "/nav_test_wizard.txt", sizeof(_navWizSdPath) - 1);
+    _navWizSdPath[sizeof(_navWizSdPath) - 1] = '\0';
+    for (uint8_t i = 0; i < 5; ++i) {
+      _navWizSteps[i] = NavWizardStepSample();
+      _navWizSteps[i].verdict[0] = '\0';
+    }
+    lastRender = 0;
+  }
+
+  uint8_t getNavWizStep() const { return _navWizStep; }
+  void setNavWizStep(uint8_t step) {
+    _navWizStep = (step <= 5) ? step : 0;
+    lastRender = 0;
+  }
+
+  void setNavWizSdSaved(bool ok, const char *path = "/nav_test_wizard.txt") {
+    _navWizSdSaved = ok;
+    if (path && strlen(path) > 0) {
+      strncpy(_navWizSdPath, path, sizeof(_navWizSdPath) - 1);
+      _navWizSdPath[sizeof(_navWizSdPath) - 1] = '\0';
+    }
+    lastRender = 0;
+  }
+
+  bool isNavWizSdSaved() const { return _navWizSdSaved; }
+  const String &getLastNavWizardReport() const { return _navWizLastReport; }
+
+  void updateNavWizardLiveSample(GPSTracker &gps) {
+    if (_navWizStep != 3)
+      return; // Apenas amostra trajeto contínuo durante Passo 4/5 (Caminhada)
+
+    uint32_t now = millis();
+    if (now - _navWizLastSampleMs < 600)
+      return;
+    _navWizLastSampleMs = now;
+
+    double homeLat = _navWizSteps[0].recorded ? _navWizSteps[0].lat
+                                              : gps.getHomeLatitude();
+    double homeLng = _navWizSteps[0].recorded ? _navWizSteps[0].lng
+                                              : gps.getHomeLongitude();
+    double curLat = gps.getLatitude();
+    double curLng = gps.getLongitude();
+
+    float distM = 0.0f;
+    float walkAz = 0.0f;
+    if ((homeLat != 0.0 || homeLng != 0.0) && (curLat != 0.0 || curLng != 0.0)) {
+      distM = (float)TinyGPSPlus::distanceBetween(homeLat, homeLng, curLat, curLng);
+      if (distM >= 0.3f) {
+        walkAz = (float)TinyGPSPlus::courseTo(homeLat, homeLng, curLat, curLng);
+      }
+    }
+
+    if (_navWizTrackCount < NAV_WIZ_MAX_TRACK_PTS) {
+      NavWizardTrackPoint &pt = _navWizTrack[_navWizTrackCount++];
+      pt.elapsedMs = now - _navWizStartMs;
+      pt.lat = curLat;
+      pt.lng = curLng;
+      pt.distFromHomeM = distM;
+      pt.walkAzimuthDeg = walkAz;
+      pt.fusedHeadingDeg = gps.getHeading();
+      pt.rawHeadingDeg = gps.getCompassRawHeading();
+      pt.gpsCogDeg = gps.getGpsCourse();
+      pt.speedKnots = gps.getSpeedKnots();
+    } else {
+      // Desliza janela preservando os primeiros 4 pontos e os mais recentes
+      for (uint8_t i = 4; i < NAV_WIZ_MAX_TRACK_PTS - 1; ++i) {
+        _navWizTrack[i] = _navWizTrack[i + 1];
+      }
+      NavWizardTrackPoint &pt = _navWizTrack[NAV_WIZ_MAX_TRACK_PTS - 1];
+      pt.elapsedMs = now - _navWizStartMs;
+      pt.lat = curLat;
+      pt.lng = curLng;
+      pt.distFromHomeM = distM;
+      pt.walkAzimuthDeg = walkAz;
+      pt.fusedHeadingDeg = gps.getHeading();
+      pt.rawHeadingDeg = gps.getCompassRawHeading();
+      pt.gpsCogDeg = gps.getGpsCourse();
+      pt.speedKnots = gps.getSpeedKnots();
+    }
+  }
+
+  void confirmNavWizardStep(uint8_t stepIdx, GPSTracker &gps) {
+    if (stepIdx >= 5)
+      return;
+
+    NavWizardStepSample &s = _navWizSteps[stepIdx];
+    s.recorded = true;
+    s.timestampMs = millis() - _navWizStartMs;
+    s.gpsFix = gps.hasFix();
+    s.sats = gps.getSatellites();
+    s.lat = gps.getLatitude();
+    s.lng = gps.getLongitude();
+    s.gpsSpeedKnots = gps.getSpeedKnots();
+    s.gpsCourseDeg = gps.getGpsCourse();
+    s.compassActive = gps.hasCompass();
+    s.i2cAddr = gps.getCompassI2cAddr();
+    s.rawHeadingDeg = gps.getCompassRawHeading();
+    s.offsetDeg = gps.getCompassOffset();
+    s.fusedHeadingDeg = gps.getHeading();
+    s.rollDeg = gps.getRoll();
+    s.pitchDeg = gps.getPitch();
+    s.calSys = gps.getCompassCalSys();
+    s.calGyro = gps.getCompassCalGyro();
+    s.calAccel = gps.getCompassCalAccel();
+    s.calMag = gps.getCompassCalMag();
+
+    double refHomeLat =
+        (stepIdx == 0) ? s.lat : _navWizSteps[0].lat;
+    double refHomeLng =
+        (stepIdx == 0) ? s.lng : _navWizSteps[0].lng;
+
+    if ((refHomeLat != 0.0 || refHomeLng != 0.0) &&
+        (s.lat != 0.0 || s.lng != 0.0)) {
+      s.distFromHomeM =
+          TinyGPSPlus::distanceBetween(refHomeLat, refHomeLng, s.lat, s.lng);
+      if (s.distFromHomeM >= 0.2) {
+        s.gpsWalkAzimuthDeg = (float)TinyGPSPlus::courseTo(
+            refHomeLat, refHomeLng, s.lat, s.lng);
+        s.courseToHomeDeg = (float)TinyGPSPlus::courseTo(
+            s.lat, s.lng, refHomeLat, refHomeLng);
+      } else {
+        s.gpsWalkAzimuthDeg = 0.0f;
+        s.courseToHomeDeg = 0.0f;
+      }
+    } else {
+      s.distFromHomeM = 0.0;
+      s.gpsWalkAzimuthDeg = 0.0f;
+      s.courseToHomeDeg = 0.0f;
+    }
+
+    s.deltaFromStep1Deg =
+        (stepIdx == 0)
+            ? 0.0f
+            : wrapNavAngle180(s.fusedHeadingDeg -
+                              _navWizSteps[0].fusedHeadingDeg);
+
+    // Simulação exata da lei de controlo RTL do C6 (main_rover_c6.cpp)
+    s.rtlHeadingErrorDeg =
+        wrapNavAngle180(s.courseToHomeDeg - s.fusedHeadingDeg);
+    s.simRudderPct =
+        (int8_t)constrain((int)(s.rtlHeadingErrorDeg * 1.8f), -100, 100);
+    s.simThrottlePct = (fabsf(s.rtlHeadingErrorDeg) > 60.0f) ? 25 : 50;
+
+    if (stepIdx == 0) {
+      // Passo 1/5: Apontar PROA para NORTE (0°) e definir HOME
+      s.expectedHeadingDeg = 0.0f;
+      s.errorVsExpectedDeg = wrapNavAngle180(s.fusedHeadingDeg - 0.0f);
+      if (!s.compassActive) {
+        s.stepPass = false;
+        snprintf(s.verdict, sizeof(s.verdict),
+                 "FALHA: BNO055 offline (sem bussola I2C)");
+      } else if (fabsf(s.errorVsExpectedDeg) <= 30.0f) {
+        s.stepPass = true;
+        snprintf(s.verdict, sizeof(s.verdict),
+                 "OK: Proa Norte=%.0f deg (Erro=%+.0f deg)", s.fusedHeadingDeg,
+                 s.errorVsExpectedDeg);
+      } else if (fabsf(s.errorVsExpectedDeg) >= 145.0f) {
+        s.stepPass = false;
+        snprintf(s.verdict, sizeof(s.verdict),
+                 "INVERTIDO 180: Apontou N mas leu %.0f deg!",
+                 s.fusedHeadingDeg);
+      } else {
+        s.stepPass = false;
+        snprintf(s.verdict, sizeof(s.verdict),
+                 "DESVIO: Apontou N(0) mas leu %.0f deg (%+.0f)",
+                 s.fusedHeadingDeg, s.errorVsExpectedDeg);
+      }
+    } else if (stepIdx == 1) {
+      // Passo 2/5: Rodar 90° para a DIREITA (ESTE = 90°)
+      s.expectedHeadingDeg =
+          wrapNavAngle360(_navWizSteps[0].fusedHeadingDeg + 90.0f);
+      s.errorVsExpectedDeg = wrapNavAngle180(s.deltaFromStep1Deg - 90.0f);
+      if (fabsf(s.deltaFromStep1Deg) < 15.0f) {
+        s.stepPass = false;
+        snprintf(s.verdict, sizeof(s.verdict),
+                 "FALHA: Bussola nao rodou (dYaw=%+.0f deg)",
+                 s.deltaFromStep1Deg);
+      } else if (s.deltaFromStep1Deg <= -50.0f &&
+                 s.deltaFromStep1Deg >= -130.0f) {
+        s.stepPass = false;
+        snprintf(s.verdict, sizeof(s.verdict),
+                 "EIXO Z INVERTIDO: Rodou Dir mas dYaw=%+.0f deg",
+                 s.deltaFromStep1Deg);
+      } else if (s.deltaFromStep1Deg >= 55.0f &&
+                 s.deltaFromStep1Deg <= 125.0f) {
+        s.stepPass = true;
+        snprintf(s.verdict, sizeof(s.verdict),
+                 "OK: Rotacao +90 Dir correta (dYaw=%+.0f deg)",
+                 s.deltaFromStep1Deg);
+      } else {
+        s.stepPass = false;
+        snprintf(s.verdict, sizeof(s.verdict),
+                 "DESVIO: Rodou Dir, mediu dYaw=%+.0f deg (alvo +90)",
+                 s.deltaFromStep1Deg);
+      }
+    } else if (stepIdx == 2) {
+      // Passo 3/5: Rodar 180° para SUL (oposto ao Passo 1)
+      s.expectedHeadingDeg =
+          wrapNavAngle360(_navWizSteps[0].fusedHeadingDeg + 180.0f);
+      s.errorVsExpectedDeg = wrapNavAngle180(s.deltaFromStep1Deg - 180.0f);
+      if (fabsf(s.errorVsExpectedDeg) <= 35.0f) {
+        s.stepPass = true;
+        snprintf(s.verdict, sizeof(s.verdict),
+                 "OK: Meia-volta 180 confirmada (dYaw=%+.0f deg)",
+                 s.deltaFromStep1Deg);
+      } else {
+        s.stepPass = false;
+        snprintf(s.verdict, sizeof(s.verdict),
+                 "DESVIO: Meia-volta mediu dYaw=%+.0f deg (erro %+.0f)",
+                 s.deltaFromStep1Deg, s.errorVsExpectedDeg);
+      }
+    } else if (stepIdx == 3) {
+      // Passo 4/5: Caminhar em frente 6-15m afastando-se do HOME sem virar a proa
+      s.expectedHeadingDeg = s.gpsWalkAzimuthDeg;
+      s.errorVsExpectedDeg =
+          wrapNavAngle180(s.fusedHeadingDeg - s.gpsWalkAzimuthDeg);
+      if (!s.gpsFix || !_navWizSteps[0].gpsFix || s.distFromHomeM < 2.0) {
+        s.stepPass = false;
+        snprintf(s.verdict, sizeof(s.verdict),
+                 "AVISO: Dist GPS curta (%.1fm) p/ validar rumo GPS",
+                 s.distFromHomeM);
+      } else if (fabsf(s.errorVsExpectedDeg) <= 35.0f) {
+        s.stepPass = true;
+        snprintf(s.verdict, sizeof(s.verdict),
+                 "OK: Proa(%.0f) = Azimute GPS(%.0f) em %.1fm",
+                 s.fusedHeadingDeg, s.gpsWalkAzimuthDeg, s.distFromHomeM);
+      } else if (fabsf(s.errorVsExpectedDeg) >= 135.0f) {
+        s.stepPass = false;
+        snprintf(s.verdict, sizeof(s.verdict),
+                 "INVERTIDO 180: Andou p/ %.0f(GPS) mas Proa=%.0f!",
+                 s.gpsWalkAzimuthDeg, s.fusedHeadingDeg);
+      } else {
+        s.stepPass = false;
+        snprintf(s.verdict, sizeof(s.verdict),
+                 "DESVIO: Andou p/ %.0f(GPS) mas Proa=%.0f (%+.0f)",
+                 s.gpsWalkAzimuthDeg, s.fusedHeadingDeg, s.errorVsExpectedDeg);
+      }
+    } else if (stepIdx == 4) {
+      // Passo 5/5: No ponto afastado, virar 180° e apontar a PROA diretamente para o HOME
+      float refHomeCourse =
+          (s.distFromHomeM >= 2.0)
+              ? s.courseToHomeDeg
+              : wrapNavAngle360(_navWizSteps[3].fusedHeadingDeg + 180.0f);
+      s.expectedHeadingDeg = refHomeCourse;
+      s.errorVsExpectedDeg = wrapNavAngle180(s.fusedHeadingDeg - refHomeCourse);
+      s.rtlHeadingErrorDeg = wrapNavAngle180(refHomeCourse - s.fusedHeadingDeg);
+      s.simRudderPct =
+          (int8_t)constrain((int)(s.rtlHeadingErrorDeg * 1.8f), -100, 100);
+      s.simThrottlePct = (fabsf(s.rtlHeadingErrorDeg) > 60.0f) ? 25 : 50;
+
+      if (fabsf(s.rtlHeadingErrorDeg) <= 35.0f) {
+        s.stepPass = true;
+        snprintf(s.verdict, sizeof(s.verdict),
+                 "OK: RTL vai DIRETO ao HOME (Erro=%+.0f Leme=%+d%%)",
+                 s.rtlHeadingErrorDeg, (int)s.simRudderPct);
+      } else if (fabsf(s.rtlHeadingErrorDeg) >= 135.0f) {
+        s.stepPass = false;
+        snprintf(s.verdict, sizeof(s.verdict),
+                 "OPOSTO 180: RTL foge do HOME! (Erro=%+.0f Leme=%+d%%)",
+                 s.rtlHeadingErrorDeg, (int)s.simRudderPct);
+      } else {
+        s.stepPass = false;
+        snprintf(s.verdict, sizeof(s.verdict),
+                 "DESVIO RTL: Erro=%+.0f deg -> Leme=%+d%%",
+                 s.rtlHeadingErrorDeg, (int)s.simRudderPct);
+      }
+
+      computeFinalNavDiagnosis();
+    }
+
+    lastRender = 0;
+  }
+
+  void computeFinalNavDiagnosis() {
+    const NavWizardStepSample &s1 = _navWizSteps[0];
+    const NavWizardStepSample &s2 = _navWizSteps[1];
+    const NavWizardStepSample &s3 = _navWizSteps[2];
+    const NavWizardStepSample &s4 = _navWizSteps[3];
+    const NavWizardStepSample &s5 = _navWizSteps[4];
+
+    // Se tivermos deslocamento GPS válido (>=2.0m), a referência absoluta do
+    // vetor GPS no Passo 5 (Rumo ao HOME) é a verdade física absoluta; caso
+    // contrário usamos o Passo 1 (Norte = 0°).
+    if (s5.distFromHomeM >= 2.0 && s5.gpsFix && s1.gpsFix) {
+      _navWizRecommendedOffset =
+          wrapNavAngle180(s5.courseToHomeDeg - s5.rawHeadingDeg);
+    } else {
+      _navWizRecommendedOffset = wrapNavAngle180(0.0f - s1.rawHeadingDeg);
+    }
+
+    bool zInverted =
+        (s2.deltaFromStep1Deg <= -50.0f && s2.deltaFromStep1Deg >= -130.0f);
+    bool rot90Ok =
+        (s2.deltaFromStep1Deg >= 55.0f && s2.deltaFromStep1Deg <= 125.0f);
+    bool rot180Ok = (fabsf(wrapNavAngle180(s3.deltaFromStep1Deg - 180.0f)) <= 40.0f);
+
+    bool walkOpposite =
+        (s4.distFromHomeM >= 2.0 && fabsf(s4.errorVsExpectedDeg) >= 135.0f);
+    bool homeOpposite = (fabsf(s5.rtlHeadingErrorDeg) >= 135.0f);
+    bool northOpposite = (fabsf(s1.errorVsExpectedDeg) >= 135.0f);
+
+    if (!s1.compassActive && !s5.compassActive) {
+      _navWizOverallPass = false;
+      snprintf(_navWizDiagLine1, sizeof(_navWizDiagLine1),
+               "FALHA: BNO055 NAO DETETADO NO BARRAMENTO I2C");
+      snprintf(_navWizDiagLine2, sizeof(_navWizDiagLine2),
+               "Verificar ligacao SDA=IO1 SCL=IO11 na placa C6");
+    } else if (zInverted) {
+      _navWizOverallPass = false;
+      snprintf(_navWizDiagLine1, sizeof(_navWizDiagLine1),
+               "FALHA: EIXO Z INVERTIDO (dYaw P1->P2 = %+.0f deg)",
+               s2.deltaFromStep1Deg);
+      snprintf(_navWizDiagLine2, sizeof(_navWizDiagLine2),
+               "Placa GY-BNO055 montada de cabeca para baixo!");
+    } else if (walkOpposite || homeOpposite || northOpposite) {
+      _navWizOverallPass = false;
+      snprintf(_navWizDiagLine1, sizeof(_navWizDiagLine1),
+               "CAUSA: PROA INVERTIDA ~180 DEG FACE AO MOVIMENTO!");
+      snprintf(_navWizDiagLine2, sizeof(_navWizDiagLine2),
+               "Off atual:%+.0f | Usar Off:%+.0f ou rodar placa 180",
+               s5.offsetDeg, _navWizRecommendedOffset);
+    } else if (rot90Ok && rot180Ok && s1.stepPass && s5.stepPass) {
+      _navWizOverallPass = true;
+      snprintf(_navWizDiagLine1, sizeof(_navWizDiagLine1),
+               "APROVADO: BUSSOLA E RTL 100%% ALINHADOS C/ HOME!");
+      snprintf(_navWizDiagLine2, sizeof(_navWizDiagLine2),
+               "Erro RTL=%+.0f deg | Leme=%+d%% | Offset=%+.0f deg",
+               s5.rtlHeadingErrorDeg, (int)s5.simRudderPct, s5.offsetDeg);
+    } else {
+      _navWizOverallPass = false;
+      snprintf(_navWizDiagLine1, sizeof(_navWizDiagLine1),
+               "DESVIO DE PROA: Erro RTL=%+.0f deg (CalMag=%u/3)",
+               s5.rtlHeadingErrorDeg, (unsigned)s5.calMag);
+      snprintf(_navWizDiagLine2, sizeof(_navWizDiagLine2),
+               "Offset atual:%+.0f deg -> Offset sugerido:%+.0f deg",
+               s5.offsetDeg, _navWizRecommendedOffset);
+    }
+  }
+
+  String buildNavWizardReport(uint8_t roverId, bool motorInverted = false) {
+    String r;
+    r.reserve(3600);
+
+    r += "====================================================================\n";
+    r += "  WINDDRAGONS ROVER - RELATORIO DO WIZARD DE NAVEGACAO / RTL\n";
+    r += "====================================================================\n";
+    char hdr[240];
+    snprintf(hdr, sizeof(hdr),
+             "Rover ID       : ROVER-%02u\n"
+             "Firmware Master: %s (%s)\n"
+             "Firmware C6    : %s\n"
+             "Sessao / Uptime: Run #%u | Uptime=%lu s\n"
+             "Sentido Motor  : %s\n"
+             "Resultado Geral: %s\n"
+             "Diagnostico 1  : %s\n"
+             "Diagnostico 2  : %s\n"
+             "Offset Atual   : %+.1f deg\n"
+             "Offset Sugerido: %+.1f deg\n",
+             (unsigned)roverId, ROVER_LAFVIN_VERSION, ROVER_BUILD_DATE,
+             _c6Version, (unsigned)_navWizRunId, (unsigned long)(millis() / 1000UL),
+             motorInverted ? "INVERTIDO (REV)" : "NORMAL (PADRAO)",
+             _navWizOverallPass ? "APROVADO (OK)" : "ANOMALIA DETETADA",
+             _navWizDiagLine1, _navWizDiagLine2,
+             _navWizSteps[4].offsetDeg, _navWizRecommendedOffset);
+    r += hdr;
+
+    static const char *const stepTitles[5] = {
+        "PASSO 1/5: APONTAR PROA PARA NORTE (0 deg) E DEFINIR HOME",
+        "PASSO 2/5: RODAR 90 GRAUS PARA A DIREITA (ESTE = 90 deg)",
+        "PASSO 3/5: RODAR 180 GRAUS PARA SUL (180 deg, OPOSTO AO PASSO 1)",
+        "PASSO 4/5: CAMINHAR EM FRENTE (6-15m) COM A PROA APONTADA P/ A FRENTE",
+        "PASSO 5/5: VIRAR 180 NO LOCAL E APONTAR A PROA DIRETA PARA O HOME"};
+
+    static const char *const stepInstructions[5] = {
+        "Segurar Rover no ponto HOME com a PROA apontada para NORTE (0 deg)",
+        "No mesmo local, rodar o Rover +90 deg no sentido horario (Direita/Este)",
+        "No mesmo local, apontar a PROA para SUL (180 deg, sentido oposto ao Passo 1)",
+        "Caminhar afastando-se do HOME mantendo a PROA apontada na direcao da caminhada",
+        "No ponto afastado, virar o Rover 180 deg apontando a PROA diretamente para o HOME"};
+
+    for (uint8_t i = 0; i < 5; ++i) {
+      const NavWizardStepSample &s = _navWizSteps[i];
+      r += "\n--------------------------------------------------------------------\n";
+      r += stepTitles[i];
+      r += "\n--------------------------------------------------------------------\n";
+      char buf[640];
+      snprintf(
+          buf, sizeof(buf),
+          "Instrucao Enviada  : %s\n"
+          "Tempo Decorrido    : %.1f s\n"
+          "GPS Fix / Sats     : %s (%u sats) | Vel=%.2f kn | GPS COG=%.1f deg\n"
+          "Coordenadas GPS    : Lat=%.7f, Lng=%.7f\n"
+          "Distancia ao HOME  : %.2f m\n"
+          "Azimute Caminhada  : %.1f deg (HOME -> Posicao Atual)\n"
+          "Rumo p/ Voltar HOME: %.1f deg (Posicao Atual -> HOME)\n"
+          "Bussola GY-BNO055  : %s (I2C 0x%02X) | Cal Sys=%u Gyr=%u Acc=%u Mag=%u\n"
+          "Leitura BNO055     : Raw=%.1f deg | Offset=%+.1f deg -> Fused(Proa)=%.1f deg\n"
+          "Inclinacao         : Roll=%+.1f deg | Pitch=%+.1f deg\n"
+          "Comparacao c/ Alvo : Esperado=%.1f deg | Lido=%.1f deg | Erro=%+.1f deg\n"
+          "Rotacao vs Passo 1 : dYaw=%+.1f deg\n"
+          "Simulacao RTL C6   : targetCourse=%.1f | heading=%.1f | headingError=%+.1f deg\n"
+          "Comando RTL C6     : Rudder=%+d%% (%s) | Throttle=%d%%\n"
+          "Avaliacao do Passo : [%s] %s\n",
+          stepInstructions[i], s.timestampMs / 1000.0f,
+          s.gpsFix ? "FIX_3D" : "NO_FIX", (unsigned)s.sats, s.gpsSpeedKnots,
+          s.gpsCourseDeg, s.lat, s.lng, s.distFromHomeM, s.gpsWalkAzimuthDeg,
+          s.courseToHomeDeg, s.compassActive ? "ONLINE" : "OFFLINE",
+          (unsigned)s.i2cAddr, (unsigned)s.calSys, (unsigned)s.calGyro,
+          (unsigned)s.calAccel, (unsigned)s.calMag, s.rawHeadingDeg,
+          s.offsetDeg, s.fusedHeadingDeg, s.rollDeg, s.pitchDeg,
+          s.expectedHeadingDeg, s.fusedHeadingDeg, s.errorVsExpectedDeg,
+          s.deltaFromStep1Deg, s.courseToHomeDeg, s.fusedHeadingDeg,
+          s.rtlHeadingErrorDeg, (int)s.simRudderPct,
+          (s.simRudderPct > 5)
+              ? "VIRA DIREITA/ESTIBORDO"
+              : ((s.simRudderPct < -5) ? "VIRA ESQUERDA/BOMBORDO"
+                                       : "LEME AO CENTRO/DIRETO"),
+          (int)s.simThrottlePct, s.stepPass ? "PASS" : "FAIL", s.verdict);
+      r += buf;
+    }
+
+    r += "\n--------------------------------------------------------------------\n";
+    r += "AMOSTRAS CONTINUAS DURANTE A CAMINHADA (PASSO 4):\n";
+    r += "idx,tempo_s,lat,lng,dist_home_m,azimute_gps_deg,proa_fused_deg,proa_raw_deg,gps_cog_deg,vel_kn\n";
+    for (uint8_t i = 0; i < _navWizTrackCount; ++i) {
+      const NavWizardTrackPoint &pt = _navWizTrack[i];
+      char line[160];
+      snprintf(line, sizeof(line),
+               "%u,%.1f,%.7f,%.7f,%.2f,%.1f,%.1f,%.1f,%.1f,%.2f\n",
+               (unsigned)(i + 1), pt.elapsedMs / 1000.0f, pt.lat, pt.lng,
+               pt.distFromHomeM, pt.walkAzimuthDeg, pt.fusedHeadingDeg,
+               pt.rawHeadingDeg, pt.gpsCogDeg, pt.speedKnots);
+      r += line;
+    }
+    r += "====================================================================\n";
+
+    _navWizLastReport = r;
+    return r;
+  }
+
+  String buildNavWizardCsvRow(uint8_t roverId) const {
+    const NavWizardStepSample &s1 = _navWizSteps[0];
+    const NavWizardStepSample &s2 = _navWizSteps[1];
+    const NavWizardStepSample &s3 = _navWizSteps[2];
+    const NavWizardStepSample &s4 = _navWizSteps[3];
+    const NavWizardStepSample &s5 = _navWizSteps[4];
+    char row[320];
+    snprintf(
+        row, sizeof(row),
+        "%lu,ROVER-%02u,%u,%.7f,%.7f,%.7f,%.7f,%.2f,%.1f,%.1f,%.1f,%.1f,%.1f,"
+        "%.1f,%.1f,%.1f,%.1f,%.1f,%d,%d,%s,\"%s\"\n",
+        (unsigned long)(millis() / 1000UL), (unsigned)roverId,
+        (unsigned)_navWizRunId, s1.lat, s1.lng, s5.lat, s5.lng,
+        s5.distFromHomeM, s1.rawHeadingDeg, s1.offsetDeg, s1.fusedHeadingDeg,
+        s2.deltaFromStep1Deg, s3.deltaFromStep1Deg, s4.gpsWalkAzimuthDeg,
+        s4.fusedHeadingDeg, s5.courseToHomeDeg, s5.fusedHeadingDeg,
+        s5.rtlHeadingErrorDeg, (int)s5.simRudderPct, (int)s5.simThrottlePct,
+        _navWizOverallPass ? "PASS" : "FAIL", _navWizDiagLine1);
+    return String(row);
   }
 
   uint8_t getWifiListIdx() const { return _wifiListIdx; }
@@ -686,12 +1262,13 @@ public:
       force = true;
     }
 
-    uint32_t minInterval =
-        (currentPage == ROVER_PAGE_CONFIG_JOY_TEST ||
-         currentPage == ROVER_PAGE_CONFIG_JOY_CAL ||
-         currentPage == ROVER_PAGE_ACTUATORS)
-            ? 60
-            : 180;
+    uint32_t minInterval = (currentPage == ROVER_PAGE_CONFIG_JOY_TEST ||
+                            currentPage == ROVER_PAGE_CONFIG_JOY_CAL ||
+                            currentPage == ROVER_PAGE_CONFIG_NAV_WIZARD ||
+                            currentPage == ROVER_PAGE_ACTUATORS ||
+                            currentPage == ROVER_PAGE_ANCHOR)
+                               ? 60
+                               : 180;
     if (!force && (now - lastRender < minInterval))
       return;
     lastRender = now;
@@ -720,9 +1297,13 @@ public:
       case ROVER_PAGE_ACTUATORS:
         renderActuatorsPage(actuators, motorStatus, lastRssi, failsafeActive);
         break;
+      case ROVER_PAGE_ANCHOR:
+        renderAnchorPage(actuators, motorStatus, lastRssi, failsafeActive);
+        break;
       case ROVER_PAGE_CONFIG_MENU:
-        renderConfigMenuPage(roverId, batt, joyInvX, joyInvY, isApMode, ip,
-                             lastRssi, failsafeActive);
+        renderConfigMenuPage(roverId, batt, joyInvX, joyInvY,
+                             actuators.isMotorInverted(), isApMode, ip, lastRssi,
+                             failsafeActive);
         break;
       case ROVER_PAGE_CONFIG_WIFI:
         renderNetworkPage(isApMode, ip, ssid, wifiRssi, apClients, apPassword);
@@ -763,6 +1344,12 @@ public:
         break;
       case ROVER_PAGE_CONFIG_LORA:
         renderLoraPage(lastRssi, failsafeActive);
+        break;
+      case ROVER_PAGE_CONFIG_NAV_WIZARD:
+        renderNavWizardPage(gps, sdOk);
+        break;
+      case ROVER_PAGE_CONFIG_MOTOR:
+        renderMotorConfigPage(actuators.isMotorInverted());
         break;
       default:
         renderHomePage(roverId, gps, batt, motorStatus, lastRssi,
@@ -1206,6 +1793,11 @@ private:
       canvas->setTextColor(UI_YELLOW);
       canvas->print("ATUADORES");
       break;
+    case ROVER_PAGE_ANCHOR:
+      canvas->print("OPERACAO > ");
+      canvas->setTextColor(UI_YELLOW);
+      canvas->print("ANCORA");
+      break;
     case ROVER_PAGE_CONFIG_MENU:
       canvas->print("HOME > ");
       canvas->setTextColor(UI_YELLOW);
@@ -1276,6 +1868,21 @@ private:
       canvas->setTextColor(UI_YELLOW);
       canvas->print("LORA 433MHZ");
       break;
+    case ROVER_PAGE_CONFIG_NAV_WIZARD:
+      canvas->print("CONFIG > ");
+      canvas->setTextColor(UI_YELLOW);
+      if (_navWizStep < 5) {
+        canvas->printf("TESTE NAV (%u/5)", (unsigned)(_navWizStep + 1));
+      } else {
+        canvas->setTextColor(UI_GREEN);
+        canvas->print("TESTE NAV (RESUMO)");
+      }
+      break;
+    case ROVER_PAGE_CONFIG_MOTOR:
+      canvas->print("CONFIG > ");
+      canvas->setTextColor(UI_YELLOW);
+      canvas->print("MOTOR (SENTIDO ESC)");
+      break;
     default:
       canvas->printf("ROVER-%02d", _roverId);
       break;
@@ -1335,14 +1942,26 @@ private:
       canvas->print("RF: A aguardar");
     }
 
-    // --- Lista de 4 itens de 1 linha (Navegacao, Bateria, Atuadores, SET RTL)
-    // ---
-    const char *titles[4] = {"Navegacao", "Bateria", "Atuadores", "SET RTL"};
-    for (uint8_t i = 0; i < 4; ++i) {
+    // --- Lista de 5 itens de 1 linha com scroll (Navegacao, Bateria,
+    // Atuadores, Ancora, SET RTL) ---
+    const uint8_t total = 5;
+    const uint8_t visibleRows = 4;
+    const char *titles[5] = {"Navegacao", "Bateria", "Atuadores", "Ancora",
+                             "SET RTL"};
+    if (_opMenuIdx >= total)
+      _opMenuIdx = 0;
+    uint8_t startIdx = 0;
+    if (_opMenuIdx >= visibleRows) {
+      startIdx = _opMenuIdx - (visibleRows - 1);
+    }
+
+    int w = 298;
+    for (uint8_t row = 0; row < visibleRows && (startIdx + row) < total;
+         ++row) {
+      uint8_t i = startIdx + row;
       bool sel = (_opMenuIdx == i);
       int x = 6;
-      int y = 63 + i * 21;
-      int w = 308;
+      int y = 63 + row * 21;
       int h = 20;
 
       if (sel) {
@@ -1380,6 +1999,14 @@ private:
         canvas->printf("T:%+d%% R:%+d%% | %.1fm", actuators.getThrottle(),
                        actuators.getRudder(),
                        actuators.getAnchorDepthCm() / 100.0f);
+      } else if (i == 3) {
+        bool isFree = actuators.isRackReleased();
+        canvas->setTextColor(isFree ? UI_ORANGE : UI_CYAN);
+        canvas->setCursor(x + 132, y + 6);
+        canvas->printf("%s | %.1fm | %s",
+                       get_anchor_status_str(actuators.getAnchorStatus()),
+                       actuators.getAnchorDepthCm() / 100.0f,
+                       isFree ? "LIVRE" : "TRAV");
       } else {
         canvas->setTextColor(gps.hasHome() ? UI_GREEN : UI_YELLOW);
         canvas->setCursor(x + 132, y + 6);
@@ -1397,7 +2024,122 @@ private:
       canvas->print(">");
     }
 
+    // Barra de scroll vertical (5 itens, 4 visíveis)
+    int sbX = 308, sbY = 63, sbW = 6, sbH = 83;
+    canvas->drawRect(sbX, sbY, sbW, sbH, UI_CARD_BG);
+    int thumbH = max(14, sbH * visibleRows / total);
+    int thumbY = sbY + (sbH - thumbH) * _opMenuIdx / max(1, (int)total - 1);
+    canvas->fillRect(sbX + 1, thumbY, sbW - 2, thumbH, UI_CYAN);
+
     renderFooter("<-X: Home | Y/BOOT: Item | X->/Hold: Entrar");
+  }
+
+  // =========================================================================
+  // OPERAÇÃO -> ÂNCORA (Comandos de Lançar c/ Sensor, Libertar, Trancar, etc.)
+  // =========================================================================
+  void renderAnchorPage(ActuatorController &actuators, uint8_t motorStatus,
+                        int16_t lastRssi, bool failsafeActive) {
+    (void)motorStatus;
+    (void)lastRssi;
+    (void)failsafeActive;
+    int cardY = 26;
+    int cardH = 122;
+
+    // --- Painel Esquerdo: Telemetria da Âncora & Sensor Hall (x=4, w=122) ---
+    canvas->fillRect(4, cardY, 122, cardH, UI_PANEL_BG);
+    canvas->drawRect(4, cardY, 122, cardH, UI_CARD_BG);
+
+    canvas->setTextSize(1);
+    canvas->setTextColor(UI_LIGHTGREY);
+    canvas->setCursor(10, cardY + 5);
+    canvas->print("ESTADO DA ANCORA:");
+
+    uint8_t ancSt = actuators.getAnchorStatus();
+    uint16_t ancCol = UI_CYAN;
+    if (ancSt == ANCHOR_DEPLOYING)
+      ancCol = UI_ORANGE;
+    else if (ancSt == ANCHOR_DEPLOYED)
+      ancCol = UI_YELLOW;
+    else if (ancSt == ANCHOR_RETRACTING)
+      ancCol = UI_MAGENTA;
+    else if (ancSt == ANCHOR_RETRACTED)
+      ancCol = UI_GREEN;
+
+    canvas->setTextSize(2);
+    canvas->setTextColor(ancCol);
+    canvas->setCursor(10, cardY + 16);
+    canvas->printf("%.9s", get_anchor_status_str(ancSt));
+
+    canvas->drawFastHLine(8, cardY + 35, 114, UI_CARD_BG);
+
+    canvas->setTextSize(1);
+    canvas->setTextColor(UI_LIGHTGREY);
+    canvas->setCursor(10, cardY + 40);
+    canvas->print("PROFUNDIDADE:");
+    canvas->setTextSize(2);
+    canvas->setTextColor(UI_WHITE);
+    canvas->setCursor(10, cardY + 51);
+    canvas->printf("%.2f m", actuators.getAnchorDepthCm() / 100.0f);
+
+    canvas->setTextSize(1);
+    canvas->setTextColor(UI_LIGHTGREY);
+    canvas->setCursor(10, cardY + 73);
+    canvas->print("CREMALHEIRA:");
+    bool isEngaged = !actuators.isRackReleased();
+    canvas->setTextColor(isEngaged ? UI_GREEN : UI_ORANGE);
+    canvas->setCursor(10, cardY + 84);
+    canvas->print(isEngaged ? "TRAVADA (LOCK)" : "LIVRE (FREE)");
+
+    canvas->setTextColor(UI_LIGHTGREY);
+    canvas->setCursor(10, cardY + 98);
+    canvas->printf("HALL: %ld p", actuators.getAnchorHallPulses());
+    if (actuators.isAnchorAtTopLimit()) {
+      canvas->setTextColor(UI_GREEN);
+      canvas->setCursor(10, cardY + 109);
+      canvas->print("FIM CURSO: TOPO");
+    } else {
+      canvas->setTextColor(UI_DARKGREY);
+      canvas->setCursor(10, cardY + 109);
+      canvas->printf(" (%u cm)", actuators.getAnchorDepthCm());
+    }
+
+    // --- Painel Direito: 5 Comandos da Âncora (x=130, w=186, h=122) ---
+    canvas->fillRect(130, cardY, 186, cardH, UI_PANEL_BG);
+    canvas->drawRect(130, cardY, 186, cardH, UI_CARD_BG);
+
+    const char *cmdTitles[5] = {"1.LANCAR", "2.LIBERTAR", "3.TRANCAR",
+                                "4.RECOLHER", "5.PARAR"};
+    const char *cmdHints[5] = {"SENSOR", "LIVRE", "LOCK", "SUBIR", "STOP"};
+    const uint16_t cmdColors[5] = {UI_CYAN, UI_ORANGE, UI_GREEN, UI_YELLOW,
+                                   UI_RED};
+
+    for (uint8_t i = 0; i < 5; ++i) {
+      bool sel = (_anchorMenuIdx == i);
+      int x = 134;
+      int y = 29 + i * 23;
+      int w = 178;
+      int h = 21;
+      uint16_t accent = cmdColors[i];
+
+      if (sel) {
+        canvas->fillRect(x, y, w, h, UI_NAVY);
+        canvas->drawRect(x, y, w, h, accent);
+        canvas->fillRect(x, y, 4, h, accent);
+      }
+
+      canvas->setTextSize(2);
+      canvas->setTextColor(sel ? UI_YELLOW : UI_WHITE);
+      canvas->setCursor(x + 8, y + 3);
+      canvas->print(cmdTitles[i]);
+
+      canvas->setTextSize(1);
+      canvas->setTextColor(sel ? accent : UI_LIGHTGREY);
+      int hintW = (int)strlen(cmdHints[i]) * 6;
+      canvas->setCursor(x + w - hintW - 6, y + 7);
+      canvas->print(cmdHints[i]);
+    }
+
+    renderFooter("<-X: Operacao | Y: Comando | X->/BOOT: Executar");
   }
 
   // =========================================================================
@@ -1632,15 +2374,16 @@ private:
   // SUBMENU: CONFIGURAÇÕES (WIFI, BATERIA, JOYSTICK, ID, FIRMWARE, LORA)
   // =========================================================================
   void renderConfigMenuPage(uint8_t roverId, BatteryMonitor &batt, bool joyInvX,
-                            bool joyInvY, bool isApMode, const char *ip,
-                            int16_t lastRssi, bool failsafeActive) {
+                            bool joyInvY, bool motorInverted, bool isApMode,
+                            const char *ip, int16_t lastRssi,
+                            bool failsafeActive) {
     (void)roverId;
     String mac = getDeviceMacAddress();
 
-    const uint8_t total = 6;
+    const uint8_t total = 8;
     const uint8_t visibleRows = 4;
-    const char *titles[6] = {"WIFI", "BATERIA",  "JOYSTICK",
-                             "ID",   "FIRMWARE", "LORA"};
+    const char *titles[8] = {"WIFI",      "BATERIA",  "JOYSTICK", "MOTOR",
+                             "TESTE NAV", "ID",       "FIRMWARE", "LORA"};
 
     if (_configMenuIdx >= total)
       _configMenuIdx = 0;
@@ -1686,10 +2429,19 @@ private:
         canvas->printf("X:%s Y:%s | Testar", joyInvX ? "INV" : "NRM",
                        joyInvY ? "INV" : "NRM");
       } else if (i == 3) {
+        canvas->setTextColor(motorInverted ? UI_ORANGE : UI_GREEN);
+        canvas->setCursor(x + 124, y + 10);
+        canvas->printf("Sentido: %s",
+                       motorInverted ? "INVERTIDO (REV)" : "NORMAL (PADRAO)");
+      } else if (i == 4) {
+        canvas->setTextColor(UI_GREEN);
+        canvas->setCursor(x + 124, y + 10);
+        canvas->print("Wizard RTL/Bussola -> SD");
+      } else if (i == 5) {
         canvas->setTextColor(UI_CYAN);
         canvas->setCursor(x + 124, y + 10);
         canvas->printf("%s", mac.c_str());
-      } else if (i == 4) {
+      } else if (i == 6) {
         canvas->setTextColor(UI_LIGHTGREY);
         canvas->setCursor(x + 124, y + 10);
         canvas->printf("M:%s | C6:%s", ROVER_LAFVIN_VERSION, _c6Version);
@@ -2168,20 +2920,19 @@ private:
       bool isYStep = (_joyCalStep == 1 || _joyCalStep == 2);
       int curVal = isYStep ? rawY : rawX;
       int centerVal = isYStep ? _joyCalCenterY : _joyCalCenterX;
-      int peakVal = (_joyCalStep == 1)
-                        ? _joyCalYUp
-                        : ((_joyCalStep == 2)
-                               ? _joyCalYDown
-                               : ((_joyCalStep == 3) ? _joyCalXLeft
-                                                     : _joyCalXRight));
+      int peakVal =
+          (_joyCalStep == 1)
+              ? _joyCalYUp
+              : ((_joyCalStep == 2)
+                     ? _joyCalYDown
+                     : ((_joyCalStep == 3) ? _joyCalXLeft : _joyCalXRight));
       canvas->setTextColor(UI_LIGHTGREY);
       canvas->setCursor(rx + 8, cardY + 61);
       canvas->printf("Atual: %4d | Centro: %4d", curVal, centerVal);
 
       canvas->setTextColor(UI_CYAN);
       canvas->setCursor(rx + 8, cardY + 73);
-      canvas->printf("Extremo Capturado: %4d (d=%d)", peakVal,
-                     _joyCalPeakDist);
+      canvas->printf("Extremo Capturado: %4d (d=%d)", peakVal, _joyCalPeakDist);
 
       // Barra de curso capturado proporcional ao extremo ADC real (0 ou 4095)
       int barX = rx + 8, barY = cardY + 86, barW = rw - 16, barH = 10;
@@ -3070,6 +3821,407 @@ private:
     renderFooter("<-X / Clique BOOT: Voltar a Configuracoes");
   }
 
+  // =========================================================================
+  // CONFIGURAÇÕES -> TESTE NAV (WIZARD DE BÚSSOLA, GPS WALK & RTL -> SD)
+  // =========================================================================
+  void renderNavWizardPage(GPSTracker &gps, bool sdOk) {
+    int cardY = 26;
+    int cardH = 122;
+
+    if (_navWizStep >= 5) {
+      // Ecrã de Resumo Final e Diagnóstico Guardado no SD
+      canvas->fillRect(4, cardY, 312, cardH, UI_PANEL_BG);
+      canvas->drawRect(4, cardY, 312, cardH,
+                       _navWizOverallPass ? UI_GREEN : UI_ORANGE);
+
+      canvas->fillRect(5, cardY + 1, 310, 15, UI_NAVY);
+      canvas->setTextSize(1);
+      canvas->setTextColor(_navWizOverallPass ? UI_GREEN : UI_YELLOW);
+      canvas->setCursor(10, cardY + 4);
+      canvas->printf("RESUMO TESTE #%u | %s", (unsigned)_navWizRunId,
+                     _navWizSdSaved ? "GUARDADO NO SD: OK"
+                                    : (sdOk ? "ERRO GRAVACAO SD" : "SEM SD (VER WEB)"));
+
+      const NavWizardStepSample &s1 = _navWizSteps[0];
+      const NavWizardStepSample &s2 = _navWizSteps[1];
+      const NavWizardStepSample &s3 = _navWizSteps[2];
+      const NavWizardStepSample &s4 = _navWizSteps[3];
+      const NavWizardStepSample &s5 = _navWizSteps[4];
+
+      // Linha 1: Passo 1 (Norte 0°)
+      canvas->setCursor(10, cardY + 20);
+      canvas->setTextColor(s1.stepPass ? UI_GREEN : UI_ORANGE);
+      canvas->printf("P1 Norte(0): Proa=%.0f (Raw=%.0f Off=%+.0f) [%s]",
+                     s1.fusedHeadingDeg, s1.rawHeadingDeg, s1.offsetDeg,
+                     s1.stepPass ? "OK" : "DESV");
+
+      // Linha 2: Passo 2 (+90° Dir) e Passo 3 (180° Sul)
+      canvas->setCursor(10, cardY + 32);
+      canvas->setTextColor((s2.stepPass && s3.stepPass) ? UI_GREEN : UI_ORANGE);
+      canvas->printf("P2 Dir(+90): dYaw=%+.0f [%s] | P3 Sul(180): dYaw=%+.0f [%s]",
+                     s2.deltaFromStep1Deg, s2.stepPass ? "OK" : "ERR",
+                     s3.deltaFromStep1Deg, s3.stepPass ? "OK" : "ERR");
+
+      // Linha 3: Passo 4 (Caminhada em Frente vs Azimute GPS)
+      canvas->setCursor(10, cardY + 44);
+      canvas->setTextColor(s4.stepPass ? UI_GREEN : UI_YELLOW);
+      canvas->printf("P4 Andar(%.1fm): GPS=%.0f vs Proa=%.0f (Dif=%+.0f)",
+                     s4.distFromHomeM, s4.gpsWalkAzimuthDeg, s4.fusedHeadingDeg,
+                     s4.errorVsExpectedDeg);
+
+      // Linha 4: Passo 5 (Apontar Proa para o HOME e Simulação RTL)
+      canvas->setCursor(10, cardY + 56);
+      canvas->setTextColor(s5.stepPass ? UI_GREEN : UI_RED);
+      canvas->printf("P5 Proa->HOME: Rumo=%.0f vs Proa=%.0f -> Leme=%+d%%",
+                     s5.expectedHeadingDeg, s5.fusedHeadingDeg,
+                     (int)s5.simRudderPct);
+
+      // Caixa de Diagnóstico Automático
+      int dx = 8, dy = cardY + 69, dw = 304, dh = 49;
+      canvas->fillRect(dx, dy, dw, dh, UI_BLACK);
+      canvas->drawRect(dx, dy, dw, dh,
+                       _navWizOverallPass ? UI_GREEN : UI_RED);
+
+      canvas->setTextColor(_navWizOverallPass ? UI_GREEN : UI_RED);
+      canvas->setCursor(dx + 5, dy + 5);
+      canvas->printf("%.48s", _navWizDiagLine1);
+
+      canvas->setTextColor(UI_YELLOW);
+      canvas->setCursor(dx + 5, dy + 19);
+      canvas->printf("%.48s", _navWizDiagLine2);
+
+      canvas->setTextColor(UI_CYAN);
+      canvas->setCursor(dx + 5, dy + 33);
+      canvas->printf("SD: %s | Web: /api/nav_wizard", _navWizSdPath);
+
+      renderFooter("BOOT / <-X: Sair Config  |  Y Cima: Repetir Wizard");
+      return;
+    }
+
+    // =====================================================================
+    // PASSOS ATIVOS 1..5 (_navWizStep = 0..4)
+    // =====================================================================
+    float curFused = gps.getHeading();
+    float curRaw = gps.getCompassRawHeading();
+    float curOff = gps.getCompassOffset();
+    bool cmpOk = gps.hasCompass();
+    bool gpsFix = gps.hasFix();
+    uint8_t sats = gps.getSatellites();
+
+    double refHomeLat =
+        (_navWizStep == 0 || !_navWizSteps[0].recorded) ? gps.getLatitude()
+                                                        : _navWizSteps[0].lat;
+    double refHomeLng =
+        (_navWizStep == 0 || !_navWizSteps[0].recorded) ? gps.getLongitude()
+                                                        : _navWizSteps[0].lng;
+    double curLat = gps.getLatitude();
+    double curLng = gps.getLongitude();
+
+    double liveDistM = 0.0;
+    float liveWalkAz = 0.0f;
+    float liveCourseToHome = 0.0f;
+    if (_navWizStep > 0 && (refHomeLat != 0.0 || refHomeLng != 0.0) &&
+        (curLat != 0.0 || curLng != 0.0)) {
+      liveDistM =
+          TinyGPSPlus::distanceBetween(refHomeLat, refHomeLng, curLat, curLng);
+      if (liveDistM >= 0.2) {
+        liveWalkAz = (float)TinyGPSPlus::courseTo(refHomeLat, refHomeLng,
+                                                  curLat, curLng);
+        liveCourseToHome = (float)TinyGPSPlus::courseTo(curLat, curLng,
+                                                        refHomeLat, refHomeLng);
+      }
+    }
+
+    float targetDeg = 0.0f;
+    if (_navWizStep == 0) {
+      targetDeg = 0.0f;
+    } else if (_navWizStep == 1) {
+      targetDeg = wrapNavAngle360(_navWizSteps[0].fusedHeadingDeg + 90.0f);
+    } else if (_navWizStep == 2) {
+      targetDeg = wrapNavAngle360(_navWizSteps[0].fusedHeadingDeg + 180.0f);
+    } else if (_navWizStep == 3) {
+      targetDeg = (liveDistM >= 1.5) ? liveWalkAz : curFused;
+    } else {
+      targetDeg =
+          (liveDistM >= 1.5)
+              ? liveCourseToHome
+              : wrapNavAngle360(_navWizSteps[3].fusedHeadingDeg + 180.0f);
+    }
+
+    float liveErr = wrapNavAngle180(curFused - targetDeg);
+    float liveDeltaP1 =
+        (_navWizStep == 0)
+            ? 0.0f
+            : wrapNavAngle180(curFused - _navWizSteps[0].fusedHeadingDeg);
+
+    // --- Painel Esquerdo: Rosa dos Ventos + Aguia Alvo vs Proa (x=4..116) ---
+    int lw = 112;
+    canvas->fillRect(4, cardY, lw, cardH, UI_PANEL_BG);
+    canvas->drawRect(4, cardY, lw, cardH, UI_CARD_BG);
+
+    int cx = 60, cy = cardY + 50, r = 34;
+    canvas->drawCircle(cx, cy, r, UI_DARKGREY);
+    canvas->drawFastHLine(cx - r, cy, r * 2, UI_CARD_BG);
+    canvas->drawFastVLine(cx, cy - r, r * 2, UI_CARD_BG);
+
+    canvas->setTextSize(1);
+    canvas->setTextColor(UI_YELLOW);
+    canvas->setCursor(cx - 2, cy - r - 9);
+    canvas->print("N");
+    canvas->setTextColor(UI_LIGHTGREY);
+    canvas->setCursor(cx + r + 3, cy - 3);
+    canvas->print("E");
+    canvas->setCursor(cx - 2, cy + r + 2);
+    canvas->print("S");
+    canvas->setCursor(cx - r - 8, cy - 3);
+    canvas->print("O");
+
+    // Vetor Alvo (Instrução) em AMARELO
+    float tRad = (targetDeg - 90.0f) * DEG_TO_RAD;
+    int tx = cx + (int)(cosf(tRad) * (r - 4));
+    int ty = cy + (int)(sinf(tRad) * (r - 4));
+    canvas->drawLine(cx, cy, tx, ty, UI_YELLOW);
+    canvas->fillCircle(tx, ty, 3, UI_YELLOW);
+
+    // Vetor Proa Atual da Bússola em CIANO/VERDE/VERMELHO
+    float hRad = (curFused - 90.0f) * DEG_TO_RAD;
+    int hx = cx + (int)(cosf(hRad) * (r - 7));
+    int hy = cy + (int)(sinf(hRad) * (r - 7));
+    uint16_t needleCol =
+        (fabsf(liveErr) <= 30.0f)
+            ? UI_GREEN
+            : ((fabsf(liveErr) >= 135.0f) ? UI_RED : UI_CYAN);
+    canvas->drawLine(cx, cy, hx, hy, needleCol);
+    canvas->fillCircle(hx, hy, 4, needleCol);
+    canvas->fillCircle(cx, cy, 2, UI_WHITE);
+
+    // Indicador dos 5 passos na base do painel esquerdo
+    for (uint8_t s = 0; s < 5; ++s) {
+      int bx = 9 + s * 20;
+      int by = cardY + 104;
+      uint16_t col = UI_DARKGREY;
+      if (s < _navWizStep) {
+        col = _navWizSteps[s].stepPass ? UI_GREEN : UI_ORANGE;
+      } else if (s == _navWizStep) {
+        col = UI_YELLOW;
+      }
+      canvas->fillRect(bx, by, 17, 12, col);
+      canvas->setTextSize(1);
+      canvas->setTextColor(s <= _navWizStep ? UI_BLACK : UI_WHITE);
+      canvas->setCursor(bx + 6, by + 2);
+      canvas->printf("%u", (unsigned)(s + 1));
+    }
+
+    // --- Painel Direito: Instruções e Comparação em Tempo Real (x=120..316) ---
+    int rx = 120;
+    int rw = 196;
+    canvas->fillRect(rx, cardY, rw, cardH, UI_PANEL_BG);
+    canvas->drawRect(rx, cardY, rw, cardH, UI_CARD_BG);
+
+    static const char *const titles[5] = {
+        "PASSO 1/5: NORTE & HOME", "PASSO 2/5: RODAR 90 DIR",
+        "PASSO 3/5: RODAR 180 SUL", "PASSO 4/5: ANDAR EM FRENTE",
+        "PASSO 5/5: APONTAR P/ HOME"};
+
+    static const char *const instr1[5] = {
+        "1. Fique no ponto HOME", "No mesmo local, RODE 90",
+        "No mesmo local, RODE 180", "Caminhe 6-15m EM FRENTE c/",
+        "No mesmo local, VIRE 180"};
+
+    static const char *const instr2[5] = {
+        "PROA -> NORTE (0 deg)", "P/ A DIREITA (ESTE = 90)",
+        "PROA -> SUL (Oposto P1)", "PROA p/ a frente e PARE",
+        "PROA DIRETA P/ O HOME!"};
+
+    canvas->fillRect(rx + 1, cardY + 1, rw - 2, 15, UI_NAVY);
+    canvas->setTextSize(1);
+    canvas->setTextColor(UI_CYAN);
+    canvas->setCursor(rx + 6, cardY + 4);
+    canvas->print(titles[_navWizStep % 5]);
+
+    canvas->setTextColor(UI_WHITE);
+    canvas->setCursor(rx + 6, cardY + 19);
+    canvas->print(instr1[_navWizStep % 5]);
+
+    canvas->setTextColor(UI_YELLOW);
+    canvas->setCursor(rx + 6, cardY + 30);
+    canvas->print(instr2[_navWizStep % 5]);
+
+    canvas->drawFastHLine(rx + 4, cardY + 42, rw - 8, UI_CARD_BG);
+
+    // Linha A: Leitura BNO055 Fused, Raw e Offset
+    canvas->setCursor(rx + 6, cardY + 46);
+    if (cmpOk) {
+      canvas->setTextColor(UI_CYAN);
+      canvas->printf("Proa:%3.0f (Raw:%3.0f Off:%+.0f)", curFused, curRaw,
+                     curOff);
+    } else {
+      canvas->setTextColor(UI_RED);
+      canvas->printf("BNO055 OFF! COG:%3.0f deg", curFused);
+    }
+
+    // Linha B & C: Comparação específica da instrução do passo
+    if (_navWizStep == 0) {
+      canvas->setCursor(rx + 6, cardY + 59);
+      canvas->setTextColor(fabsf(liveErr) <= 30.0f ? UI_GREEN : UI_ORANGE);
+      canvas->printf("Alvo: 0(N) | Erro: %+.0f deg", liveErr);
+
+      canvas->setCursor(rx + 6, cardY + 72);
+      canvas->setTextColor(gpsFix ? UI_GREEN : UI_YELLOW);
+      canvas->printf("GPS: %s (%u sats) CalM:%u/3",
+                     gpsFix ? "FIX 3D" : "SEM FIX", (unsigned)sats,
+                     (unsigned)gps.getCompassCalMag());
+
+      canvas->setCursor(rx + 6, cardY + 85);
+      canvas->setTextColor(UI_LIGHTGREY);
+      canvas->printf("Roll:%+.1f Pitch:%+.1f", gps.getRoll(), gps.getPitch());
+    } else if (_navWizStep == 1) {
+      canvas->setCursor(rx + 6, cardY + 59);
+      canvas->setTextColor(UI_LIGHTGREY);
+      canvas->printf("P1:%.0f -> Atual:%.0f deg",
+                     _navWizSteps[0].fusedHeadingDeg, curFused);
+
+      bool ok90 = (liveDeltaP1 >= 55.0f && liveDeltaP1 <= 125.0f);
+      bool inv90 = (liveDeltaP1 <= -50.0f && liveDeltaP1 >= -130.0f);
+      canvas->setCursor(rx + 6, cardY + 72);
+      canvas->setTextColor(ok90 ? UI_GREEN : (inv90 ? UI_RED : UI_YELLOW));
+      canvas->printf("Rotacao dYaw: %+.0f (Alvo:+90)", liveDeltaP1);
+
+      canvas->setCursor(rx + 6, cardY + 85);
+      canvas->setTextColor(_navWizSteps[0].stepPass ? UI_GREEN : UI_ORANGE);
+      canvas->printf("P1: %.26s", _navWizSteps[0].verdict);
+    } else if (_navWizStep == 2) {
+      canvas->setCursor(rx + 6, cardY + 59);
+      canvas->setTextColor(UI_LIGHTGREY);
+      canvas->printf("P1:%.0f -> Atual:%.0f deg",
+                     _navWizSteps[0].fusedHeadingDeg, curFused);
+
+      float err180 = wrapNavAngle180(liveDeltaP1 - 180.0f);
+      bool ok180 = (fabsf(err180) <= 35.0f);
+      canvas->setCursor(rx + 6, cardY + 72);
+      canvas->setTextColor(ok180 ? UI_GREEN : UI_YELLOW);
+      canvas->printf("Meia-volta dYaw: %+.0f (180)", liveDeltaP1);
+
+      canvas->setCursor(rx + 6, cardY + 85);
+      canvas->setTextColor(_navWizSteps[1].stepPass ? UI_GREEN : UI_ORANGE);
+      canvas->printf("P2: %.26s", _navWizSteps[1].verdict);
+    } else if (_navWizStep == 3) {
+      canvas->setCursor(rx + 6, cardY + 59);
+      canvas->setTextColor(liveDistM >= 4.0 ? UI_GREEN : UI_YELLOW);
+      canvas->printf("Dist HOME: %.1fm (Pts:%u)", liveDistM,
+                     (unsigned)_navWizTrackCount);
+
+      canvas->setCursor(rx + 6, cardY + 72);
+      canvas->setTextColor(UI_CYAN);
+      canvas->printf("Azimute GPS:%.0f vs Proa:%.0f", liveWalkAz, curFused);
+
+      canvas->setCursor(rx + 6, cardY + 85);
+      canvas->setTextColor(fabsf(liveErr) <= 35.0f
+                               ? UI_GREEN
+                               : (fabsf(liveErr) >= 135.0f ? UI_RED : UI_ORANGE));
+      canvas->printf("Dif Proa-GPS: %+.0f deg", liveErr);
+    } else if (_navWizStep == 4) {
+      float rtlErr = wrapNavAngle180(targetDeg - curFused);
+      int simRud = constrain((int)(rtlErr * 1.8f), -100, 100);
+      int simThr = (fabsf(rtlErr) > 60.0f) ? 25 : 50;
+
+      canvas->setCursor(rx + 6, cardY + 59);
+      canvas->setTextColor(UI_YELLOW);
+      canvas->printf("Rumo HOME:%.0f | Proa:%.0f", targetDeg, curFused);
+
+      canvas->setCursor(rx + 6, cardY + 72);
+      canvas->setTextColor(fabsf(rtlErr) <= 35.0f
+                               ? UI_GREEN
+                               : (fabsf(rtlErr) >= 135.0f ? UI_RED : UI_ORANGE));
+      canvas->printf("Erro RTL:%+.0f -> Leme:%+d%%", rtlErr, simRud);
+
+      canvas->setCursor(rx + 6, cardY + 85);
+      canvas->setTextColor(UI_LIGHTGREY);
+      canvas->printf("Sim RTL: Mot=%d%% Dist=%.1fm", simThr, liveDistM);
+    }
+
+    // Botão de ação na base do painel direito
+    canvas->fillRect(rx + 6, cardY + 99, rw - 12, 18, UI_NAVY);
+    canvas->drawRect(rx + 6, cardY + 99, rw - 12, 18, UI_CYAN);
+    canvas->setTextColor(UI_GREEN);
+    canvas->setCursor(rx + 12, cardY + 104);
+    if (_navWizStep < 4) {
+      canvas->print("BOOT / X->: GRAVAR PASSO");
+    } else {
+      canvas->print("BOOT / X->: CONCLUIR & SD");
+    }
+
+    renderFooter("BOOT/X->: Confirmar Acao | <-X/MODE: Sair");
+  }
+
+  // =========================================================================
+  // CONFIGURAÇÕES -> MOTOR (INVERTER SENTIDO ESC + TESTE DE AVANÇO)
+  // =========================================================================
+  void renderMotorConfigPage(bool motorInverted) {
+    // Card Superior: Estado Atual do Sentido do Motor ESC (x=6, y=26, w=308, h=42)
+    canvas->fillRect(6, 26, 308, 42, UI_PANEL_BG);
+    canvas->drawRect(6, 26, 308, 42, motorInverted ? UI_ORANGE : UI_CARD_BG);
+    canvas->fillRect(6, 26, 4, 42, motorInverted ? UI_ORANGE : UI_GREEN);
+
+    canvas->setTextSize(1);
+    canvas->setTextColor(UI_LIGHTGREY);
+    canvas->setCursor(16, 32);
+    canvas->print("SENTIDO DE PROPULSAO DO MOTOR ESC:");
+
+    canvas->setTextSize(2);
+    canvas->setTextColor(motorInverted ? UI_ORANGE : UI_GREEN);
+    canvas->setCursor(16, 45);
+    canvas->print(motorInverted ? "INVERTIDO (REV)" : "NORMAL (PADRAO)");
+
+    canvas->setTextSize(1);
+    canvas->setTextColor(UI_CYAN);
+    canvas->setCursor(204, 49);
+    canvas->print(motorInverted ? "+100%->1000us" : "+100%->2000us");
+
+    // Dois itens selecionáveis (Sentido Normal/Invertido e Pulso Teste Frente)
+    for (uint8_t i = 0; i < 2; ++i) {
+      bool sel = (_motorMenuIdx == i);
+      int x = 6;
+      int y = 73 + i * 36;
+      int w = 308;
+      int h = 32;
+
+      canvas->fillRect(x, y, w, h, sel ? UI_NAVY : UI_PANEL_BG);
+      canvas->drawRect(x, y, w, h, sel ? UI_CYAN : UI_CARD_BG);
+      if (sel) {
+        canvas->fillRect(x, y, 4, h, UI_CYAN);
+      }
+
+      if (i == 0) {
+        canvas->setTextSize(2);
+        canvas->setTextColor(sel ? UI_YELLOW : UI_WHITE);
+        canvas->setCursor(x + 12, y + 8);
+        canvas->print("SENTIDO:");
+
+        canvas->setTextColor(motorInverted ? UI_ORANGE : UI_GREEN);
+        canvas->setCursor(x + 114, y + 8);
+        canvas->print(motorInverted ? "INVERTIDO" : "NORMAL");
+
+        canvas->setTextSize(1);
+        canvas->setTextColor(sel ? UI_CYAN : UI_LIGHTGREY);
+        canvas->setCursor(x + 236, y + 12);
+        canvas->print("[ALTERNAR]");
+      } else {
+        canvas->setTextSize(2);
+        canvas->setTextColor(sel ? UI_YELLOW : UI_WHITE);
+        canvas->setCursor(x + 12, y + 8);
+        canvas->print("TESTAR FRENTE");
+
+        canvas->setTextSize(1);
+        canvas->setTextColor(sel ? UI_GREEN : UI_CYAN);
+        canvas->setCursor(x + 184, y + 12);
+        canvas->print("[+25% POR 1 SEG]");
+      }
+    }
+
+    renderFooter("<-X: Config | Y: Mover | BOOT/X->: Aplicar");
+  }
+
   ST7789Display display;
   Arduino_Canvas *canvas;
   RoverScreenPage currentPage;
@@ -3084,6 +4236,7 @@ private:
 
   uint8_t _homeMenuIdx;
   uint8_t _opMenuIdx;
+  uint8_t _anchorMenuIdx;
   uint8_t _configMenuIdx;
   uint8_t _wifiListIdx;
   uint8_t _wifiScanIdx;
@@ -3119,4 +4272,20 @@ private:
   uint32_t _loraLastRxSecAgo;
   float _loraSnr;
   bool _loraHasContact;
+  uint8_t _motorMenuIdx;
+
+  uint8_t _navWizStep;
+  uint32_t _navWizStartMs;
+  uint32_t _navWizLastSampleMs;
+  NavWizardStepSample _navWizSteps[5];
+  NavWizardTrackPoint _navWizTrack[NAV_WIZ_MAX_TRACK_PTS];
+  uint8_t _navWizTrackCount;
+  uint16_t _navWizRunId;
+  bool _navWizSdSaved;
+  float _navWizRecommendedOffset;
+  bool _navWizOverallPass;
+  char _navWizDiagLine1[56];
+  char _navWizDiagLine2[56];
+  char _navWizSdPath[32];
+  String _navWizLastReport;
 };

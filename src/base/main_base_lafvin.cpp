@@ -629,7 +629,8 @@ void handleInputsAndMenu(uint32_t now, bool &forceDisplay) {
           fleet.queueCommand(rv.id, ++localCmdId, ACTION_SET_HOME);
         }
         display.showFeedback("SET ALL RTL ENVIADO!", 1500);
-        printLog("[UI] ★ Missao -> SET ALL RTL confirmado e enviado (%u rovers + broadcast)\n",
+        printLog("[UI] ★ Missao -> SET ALL RTL confirmado e enviado (%u rovers "
+                 "+ broadcast)\n",
                  (unsigned)fleet.getRovers().size());
       } else {
         printLog("[UI] SET ALL RTL: Cancelar -> Menu Missao\n");
@@ -699,7 +700,7 @@ void handleInputsAndMenu(uint32_t now, bool &forceDisplay) {
 
   case BASE_PAGE_ROVER_MENU:
     if (navY != 0) {
-      display.setRoverMenuIdx((display.getRoverMenuIdx() + 4 + navY) % 4);
+      display.setRoverMenuIdx((display.getRoverMenuIdx() + 5 + navY) % 5);
       forceDisplay = true;
     }
     if (navX == -1 || clickBack) {
@@ -718,6 +719,10 @@ void handleInputsAndMenu(uint32_t now, bool &forceDisplay) {
         display.setPage(BASE_PAGE_ROVER_CONTROL);
         printLog("[UI] Rover Menu -> Comando\n");
       } else if (display.getRoverMenuIdx() == 2) {
+        display.setRoverAnchorIdx(0);
+        display.setPage(BASE_PAGE_ROVER_ANCHOR);
+        printLog("[UI] Rover Menu -> Ancora\n");
+      } else if (display.getRoverMenuIdx() == 3) {
         joystick.disarmNav();
         joystick.wasShortClicked();
         joystick.wasLongClicked();
@@ -731,6 +736,54 @@ void handleInputsAndMenu(uint32_t now, bool &forceDisplay) {
         display.setRoverRemoveIdx(0);
         display.setPage(BASE_PAGE_ROVER_REMOVE);
         printLog("[UI] Rover Menu -> Confirmar Remocao\n");
+      }
+      forceDisplay = true;
+    }
+    break;
+
+  case BASE_PAGE_ROVER_ANCHOR:
+    if (navY != 0) {
+      display.setRoverAnchorIdx((display.getRoverAnchorIdx() + 5 + navY) % 5);
+      forceDisplay = true;
+    }
+    if (navX == -1 || clickBack) {
+      display.setPage(BASE_PAGE_ROVER_MENU);
+      forceDisplay = true;
+      printLog("[UI] Ancora -> Rover Menu\n");
+    } else if (navX == 1 || clickEnter) {
+      uint8_t rId = fleet.getSelectedRoverId();
+      if (rId == 0 && !fleet.getRovers().empty()) {
+        uint8_t idx = display.getRoverListIdx();
+        rId = (idx < fleet.getRovers().size()) ? fleet.getRovers()[idx].id
+                                               : fleet.getRovers()[0].id;
+      }
+      uint8_t aIdx = display.getRoverAnchorIdx();
+      if (rId != 0) {
+        if (aIdx == 0) {
+          fleet.queueCommand(rId, ++localCmdId, ACTION_DROP_ANCHOR);
+          display.showFeedback("LANCAR ANCORA ENVIADO!", 1500);
+          printLog("[UI] ★ Ancora -> LANCAR (auto-lock) enviado ao Rover #%u\n",
+                   rId);
+        } else if (aIdx == 1) {
+          fleet.queueCommand(rId, ++localCmdId, ACTION_RELEASE_ANCHOR);
+          display.showFeedback("LIBERTAR ENVIADO!", 1500);
+          printLog(
+              "[UI] ★ Ancora -> LIBERTAR (sem sensor) enviado ao Rover #%u\n",
+              rId);
+        } else if (aIdx == 2) {
+          fleet.queueCommand(rId, ++localCmdId, ACTION_ENGAGE_RACK);
+          display.showFeedback("TRANCAR ENVIADO!", 1500);
+          printLog("[UI] ★ Ancora -> TRANCAR enviado ao Rover #%u\n", rId);
+        } else if (aIdx == 3) {
+          fleet.queueCommand(rId, ++localCmdId, ACTION_RETRIEVE_ANCHOR);
+          display.showFeedback("RECOLHER ENVIADO!", 1500);
+          printLog("[UI] ★ Ancora -> RECOLHER enviado ao Rover #%u\n", rId);
+        } else {
+          fleet.queueCommand(rId, ++localCmdId, ACTION_STOP_ANCHOR);
+          display.showFeedback("PARAR GUINCHO ENVIADO!", 1500);
+          printLog("[UI] ★ Ancora -> PARAR GUINCHO enviado ao Rover #%u\n",
+                   rId);
+        }
       }
       forceDisplay = true;
     }

@@ -65,7 +65,9 @@ enum BaseScreenPage : uint8_t {
       19, // Rover Selecionado -> SET RTL (Ecrã de Confirmação)
   BASE_PAGE_ROVER_RTL_CONFIRM =
       20, // Rover Selecionado -> Modo -> Return Home (Ecrã de Confirmação)
-  BASE_PAGE_COUNT = 21,
+  BASE_PAGE_ROVER_ANCHOR = 21, // Rover Selecionado -> Âncora (Lançar c/ sensor,
+                               // Libertar, Trancar, Recolher, Parar)
+  BASE_PAGE_COUNT = 22,
 
   // Aliases de compatibilidade
   BASE_PAGE_STATION = BASE_PAGE_CONFIG_ID,
@@ -89,11 +91,12 @@ public:
         _bootLogCount(0), _bootProgress(0), _brightness(85),
         _joyScreenEnabled(true), _otaActive(false), _homeMenuIdx(0),
         _missionMenuIdx(0), _stateCursorIdx(0), _roverListIdx(0),
-        _roverMenuIdx(0), _roverModeIdx(0), _roverRemoveIdx(0),
-        _rtlConfirmIdx(0), _configMenuIdx(0), _wifiListIdx(0), _wifiScanIdx(0),
-        _wifiKbRow(0), _wifiKbCol(0), _wifiKbMode(0), _wifiTextCursorPos(0),
-        _wifiConfig(nullptr), _controlExitPromptActive(false),
-        _controlExitCursorIdx(0), _bootHoldPct(0), _feedbackUntilMs(0) {
+        _roverMenuIdx(0), _roverModeIdx(0), _roverAnchorIdx(0),
+        _roverRemoveIdx(0), _rtlConfirmIdx(0), _configMenuIdx(0),
+        _wifiListIdx(0), _wifiScanIdx(0), _wifiKbRow(0), _wifiKbCol(0),
+        _wifiKbMode(0), _wifiTextCursorPos(0), _wifiConfig(nullptr),
+        _controlExitPromptActive(false), _controlExitCursorIdx(0),
+        _bootHoldPct(0), _feedbackUntilMs(0) {
     strncpy(_c6Version, "Desconhecido", sizeof(_c6Version));
     _feedbackMsg[0] = '\0';
     _wifiTargetSsid[0] = '\0';
@@ -308,7 +311,13 @@ public:
 
   uint8_t getRoverMenuIdx() const { return _roverMenuIdx; }
   void setRoverMenuIdx(uint8_t idx) {
-    _roverMenuIdx = idx % 4;
+    _roverMenuIdx = idx % 5;
+    lastRender = 0;
+  }
+
+  uint8_t getRoverAnchorIdx() const { return _roverAnchorIdx; }
+  void setRoverAnchorIdx(uint8_t idx) {
+    _roverAnchorIdx = idx % 5;
     lastRender = 0;
   }
 
@@ -605,6 +614,9 @@ public:
       case BASE_PAGE_ROVER_MODE:
         renderRoverModePage(fleet, navMode);
         break;
+      case BASE_PAGE_ROVER_ANCHOR:
+        renderRoverAnchorPage(fleet);
+        break;
       case BASE_PAGE_ROVER_REMOVE:
         renderRoverRemovePage(fleet);
         break;
@@ -890,6 +902,11 @@ private:
       canvas->printf("%s > ", rCode);
       canvas->setTextColor(UI_YELLOW);
       canvas->print("MODO");
+      break;
+    case BASE_PAGE_ROVER_ANCHOR:
+      canvas->printf("%s > ", rCode);
+      canvas->setTextColor(UI_YELLOW);
+      canvas->print("ANCORA");
       break;
     case BASE_PAGE_ROVER_REMOVE:
       canvas->printf("%s > ", rCode);
@@ -1368,20 +1385,32 @@ private:
       canvas->print("GPS: Sem Fix");
     }
 
-    // --- Painel Direito: Opções de 1 linha (Modo, Comando, SET RTL, Remover)
-    // (x=150, w=166, h=122) ---
+    // --- Painel Direito: Opções de 1 linha (Modo, Comando, Ancora, SET RTL,
+    // Remover) (x=150, w=166, h=122) ---
     canvas->fillRect(150, cardY, 166, cardH, UI_PANEL_BG);
     canvas->drawRect(150, cardY, 166, cardH, UI_CARD_BG);
 
-    const char *menuTitles[4] = {"Modo", "Comando", "SET RTL", "Remover"};
-    for (uint8_t i = 0; i < 4; ++i) {
+    const uint8_t total = 5;
+    const uint8_t visibleRows = 4;
+    const char *menuTitles[5] = {"Modo", "Comando", "Ancora", "SET RTL",
+                                 "Remover"};
+    if (_roverMenuIdx >= total)
+      _roverMenuIdx = 0;
+    uint8_t startIdx = 0;
+    if (_roverMenuIdx >= visibleRows) {
+      startIdx = _roverMenuIdx - (visibleRows - 1);
+    }
+
+    int w = 150;
+    for (uint8_t row = 0; row < visibleRows && (startIdx + row) < total;
+         ++row) {
+      uint8_t i = startIdx + row;
       bool sel = (_roverMenuIdx == i);
       int x = 154;
-      int y = 29 + i * 29;
-      int w = 158;
+      int y = 29 + row * 29;
       int h = 26;
       uint16_t accentCol =
-          (i == 3) ? UI_RED : ((i == 2 && r->home_set) ? UI_GREEN : UI_CYAN);
+          (i == 4) ? UI_RED : ((i == 3 && r->home_set) ? UI_GREEN : UI_CYAN);
 
       if (sel) {
         canvas->fillRect(x, y, w, h, UI_NAVY);
@@ -1392,25 +1421,140 @@ private:
       canvas->setTextSize(2);
       canvas->setTextColor(
           sel ? UI_YELLOW
-              : ((i == 3) ? UI_RED
-                          : ((i == 2 && r->home_set) ? UI_GREEN : UI_WHITE)));
-      canvas->setCursor(x + 10, y + 5);
+              : ((i == 4) ? UI_RED
+                          : ((i == 3 && r->home_set) ? UI_GREEN : UI_WHITE)));
+      canvas->setCursor(x + 8, y + 5);
       canvas->print(menuTitles[i]);
 
-      if (i == 2 && r->home_set) {
+      if (i == 3 && r->home_set) {
         canvas->setTextSize(1);
         canvas->setTextColor(UI_GREEN);
-        canvas->setCursor(x + w - 34, y + 9);
+        canvas->setCursor(x + w - 32, y + 9);
         canvas->print("OK");
       }
 
       canvas->setTextSize(2);
       canvas->setTextColor(sel ? accentCol : UI_DARKGREY);
-      canvas->setCursor(x + w - 16, y + 5);
+      canvas->setCursor(x + w - 15, y + 5);
       canvas->print(">");
     }
 
+    // Barra de scroll vertical no painel direito (5 itens, 4 visíveis)
+    int sbX = 307, sbY = 29, sbW = 6, sbH = 113;
+    canvas->drawRect(sbX, sbY, sbW, sbH, UI_CARD_BG);
+    int thumbH = max(16, sbH * visibleRows / total);
+    int thumbY = sbY + (sbH - thumbH) * _roverMenuIdx / max(1, (int)total - 1);
+    canvas->fillRect(sbX + 1, thumbY, sbW - 2, thumbH, UI_CYAN);
+
     renderFooter("<-X: Rovers | Y: Opcao | X->: Entrar");
+  }
+
+  // =========================================================================
+  // ROVER SELECIONADO -> ÂNCORA (Lançar c/ Sensor, Libertar, Trancar, Recolher,
+  // Parar)
+  // =========================================================================
+  void renderRoverAnchorPage(FleetManager &fleet) {
+    FleetRover *r = fleet.getSelectedRover();
+    if (!r) {
+      renderRoverListPage(fleet);
+      return;
+    }
+
+    int cardY = 26;
+    int cardH = 122;
+
+    // --- Painel Esquerdo: Estado do Rover & Âncora (x=4, w=122, h=122) ---
+    canvas->fillRect(4, cardY, 122, cardH, UI_PANEL_BG);
+    canvas->drawRect(4, cardY, 122, cardH, UI_CARD_BG);
+
+    canvas->setTextSize(2);
+    canvas->setTextColor(UI_YELLOW);
+    canvas->setCursor(10, cardY + 6);
+    canvas->printf("%.8s", r->code);
+    canvas->fillCircle(114, cardY + 12, 4, r->is_online ? UI_GREEN : UI_RED);
+
+    canvas->setTextSize(1);
+    canvas->setTextColor(r->is_online ? UI_GREEN : UI_RED);
+    canvas->setCursor(10, cardY + 25);
+    if (r->is_online) {
+      canvas->printf("ONLINE (%ddBm)", r->rssi);
+    } else {
+      canvas->print("OFFLINE");
+    }
+
+    canvas->drawFastHLine(8, cardY + 36, 114, UI_CARD_BG);
+
+    canvas->setTextColor(UI_LIGHTGREY);
+    canvas->setCursor(10, cardY + 41);
+    canvas->print("ESTADO ANCORA:");
+
+    uint8_t ancSt = r->anchor_status;
+    uint16_t ancCol = UI_CYAN;
+    if (ancSt == ANCHOR_DEPLOYING)
+      ancCol = UI_ORANGE;
+    else if (ancSt == ANCHOR_LOWERED)
+      ancCol = UI_YELLOW;
+    else if (ancSt == ANCHOR_RETRIEVING)
+      ancCol = UI_MAGENTA;
+    else if (ancSt == ANCHOR_STOWED)
+      ancCol = UI_GREEN;
+
+    canvas->setTextSize(2);
+    canvas->setTextColor(ancCol);
+    canvas->setCursor(10, cardY + 52);
+    canvas->printf("%.9s", get_anchor_status_str(ancSt));
+
+    canvas->setTextSize(1);
+    canvas->setTextColor(UI_LIGHTGREY);
+    canvas->setCursor(10, cardY + 74);
+    canvas->print("PROFUNDIDADE:");
+    canvas->setTextSize(2);
+    canvas->setTextColor(UI_WHITE);
+    canvas->setCursor(10, cardY + 85);
+    canvas->printf("%.2f m", r->anchor_depth_m);
+
+    canvas->setTextSize(1);
+    canvas->setTextColor(UI_LIGHTGREY);
+    canvas->setCursor(10, cardY + 106);
+    canvas->printf("MOD: %.13s", get_motor_status_str(r->motor_status));
+
+    // --- Painel Direito: 5 Comandos da Âncora (x=130, w=186, h=122) ---
+    canvas->fillRect(130, cardY, 186, cardH, UI_PANEL_BG);
+    canvas->drawRect(130, cardY, 186, cardH, UI_CARD_BG);
+
+    const char *cmdTitles[5] = {"1.LANCAR", "2.LIBERTAR", "3.TRANCAR",
+                                "4.RECOLHER", "5.PARAR"};
+    const char *cmdHints[5] = {"SENSOR", "LIVRE", "LOCK", "SUBIR", "STOP"};
+    const uint16_t cmdColors[5] = {UI_CYAN, UI_ORANGE, UI_GREEN, UI_YELLOW,
+                                   UI_RED};
+
+    for (uint8_t i = 0; i < 5; ++i) {
+      bool sel = (_roverAnchorIdx == i);
+      int x = 134;
+      int y = 29 + i * 23;
+      int w = 178;
+      int h = 21;
+      uint16_t accent = cmdColors[i];
+
+      if (sel) {
+        canvas->fillRect(x, y, w, h, UI_NAVY);
+        canvas->drawRect(x, y, w, h, accent);
+        canvas->fillRect(x, y, 4, h, accent);
+      }
+
+      canvas->setTextSize(2);
+      canvas->setTextColor(sel ? UI_YELLOW : UI_WHITE);
+      canvas->setCursor(x + 8, y + 3);
+      canvas->print(cmdTitles[i]);
+
+      canvas->setTextSize(1);
+      canvas->setTextColor(sel ? accent : UI_LIGHTGREY);
+      int hintW = (int)strlen(cmdHints[i]) * 6;
+      canvas->setCursor(x + w - hintW - 6, y + 7);
+      canvas->print(cmdHints[i]);
+    }
+
+    renderFooter("<-X: Voltar | Y: Comando | X->/BOOT: Enviar");
   }
 
   // =========================================================================
@@ -3006,6 +3150,7 @@ private:
   uint8_t _roverListIdx;
   uint8_t _roverMenuIdx;
   uint8_t _roverModeIdx;
+  uint8_t _roverAnchorIdx;
   uint8_t _roverRemoveIdx;
   uint8_t _rtlConfirmIdx;
   uint8_t _configMenuIdx;
