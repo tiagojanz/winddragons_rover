@@ -75,7 +75,9 @@ enum RoverScreenPage : uint8_t {
       20, // Configurações -> Teste Nav (Wizard 5 passos Bússola/GPS/RTL -> SD)
   ROVER_PAGE_CONFIG_MOTOR =
       21, // Configurações -> Motor (Sentido Normal / Invertido + Teste Pulso)
-  ROVER_PAGE_COUNT = 22,
+  ROVER_PAGE_CONFIG_COMPASS =
+      22, // Configurações -> Calibrar Norte (Alinhar BNO055 a 0° c/ Garmin)
+  ROVER_PAGE_COUNT = 23,
 
   // Aliases de compatibilidade
   ROVER_PAGE_NETWORK = ROVER_PAGE_CONFIG_WIFI,
@@ -152,10 +154,10 @@ public:
         _joyCalYDown(3200), _joyCalPeakDist(0), _bootHoldPct(0),
         _wifiConfig(nullptr), _feedbackUntilMs(0), _loraTxTelems(0),
         _loraRxPolls(0), _loraLastRxSecAgo(999999), _loraSnr(0.0f),
-        _loraHasContact(false), _motorMenuIdx(0), _navWizStep(0),
-        _navWizStartMs(0), _navWizLastSampleMs(0), _navWizTrackCount(0),
-        _navWizRunId(0), _navWizSdSaved(false), _navWizRecommendedOffset(0.0f),
-        _navWizOverallPass(false) {
+        _loraHasContact(false), _motorMenuIdx(0), _compassMenuIdx(0),
+        _navWizStep(0), _navWizStartMs(0), _navWizLastSampleMs(0),
+        _navWizTrackCount(0), _navWizRunId(0), _navWizSdSaved(false),
+        _navWizRecommendedOffset(0.0f), _navWizOverallPass(false) {
     strncpy(_c6Version, "--", sizeof(_c6Version));
     strncpy(_battMahBuf, "3000", sizeof(_battMahBuf));
     _wifiTargetSsid[0] = '\0';
@@ -363,13 +365,19 @@ public:
 
   uint8_t getConfigMenuIdx() const { return _configMenuIdx; }
   void setConfigMenuIdx(uint8_t idx) {
-    _configMenuIdx = idx % 8;
+    _configMenuIdx = idx % 9;
     lastRender = 0;
   }
 
   uint8_t getMotorMenuIdx() const { return _motorMenuIdx; }
   void setMotorMenuIdx(uint8_t idx) {
     _motorMenuIdx = idx % 2;
+    lastRender = 0;
+  }
+
+  uint8_t getCompassMenuIdx() const { return _compassMenuIdx; }
+  void setCompassMenuIdx(uint8_t idx) {
+    _compassMenuIdx = idx % 2;
     lastRender = 0;
   }
 
@@ -1265,6 +1273,7 @@ public:
     uint32_t minInterval = (currentPage == ROVER_PAGE_CONFIG_JOY_TEST ||
                             currentPage == ROVER_PAGE_CONFIG_JOY_CAL ||
                             currentPage == ROVER_PAGE_CONFIG_NAV_WIZARD ||
+                            currentPage == ROVER_PAGE_CONFIG_COMPASS ||
                             currentPage == ROVER_PAGE_ACTUATORS ||
                             currentPage == ROVER_PAGE_ANCHOR)
                                ? 60
@@ -1301,7 +1310,7 @@ public:
         renderAnchorPage(actuators, motorStatus, lastRssi, failsafeActive);
         break;
       case ROVER_PAGE_CONFIG_MENU:
-        renderConfigMenuPage(roverId, batt, joyInvX, joyInvY,
+        renderConfigMenuPage(roverId, gps, batt, joyInvX, joyInvY,
                              actuators.isMotorInverted(), isApMode, ip, lastRssi,
                              failsafeActive);
         break;
@@ -1350,6 +1359,9 @@ public:
         break;
       case ROVER_PAGE_CONFIG_MOTOR:
         renderMotorConfigPage(actuators.isMotorInverted());
+        break;
+      case ROVER_PAGE_CONFIG_COMPASS:
+        renderCompassCalPage(gps);
         break;
       default:
         renderHomePage(roverId, gps, batt, motorStatus, lastRssi,
@@ -1883,6 +1895,11 @@ private:
       canvas->setTextColor(UI_YELLOW);
       canvas->print("MOTOR (SENTIDO ESC)");
       break;
+    case ROVER_PAGE_CONFIG_COMPASS:
+      canvas->print("CONFIG > ");
+      canvas->setTextColor(UI_YELLOW);
+      canvas->print("CALIBRAR NORTE (0)");
+      break;
     default:
       canvas->printf("ROVER-%02d", _roverId);
       break;
@@ -2373,17 +2390,18 @@ private:
   // =========================================================================
   // SUBMENU: CONFIGURAÇÕES (WIFI, BATERIA, JOYSTICK, ID, FIRMWARE, LORA)
   // =========================================================================
-  void renderConfigMenuPage(uint8_t roverId, BatteryMonitor &batt, bool joyInvX,
-                            bool joyInvY, bool motorInverted, bool isApMode,
-                            const char *ip, int16_t lastRssi,
-                            bool failsafeActive) {
+  void renderConfigMenuPage(uint8_t roverId, GPSTracker &gps,
+                            BatteryMonitor &batt, bool joyInvX, bool joyInvY,
+                            bool motorInverted, bool isApMode, const char *ip,
+                            int16_t lastRssi, bool failsafeActive) {
     (void)roverId;
     String mac = getDeviceMacAddress();
 
-    const uint8_t total = 8;
+    const uint8_t total = 9;
     const uint8_t visibleRows = 4;
-    const char *titles[8] = {"WIFI",      "BATERIA",  "JOYSTICK", "MOTOR",
-                             "TESTE NAV", "ID",       "FIRMWARE", "LORA"};
+    const char *titles[9] = {"WIFI",      "BATERIA",    "JOYSTICK",
+                             "MOTOR",     "CAL. NORTE", "TESTE NAV",
+                             "ID",        "FIRMWARE",   "LORA"};
 
     if (_configMenuIdx >= total)
       _configMenuIdx = 0;
@@ -2434,14 +2452,19 @@ private:
         canvas->printf("Sentido: %s",
                        motorInverted ? "INVERTIDO (REV)" : "NORMAL (PADRAO)");
       } else if (i == 4) {
+        canvas->setTextColor(UI_CYAN);
+        canvas->setCursor(x + 140, y + 10);
+        canvas->printf("Proa:%3.0f | Off:%+.0f", gps.getHeading(),
+                       gps.getCompassOffset());
+      } else if (i == 5) {
         canvas->setTextColor(UI_GREEN);
         canvas->setCursor(x + 124, y + 10);
         canvas->print("Wizard RTL/Bussola -> SD");
-      } else if (i == 5) {
+      } else if (i == 6) {
         canvas->setTextColor(UI_CYAN);
         canvas->setCursor(x + 124, y + 10);
         canvas->printf("%s", mac.c_str());
-      } else if (i == 6) {
+      } else if (i == 7) {
         canvas->setTextColor(UI_LIGHTGREY);
         canvas->setCursor(x + 124, y + 10);
         canvas->printf("M:%s | C6:%s", ROVER_LAFVIN_VERSION, _c6Version);
@@ -3823,88 +3846,68 @@ private:
 
   // =========================================================================
   // CONFIGURAÇÕES -> TESTE NAV (WIZARD DE BÚSSOLA, GPS WALK & RTL -> SD)
+  // Layout de Alta Visibilidade (letras grandes Size 2 e Size 3)
   // =========================================================================
   void renderNavWizardPage(GPSTracker &gps, bool sdOk) {
     int cardY = 26;
     int cardH = 122;
 
     if (_navWizStep >= 5) {
-      // Ecrã de Resumo Final e Diagnóstico Guardado no SD
+      // Ecrã Final Simplificado de Alta Visibilidade
       canvas->fillRect(4, cardY, 312, cardH, UI_PANEL_BG);
       canvas->drawRect(4, cardY, 312, cardH,
                        _navWizOverallPass ? UI_GREEN : UI_ORANGE);
 
-      canvas->fillRect(5, cardY + 1, 310, 15, UI_NAVY);
-      canvas->setTextSize(1);
-      canvas->setTextColor(_navWizOverallPass ? UI_GREEN : UI_YELLOW);
-      canvas->setCursor(10, cardY + 4);
-      canvas->printf("RESUMO TESTE #%u | %s", (unsigned)_navWizRunId,
-                     _navWizSdSaved ? "GUARDADO NO SD: OK"
-                                    : (sdOk ? "ERRO GRAVACAO SD" : "SEM SD (VER WEB)"));
+      // Topo: Estado da gravação no SD em letra grande (Size 2)
+      canvas->fillRect(5, cardY + 1, 310, 24,
+                       _navWizSdSaved ? UI_NAVY : UI_RED);
+      canvas->setTextSize(2);
+      canvas->setTextColor(_navWizSdSaved ? UI_GREEN : UI_WHITE);
+      canvas->setCursor(12, cardY + 5);
+      canvas->print(_navWizSdSaved ? "GUARDADO NO SD: OK"
+                                   : (sdOk ? "ERRO GRAVAR SD!" : "SEM CARTAO SD!"));
 
-      const NavWizardStepSample &s1 = _navWizSteps[0];
-      const NavWizardStepSample &s2 = _navWizSteps[1];
-      const NavWizardStepSample &s3 = _navWizSteps[2];
-      const NavWizardStepSample &s4 = _navWizSteps[3];
-      const NavWizardStepSample &s5 = _navWizSteps[4];
+      // 5 Caixas grandes com o resultado de cada passo (P1..P5)
+      for (uint8_t i = 0; i < 5; ++i) {
+        int bx = 10 + i * 60;
+        int by = cardY + 32;
+        bool ok = _navWizSteps[i].stepPass;
+        canvas->fillRect(bx, by, 54, 30, ok ? UI_GREEN : UI_RED);
+        canvas->drawRect(bx, by, 54, 30, UI_WHITE);
+        canvas->setTextSize(2);
+        canvas->setTextColor(ok ? UI_BLACK : UI_WHITE);
+        canvas->setCursor(bx + 15, by + 7);
+        canvas->printf("P%u", (unsigned)(i + 1));
+      }
 
-      // Linha 1: Passo 1 (Norte 0°)
-      canvas->setCursor(10, cardY + 20);
-      canvas->setTextColor(s1.stepPass ? UI_GREEN : UI_ORANGE);
-      canvas->printf("P1 Norte(0): Proa=%.0f (Raw=%.0f Off=%+.0f) [%s]",
-                     s1.fusedHeadingDeg, s1.rawHeadingDeg, s1.offsetDeg,
-                     s1.stepPass ? "OK" : "DESV");
+      // Resultado global + recomendação essencial em letra grande (Size 2)
+      canvas->fillRect(8, cardY + 68, 304, 48, UI_BLACK);
+      canvas->drawRect(8, cardY + 68, 304, 48,
+                       _navWizOverallPass ? UI_GREEN : UI_YELLOW);
 
-      // Linha 2: Passo 2 (+90° Dir) e Passo 3 (180° Sul)
-      canvas->setCursor(10, cardY + 32);
-      canvas->setTextColor((s2.stepPass && s3.stepPass) ? UI_GREEN : UI_ORANGE);
-      canvas->printf("P2 Dir(+90): dYaw=%+.0f [%s] | P3 Sul(180): dYaw=%+.0f [%s]",
-                     s2.deltaFromStep1Deg, s2.stepPass ? "OK" : "ERR",
-                     s3.deltaFromStep1Deg, s3.stepPass ? "OK" : "ERR");
-
-      // Linha 3: Passo 4 (Caminhada em Frente vs Azimute GPS)
-      canvas->setCursor(10, cardY + 44);
-      canvas->setTextColor(s4.stepPass ? UI_GREEN : UI_YELLOW);
-      canvas->printf("P4 Andar(%.1fm): GPS=%.0f vs Proa=%.0f (Dif=%+.0f)",
-                     s4.distFromHomeM, s4.gpsWalkAzimuthDeg, s4.fusedHeadingDeg,
-                     s4.errorVsExpectedDeg);
-
-      // Linha 4: Passo 5 (Apontar Proa para o HOME e Simulação RTL)
-      canvas->setCursor(10, cardY + 56);
-      canvas->setTextColor(s5.stepPass ? UI_GREEN : UI_RED);
-      canvas->printf("P5 Proa->HOME: Rumo=%.0f vs Proa=%.0f -> Leme=%+d%%",
-                     s5.expectedHeadingDeg, s5.fusedHeadingDeg,
-                     (int)s5.simRudderPct);
-
-      // Caixa de Diagnóstico Automático
-      int dx = 8, dy = cardY + 69, dw = 304, dh = 49;
-      canvas->fillRect(dx, dy, dw, dh, UI_BLACK);
-      canvas->drawRect(dx, dy, dw, dh,
-                       _navWizOverallPass ? UI_GREEN : UI_RED);
-
-      canvas->setTextColor(_navWizOverallPass ? UI_GREEN : UI_RED);
-      canvas->setCursor(dx + 5, dy + 5);
-      canvas->printf("%.48s", _navWizDiagLine1);
+      canvas->setTextSize(2);
+      canvas->setTextColor(_navWizOverallPass ? UI_GREEN : UI_ORANGE);
+      canvas->setCursor(14, cardY + 73);
+      canvas->print(_navWizOverallPass ? "TESTE: TUDO OK!" : "TESTE: VER SD");
 
       canvas->setTextColor(UI_YELLOW);
-      canvas->setCursor(dx + 5, dy + 19);
-      canvas->printf("%.48s", _navWizDiagLine2);
+      canvas->setCursor(14, cardY + 94);
+      float recDelta =
+          wrapNavAngle180(_navWizRecommendedOffset - gps.getCompassOffset());
+      if (fabsf(recDelta) > 25.0f) {
+        canvas->printf("OFFSET SUG: %+.0f", _navWizRecommendedOffset);
+      } else {
+        canvas->print("TIRE O SD E ENVIE");
+      }
 
-      canvas->setTextColor(UI_CYAN);
-      canvas->setCursor(dx + 5, dy + 33);
-      canvas->printf("SD: %s | Web: /api/nav_wizard", _navWizSdPath);
-
-      renderFooter("BOOT / <-X: Sair Config  |  Y Cima: Repetir Wizard");
+      renderFooter("BOOT / <-X: Sair  |  Y Cima: Repetir");
       return;
     }
 
     // =====================================================================
-    // PASSOS ATIVOS 1..5 (_navWizStep = 0..4)
+    // PASSOS ATIVOS 1..5 (_navWizStep = 0..4) - ALTA VISIBILIDADE
     // =====================================================================
     float curFused = gps.getHeading();
-    float curRaw = gps.getCompassRawHeading();
-    float curOff = gps.getCompassOffset();
-    bool cmpOk = gps.hasCompass();
     bool gpsFix = gps.hasFix();
     uint8_t sats = gps.getSatellites();
 
@@ -3954,204 +3957,130 @@ private:
             ? 0.0f
             : wrapNavAngle180(curFused - _navWizSteps[0].fusedHeadingDeg);
 
-    // --- Painel Esquerdo: Rosa dos Ventos + Aguia Alvo vs Proa (x=4..116) ---
-    int lw = 112;
-    canvas->fillRect(4, cardY, lw, cardH, UI_PANEL_BG);
-    canvas->drawRect(4, cardY, lw, cardH, UI_CARD_BG);
-
-    int cx = 60, cy = cardY + 50, r = 34;
-    canvas->drawCircle(cx, cy, r, UI_DARKGREY);
-    canvas->drawFastHLine(cx - r, cy, r * 2, UI_CARD_BG);
-    canvas->drawFastVLine(cx, cy - r, r * 2, UI_CARD_BG);
-
-    canvas->setTextSize(1);
-    canvas->setTextColor(UI_YELLOW);
-    canvas->setCursor(cx - 2, cy - r - 9);
-    canvas->print("N");
-    canvas->setTextColor(UI_LIGHTGREY);
-    canvas->setCursor(cx + r + 3, cy - 3);
-    canvas->print("E");
-    canvas->setCursor(cx - 2, cy + r + 2);
-    canvas->print("S");
-    canvas->setCursor(cx - r - 8, cy - 3);
-    canvas->print("O");
-
-    // Vetor Alvo (Instrução) em AMARELO
-    float tRad = (targetDeg - 90.0f) * DEG_TO_RAD;
-    int tx = cx + (int)(cosf(tRad) * (r - 4));
-    int ty = cy + (int)(sinf(tRad) * (r - 4));
-    canvas->drawLine(cx, cy, tx, ty, UI_YELLOW);
-    canvas->fillCircle(tx, ty, 3, UI_YELLOW);
-
-    // Vetor Proa Atual da Bússola em CIANO/VERDE/VERMELHO
-    float hRad = (curFused - 90.0f) * DEG_TO_RAD;
-    int hx = cx + (int)(cosf(hRad) * (r - 7));
-    int hy = cy + (int)(sinf(hRad) * (r - 7));
-    uint16_t needleCol =
-        (fabsf(liveErr) <= 30.0f)
-            ? UI_GREEN
-            : ((fabsf(liveErr) >= 135.0f) ? UI_RED : UI_CYAN);
-    canvas->drawLine(cx, cy, hx, hy, needleCol);
-    canvas->fillCircle(hx, hy, 4, needleCol);
-    canvas->fillCircle(cx, cy, 2, UI_WHITE);
-
-    // Indicador dos 5 passos na base do painel esquerdo
-    for (uint8_t s = 0; s < 5; ++s) {
-      int bx = 9 + s * 20;
-      int by = cardY + 104;
-      uint16_t col = UI_DARKGREY;
-      if (s < _navWizStep) {
-        col = _navWizSteps[s].stepPass ? UI_GREEN : UI_ORANGE;
-      } else if (s == _navWizStep) {
-        col = UI_YELLOW;
-      }
-      canvas->fillRect(bx, by, 17, 12, col);
-      canvas->setTextSize(1);
-      canvas->setTextColor(s <= _navWizStep ? UI_BLACK : UI_WHITE);
-      canvas->setCursor(bx + 6, by + 2);
-      canvas->printf("%u", (unsigned)(s + 1));
-    }
-
-    // --- Painel Direito: Instruções e Comparação em Tempo Real (x=120..316) ---
-    int rx = 120;
-    int rw = 196;
-    canvas->fillRect(rx, cardY, rw, cardH, UI_PANEL_BG);
-    canvas->drawRect(rx, cardY, rw, cardH, UI_CARD_BG);
-
-    static const char *const titles[5] = {
-        "PASSO 1/5: NORTE & HOME", "PASSO 2/5: RODAR 90 DIR",
-        "PASSO 3/5: RODAR 180 SUL", "PASSO 4/5: ANDAR EM FRENTE",
-        "PASSO 5/5: APONTAR P/ HOME"};
-
-    static const char *const instr1[5] = {
-        "1. Fique no ponto HOME", "No mesmo local, RODE 90",
-        "No mesmo local, RODE 180", "Caminhe 6-15m EM FRENTE c/",
-        "No mesmo local, VIRE 180"};
-
-    static const char *const instr2[5] = {
-        "PROA -> NORTE (0 deg)", "P/ A DIREITA (ESTE = 90)",
-        "PROA -> SUL (Oposto P1)", "PROA p/ a frente e PARE",
-        "PROA DIRETA P/ O HOME!"};
-
-    canvas->fillRect(rx + 1, cardY + 1, rw - 2, 15, UI_NAVY);
-    canvas->setTextSize(1);
-    canvas->setTextColor(UI_CYAN);
-    canvas->setCursor(rx + 6, cardY + 4);
-    canvas->print(titles[_navWizStep % 5]);
-
-    canvas->setTextColor(UI_WHITE);
-    canvas->setCursor(rx + 6, cardY + 19);
-    canvas->print(instr1[_navWizStep % 5]);
-
-    canvas->setTextColor(UI_YELLOW);
-    canvas->setCursor(rx + 6, cardY + 30);
-    canvas->print(instr2[_navWizStep % 5]);
-
-    canvas->drawFastHLine(rx + 4, cardY + 42, rw - 8, UI_CARD_BG);
-
-    // Linha A: Leitura BNO055 Fused, Raw e Offset
-    canvas->setCursor(rx + 6, cardY + 46);
-    if (cmpOk) {
-      canvas->setTextColor(UI_CYAN);
-      canvas->printf("Proa:%3.0f (Raw:%3.0f Off:%+.0f)", curFused, curRaw,
-                     curOff);
-    } else {
-      canvas->setTextColor(UI_RED);
-      canvas->printf("BNO055 OFF! COG:%3.0f deg", curFused);
-    }
-
-    // Linha B & C: Comparação específica da instrução do passo
+    bool stepReady = false;
     if (_navWizStep == 0) {
-      canvas->setCursor(rx + 6, cardY + 59);
-      canvas->setTextColor(fabsf(liveErr) <= 30.0f ? UI_GREEN : UI_ORANGE);
-      canvas->printf("Alvo: 0(N) | Erro: %+.0f deg", liveErr);
-
-      canvas->setCursor(rx + 6, cardY + 72);
-      canvas->setTextColor(gpsFix ? UI_GREEN : UI_YELLOW);
-      canvas->printf("GPS: %s (%u sats) CalM:%u/3",
-                     gpsFix ? "FIX 3D" : "SEM FIX", (unsigned)sats,
-                     (unsigned)gps.getCompassCalMag());
-
-      canvas->setCursor(rx + 6, cardY + 85);
-      canvas->setTextColor(UI_LIGHTGREY);
-      canvas->printf("Roll:%+.1f Pitch:%+.1f", gps.getRoll(), gps.getPitch());
+      stepReady = (fabsf(liveErr) <= 30.0f);
     } else if (_navWizStep == 1) {
-      canvas->setCursor(rx + 6, cardY + 59);
-      canvas->setTextColor(UI_LIGHTGREY);
-      canvas->printf("P1:%.0f -> Atual:%.0f deg",
-                     _navWizSteps[0].fusedHeadingDeg, curFused);
-
-      bool ok90 = (liveDeltaP1 >= 55.0f && liveDeltaP1 <= 125.0f);
-      bool inv90 = (liveDeltaP1 <= -50.0f && liveDeltaP1 >= -130.0f);
-      canvas->setCursor(rx + 6, cardY + 72);
-      canvas->setTextColor(ok90 ? UI_GREEN : (inv90 ? UI_RED : UI_YELLOW));
-      canvas->printf("Rotacao dYaw: %+.0f (Alvo:+90)", liveDeltaP1);
-
-      canvas->setCursor(rx + 6, cardY + 85);
-      canvas->setTextColor(_navWizSteps[0].stepPass ? UI_GREEN : UI_ORANGE);
-      canvas->printf("P1: %.26s", _navWizSteps[0].verdict);
+      stepReady = (liveDeltaP1 >= 55.0f && liveDeltaP1 <= 125.0f);
     } else if (_navWizStep == 2) {
-      canvas->setCursor(rx + 6, cardY + 59);
-      canvas->setTextColor(UI_LIGHTGREY);
-      canvas->printf("P1:%.0f -> Atual:%.0f deg",
-                     _navWizSteps[0].fusedHeadingDeg, curFused);
-
-      float err180 = wrapNavAngle180(liveDeltaP1 - 180.0f);
-      bool ok180 = (fabsf(err180) <= 35.0f);
-      canvas->setCursor(rx + 6, cardY + 72);
-      canvas->setTextColor(ok180 ? UI_GREEN : UI_YELLOW);
-      canvas->printf("Meia-volta dYaw: %+.0f (180)", liveDeltaP1);
-
-      canvas->setCursor(rx + 6, cardY + 85);
-      canvas->setTextColor(_navWizSteps[1].stepPass ? UI_GREEN : UI_ORANGE);
-      canvas->printf("P2: %.26s", _navWizSteps[1].verdict);
+      stepReady = (fabsf(wrapNavAngle180(liveDeltaP1 - 180.0f)) <= 35.0f);
     } else if (_navWizStep == 3) {
-      canvas->setCursor(rx + 6, cardY + 59);
-      canvas->setTextColor(liveDistM >= 4.0 ? UI_GREEN : UI_YELLOW);
-      canvas->printf("Dist HOME: %.1fm (Pts:%u)", liveDistM,
-                     (unsigned)_navWizTrackCount);
-
-      canvas->setCursor(rx + 6, cardY + 72);
-      canvas->setTextColor(UI_CYAN);
-      canvas->printf("Azimute GPS:%.0f vs Proa:%.0f", liveWalkAz, curFused);
-
-      canvas->setCursor(rx + 6, cardY + 85);
-      canvas->setTextColor(fabsf(liveErr) <= 35.0f
-                               ? UI_GREEN
-                               : (fabsf(liveErr) >= 135.0f ? UI_RED : UI_ORANGE));
-      canvas->printf("Dif Proa-GPS: %+.0f deg", liveErr);
-    } else if (_navWizStep == 4) {
-      float rtlErr = wrapNavAngle180(targetDeg - curFused);
-      int simRud = constrain((int)(rtlErr * 1.8f), -100, 100);
-      int simThr = (fabsf(rtlErr) > 60.0f) ? 25 : 50;
-
-      canvas->setCursor(rx + 6, cardY + 59);
-      canvas->setTextColor(UI_YELLOW);
-      canvas->printf("Rumo HOME:%.0f | Proa:%.0f", targetDeg, curFused);
-
-      canvas->setCursor(rx + 6, cardY + 72);
-      canvas->setTextColor(fabsf(rtlErr) <= 35.0f
-                               ? UI_GREEN
-                               : (fabsf(rtlErr) >= 135.0f ? UI_RED : UI_ORANGE));
-      canvas->printf("Erro RTL:%+.0f -> Leme:%+d%%", rtlErr, simRud);
-
-      canvas->setCursor(rx + 6, cardY + 85);
-      canvas->setTextColor(UI_LIGHTGREY);
-      canvas->printf("Sim RTL: Mot=%d%% Dist=%.1fm", simThr, liveDistM);
-    }
-
-    // Botão de ação na base do painel direito
-    canvas->fillRect(rx + 6, cardY + 99, rw - 12, 18, UI_NAVY);
-    canvas->drawRect(rx + 6, cardY + 99, rw - 12, 18, UI_CYAN);
-    canvas->setTextColor(UI_GREEN);
-    canvas->setCursor(rx + 12, cardY + 104);
-    if (_navWizStep < 4) {
-      canvas->print("BOOT / X->: GRAVAR PASSO");
+      stepReady = (liveDistM >= 5.0);
     } else {
-      canvas->print("BOOT / X->: CONCLUIR & SD");
+      stepReady = (fabsf(liveErr) <= 35.0f);
     }
 
-    renderFooter("BOOT/X->: Confirmar Acao | <-X/MODE: Sair");
+    canvas->fillRect(4, cardY, 312, cardH, UI_PANEL_BG);
+    canvas->drawRect(4, cardY, 312, cardH, stepReady ? UI_GREEN : UI_CARD_BG);
+
+    // 1. Barra de Título com a Ação Principal em Letra Grande (Size 2)
+    static const char *const bigTitles[5] = {
+        "1/5 APONTAR NORTE", "2/5 RODAR 90 DIR.", "3/5 RODAR 180 SUL",
+        "4/5 ANDAR FRENTE", "5/5 APONTAR HOME"};
+
+    canvas->fillRect(5, cardY + 1, 310, 24, UI_NAVY);
+    canvas->setTextSize(2);
+    canvas->setTextColor(UI_YELLOW);
+    canvas->setCursor(12, cardY + 5);
+    canvas->print(bigTitles[_navWizStep % 5]);
+
+    // 2. Dois Cartões Gigantes (Size 3) apenas com os 2 números essenciais
+    int boxY = cardY + 29;
+    int boxH = 62;
+    // Cartão Esquerdo (x=8..156)
+    canvas->fillRect(8, boxY, 148, boxH, UI_BLACK);
+    canvas->drawRect(8, boxY, 148, boxH, stepReady ? UI_GREEN : UI_CYAN);
+    // Cartão Direito (x=164..312)
+    canvas->fillRect(164, boxY, 148, boxH, UI_BLACK);
+    canvas->drawRect(164, boxY, 148, boxH, UI_CARD_BG);
+
+    if (_navWizStep == 3) {
+      // Passo 4: Andar em Frente -> Mostrar DISTÂNCIA (m) e GPS SATS em Gigante
+      canvas->setTextSize(2);
+      canvas->setTextColor(UI_LIGHTGREY);
+      canvas->setCursor(16, boxY + 6);
+      canvas->print("DISTANCIA");
+
+      canvas->setTextSize(3);
+      canvas->setTextColor(liveDistM >= 5.0 ? UI_GREEN : UI_YELLOW);
+      canvas->setCursor(16, boxY + 28);
+      canvas->printf("%.1fm", liveDistM);
+
+      canvas->setTextSize(2);
+      canvas->setTextColor(UI_LIGHTGREY);
+      canvas->setCursor(172, boxY + 6);
+      canvas->print("GPS");
+
+      canvas->setTextSize(3);
+      canvas->setTextColor(gpsFix ? UI_GREEN : UI_RED);
+      canvas->setCursor(172, boxY + 28);
+      if (gpsFix) {
+        canvas->printf("%uSAT", (unsigned)sats);
+      } else {
+        canvas->print("NOFIX");
+      }
+    } else if (_navWizStep == 1 || _navWizStep == 2) {
+      // Passos 2 e 3: Rotação no local -> Mostrar RODOU vs ALVO em Gigante
+      canvas->setTextSize(2);
+      canvas->setTextColor(UI_LIGHTGREY);
+      canvas->setCursor(16, boxY + 6);
+      canvas->print("RODOU");
+
+      canvas->setTextSize(3);
+      canvas->setTextColor(stepReady ? UI_GREEN : UI_CYAN);
+      canvas->setCursor(16, boxY + 28);
+      canvas->printf("%+.0f", liveDeltaP1);
+
+      canvas->setTextSize(2);
+      canvas->setTextColor(UI_LIGHTGREY);
+      canvas->setCursor(172, boxY + 6);
+      canvas->print("ALVO");
+
+      canvas->setTextSize(3);
+      canvas->setTextColor(UI_YELLOW);
+      canvas->setCursor(172, boxY + 28);
+      canvas->print(_navWizStep == 1 ? "+90 E" : "180 S");
+    } else {
+      // Passos 1 e 5: Apontar Norte (0°) ou Apontar para HOME -> PROA vs ALVO
+      canvas->setTextSize(2);
+      canvas->setTextColor(UI_LIGHTGREY);
+      canvas->setCursor(16, boxY + 6);
+      canvas->print("PROA");
+
+      canvas->setTextSize(3);
+      canvas->setTextColor(stepReady ? UI_GREEN : UI_CYAN);
+      canvas->setCursor(16, boxY + 28);
+      canvas->printf("%3.0f", curFused);
+
+      canvas->setTextSize(2);
+      canvas->setTextColor(UI_LIGHTGREY);
+      canvas->setCursor(172, boxY + 6);
+      canvas->print(_navWizStep == 0 ? "ALVO" : "HOME");
+
+      canvas->setTextSize(3);
+      canvas->setTextColor(UI_YELLOW);
+      canvas->setCursor(172, boxY + 28);
+      if (_navWizStep == 0) {
+        canvas->print("0 N");
+      } else {
+        canvas->printf("%3.0f", targetDeg);
+      }
+    }
+
+    // 3. Botão Inferior Grande (Fica VERDE quando está alinhado/pronto!)
+    int btnY = cardY + 95;
+    canvas->fillRect(8, btnY, 304, 23, stepReady ? UI_GREEN : UI_NAVY);
+    canvas->drawRect(8, btnY, 304, 23, UI_WHITE);
+    canvas->setTextSize(2);
+    canvas->setTextColor(stepReady ? UI_BLACK : UI_WHITE);
+    canvas->setCursor(22, btnY + 4);
+    if (_navWizStep < 4) {
+      canvas->print(stepReady ? "OK! CLIQUE P/ GRAVAR" : "CLIQUE P/ GRAVAR");
+    } else {
+      canvas->print(stepReady ? "OK! GUARDAR NO SD" : "CLIQUE: GUARDAR SD");
+    }
+
+    renderFooter("BOOT / X->: Gravar  |  <-X: Sair");
   }
 
   // =========================================================================
@@ -4222,6 +4151,79 @@ private:
     renderFooter("<-X: Config | Y: Mover | BOOT/X->: Aplicar");
   }
 
+  // =========================================================================
+  // CONFIGURAÇÕES -> CAL. NORTE (ALINHAR BÚSSOLA BNO055 A 0° C/ GARMIN)
+  // Layout de Alta Visibilidade (letras grandes Size 2 e Size 3)
+  // =========================================================================
+  void renderCompassCalPage(GPSTracker &gps) {
+    int cardY = 26;
+    int cardH = 122;
+
+    float curFused = gps.getHeading();
+    float curOff = gps.getCompassOffset();
+    float errFromNorth = wrapNavAngle180(curFused);
+    bool alignedNorth = (fabsf(errFromNorth) <= 5.0f);
+
+    canvas->fillRect(4, cardY, 312, cardH, UI_PANEL_BG);
+    canvas->drawRect(4, cardY, 312, cardH, alignedNorth ? UI_GREEN : UI_CARD_BG);
+
+    // 1. Topo em Letra Grande (Size 2)
+    canvas->fillRect(5, cardY + 1, 310, 24, UI_NAVY);
+    canvas->setTextSize(2);
+    canvas->setTextColor(UI_YELLOW);
+    canvas->setCursor(12, cardY + 5);
+    canvas->print("APONTE PROA P/ NORTE");
+
+    // 2. Dois Cartões Gigantes (Size 3): PROA ATUAL vs OFFSET
+    int boxY = cardY + 29;
+    int boxH = 62;
+    canvas->fillRect(8, boxY, 148, boxH, UI_BLACK);
+    canvas->drawRect(8, boxY, 148, boxH, alignedNorth ? UI_GREEN : UI_CYAN);
+
+    canvas->fillRect(164, boxY, 148, boxH, UI_BLACK);
+    canvas->drawRect(164, boxY, 148, boxH, UI_CARD_BG);
+
+    canvas->setTextSize(2);
+    canvas->setTextColor(UI_LIGHTGREY);
+    canvas->setCursor(16, boxY + 6);
+    canvas->print("PROA");
+
+    canvas->setTextSize(3);
+    canvas->setTextColor(alignedNorth ? UI_GREEN : UI_CYAN);
+    canvas->setCursor(16, boxY + 28);
+    canvas->printf("%3.0f", curFused);
+
+    canvas->setTextSize(2);
+    canvas->setTextColor(UI_LIGHTGREY);
+    canvas->setCursor(172, boxY + 6);
+    canvas->print("OFFSET");
+
+    canvas->setTextSize(3);
+    canvas->setTextColor(UI_YELLOW);
+    canvas->setCursor(172, boxY + 28);
+    canvas->printf("%+.0f", curOff);
+
+    // 3. Botão Inferior Grande (Y alterna entre GRAVAR NORTE=0 e REPOR OFFSET=0)
+    int btnY = cardY + 95;
+    if (_compassMenuIdx == 0) {
+      canvas->fillRect(8, btnY, 304, 23, UI_GREEN);
+      canvas->drawRect(8, btnY, 304, 23, UI_WHITE);
+      canvas->setTextSize(2);
+      canvas->setTextColor(UI_BLACK);
+      canvas->setCursor(16, btnY + 4);
+      canvas->print("GRAVAR NORTE = 0");
+    } else {
+      canvas->fillRect(8, btnY, 304, 23, UI_ORANGE);
+      canvas->drawRect(8, btnY, 304, 23, UI_WHITE);
+      canvas->setTextSize(2);
+      canvas->setTextColor(UI_BLACK);
+      canvas->setCursor(16, btnY + 4);
+      canvas->print("REPOR OFFSET = 0");
+    }
+
+    renderFooter("BOOT/X->: Aplicar | Y: Opcao | <-X: Sair");
+  }
+
   ST7789Display display;
   Arduino_Canvas *canvas;
   RoverScreenPage currentPage;
@@ -4273,6 +4275,7 @@ private:
   float _loraSnr;
   bool _loraHasContact;
   uint8_t _motorMenuIdx;
+  uint8_t _compassMenuIdx;
 
   uint8_t _navWizStep;
   uint32_t _navWizStartMs;

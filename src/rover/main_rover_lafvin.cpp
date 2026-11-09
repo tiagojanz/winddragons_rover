@@ -585,7 +585,7 @@ static void handleRoverMenuInputs(uint32_t now, bool &forceDisplay) {
   case ROVER_PAGE_CONFIG_MENU:
     if (navY != 0) {
       roverDisplay.setConfigMenuIdx(
-          (roverDisplay.getConfigMenuIdx() + 8 + navY) % 8);
+          (roverDisplay.getConfigMenuIdx() + 9 + navY) % 9);
       forceDisplay = true;
     }
     if (navX == -1 || clickBack) {
@@ -610,21 +610,83 @@ static void handleRoverMenuInputs(uint32_t now, bool &forceDisplay) {
         roverDisplay.setPage(ROVER_PAGE_CONFIG_MOTOR);
         printLog("[UI] Configuracoes -> Motor (Sentido ESC)\n");
       } else if (idx == 4) {
+        roverDisplay.setCompassMenuIdx(0);
+        roverDisplay.setPage(ROVER_PAGE_CONFIG_COMPASS);
+        printLog("[UI] Configuracoes -> Calibrar Norte (0 deg)\n");
+      } else if (idx == 5) {
         joystick.wasShortClicked();
         joystick.wasLongClicked();
         joystick.wasBootHeld3s();
         roverDisplay.beginNavWizard();
         roverDisplay.setPage(ROVER_PAGE_CONFIG_NAV_WIZARD);
         printLog("[UI] Configuracoes -> Teste Nav (Wizard 1/5)\n");
-      } else if (idx == 5) {
+      } else if (idx == 6) {
         roverDisplay.setPage(ROVER_PAGE_CONFIG_ID);
         printLog("[UI] Configuracoes -> ID\n");
-      } else if (idx == 6) {
+      } else if (idx == 7) {
         roverDisplay.setPage(ROVER_PAGE_CONFIG_FW);
         printLog("[UI] Configuracoes -> Firmware\n");
       } else {
         roverDisplay.setPage(ROVER_PAGE_CONFIG_LORA);
         printLog("[UI] Configuracoes -> LoRa\n");
+      }
+      forceDisplay = true;
+    }
+    break;
+
+  case ROVER_PAGE_CONFIG_COMPASS:
+    if (navY != 0) {
+      roverDisplay.setCompassMenuIdx(
+          (roverDisplay.getCompassMenuIdx() + 2 + navY) % 2);
+      forceDisplay = true;
+    }
+    if (navX == -1 || clickBack) {
+      disarmRoverNav();
+      roverDisplay.setPage(ROVER_PAGE_CONFIG_MENU);
+      forceDisplay = true;
+      printLog("[UI] Calibrar Norte -> Configuracoes\n");
+    } else if (navX == 1 || clickEnter) {
+      disarmRoverNav();
+      if (roverDisplay.getCompassMenuIdx() == 0) {
+        // Gravar Norte = 0° (alinhado com Garmin / referência externa)
+        float rawH = gps.getCompassRawHeading();
+        float newOff = -rawH;
+        while (newOff > 180.0f)
+          newOff -= 360.0f;
+        while (newOff <= -180.0f)
+          newOff += 360.0f;
+        gps.setCompassData(gps.hasCompass(), 0.0f, gps.getRoll(),
+                           gps.getPitch(), gps.getCompassCalSys(),
+                           gps.getCompassCalMag(), newOff,
+                           gps.getCompassCalGyro(), gps.getCompassCalAccel(),
+                           rawH, gps.getCompassI2cAddr());
+
+        interSerial.println("CMD:COMPASS_ZERO");
+        interSerial.flush();
+        strncpy(queuedWebCommand, "CMD:COMPASS_ZERO",
+                sizeof(queuedWebCommand) - 1);
+        queuedWebCommand[sizeof(queuedWebCommand) - 1] = '\0';
+
+        roverDisplay.showFeedback("NORTE GRAVADO (0 DEG)!", 2000);
+        printLog("[UI] ★ Calibrar Norte: BNO055 alinhado a 0.0° (Offset=%+.1f°)\n",
+                 newOff);
+      } else {
+        // Repor Offset = 0°
+        float rawH = gps.getCompassRawHeading();
+        gps.setCompassData(gps.hasCompass(), rawH, gps.getRoll(),
+                           gps.getPitch(), gps.getCompassCalSys(),
+                           gps.getCompassCalMag(), 0.0f,
+                           gps.getCompassCalGyro(), gps.getCompassCalAccel(),
+                           rawH, gps.getCompassI2cAddr());
+
+        interSerial.println("CMD:COMPASS_OFFSET:0");
+        interSerial.flush();
+        strncpy(queuedWebCommand, "CMD:COMPASS_OFFSET:0",
+                sizeof(queuedWebCommand) - 1);
+        queuedWebCommand[sizeof(queuedWebCommand) - 1] = '\0';
+
+        roverDisplay.showFeedback("OFFSET REPOSTO (0 DEG)", 2000);
+        printLog("[UI] ★ Calibrar Norte: Offset reposto para 0.0°\n");
       }
       forceDisplay = true;
     }
@@ -1461,6 +1523,7 @@ void loop() {
       (roverDisplay.getCurrentPage() == ROVER_PAGE_CONFIG_JOY_TEST ||
        roverDisplay.getCurrentPage() == ROVER_PAGE_CONFIG_JOY_CAL ||
        roverDisplay.getCurrentPage() == ROVER_PAGE_CONFIG_NAV_WIZARD ||
+       roverDisplay.getCurrentPage() == ROVER_PAGE_CONFIG_COMPASS ||
        roverDisplay.getCurrentPage() == ROVER_PAGE_ACTUATORS)
           ? 60
           : 200;
