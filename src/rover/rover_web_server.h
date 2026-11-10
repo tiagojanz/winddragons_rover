@@ -772,6 +772,26 @@ private:
     html += ".fa-palette:before{content:'\\f53f';}";
     html += ".fa-power-off:before{content:'\\f011';}";
     html += ".fa-wand-magic-sparkles:before{content:'\\e2ca';}";
+    html += ".fa-chevron-down:before{content:'\\f078';}";
+    html += ".fa-chevron-up:before{content:'\\f077';}";
+    html += ".fa-angles-down:before{content:'\\f103';}";
+    html += ".fa-angles-up:before{content:'\\f102';}";
+    html += ":root{interpolate-size:allow-keywords;}";
+    html += ".cfg-collapse-toolbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;background:var(--card);border:1px solid var(--card-border);border-radius:12px;padding:10px 16px;margin-bottom:16px;}";
+    html += ".cfg-collapse-toolbar-info{display:flex;align-items:center;gap:8px;font-size:0.85rem;font-weight:600;color:var(--muted);}";
+    html += ".cfg-collapse-toolbar-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}";
+    html += ".collapsible-card>.card-title{cursor:pointer;user-select:none;display:flex!important;align-items:center!important;justify-content:space-between!important;flex-wrap:nowrap!important;gap:12px!important;transition:margin-bottom 0.2s ease;}";
+    html += ".collapsible-card.is-collapsed{padding-top:14px;padding-bottom:14px;}";
+    html += ".collapsible-card.is-collapsed>.card-title{margin-bottom:0;}";
+    html += ".card-title-right{display:inline-flex!important;align-items:center!important;justify-content:flex-end!important;gap:8px!important;flex-wrap:nowrap!important;flex-shrink:0!important;margin-left:auto!important;}";
+    html += ".card-collapse-btn{width:30px;height:30px;border-radius:8px;border:1px solid var(--card-border);background:rgba(0,0,0,0.2);color:var(--muted);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0;flex-shrink:0;transition:0.2s;}";
+    html += ".card-collapse-btn:hover,.collapsible-card>.card-title:hover .card-collapse-btn{border-color:var(--primary);color:var(--primary);background:rgba(6,182,212,0.12);}";
+    html += ".card-collapse-icon{font-size:0.82rem;transition:transform 0.25s ease;pointer-events:none;}";
+    html += ".collapsible-card.is-collapsed .card-collapse-icon{transform:rotate(-90deg);}";
+    html += ".collapsible-card-body{block-size:auto;overflow:hidden;transition:block-size 0.25s ease-out;}";
+    html += ".collapsible-card.is-collapsed>.collapsible-card-body{block-size:0;}";
+    html += ".collapsible-card-inner{padding-top:2px;}";
+    html += "@media(prefers-reduced-motion:reduce){.collapsible-card>.card-title,.card-collapse-btn,.card-collapse-icon,.collapsible-card-body{transition:none!important;}}";
     html += "</style></head><body>";
 
     // Navbar
@@ -1093,6 +1113,13 @@ private:
   // -------------------------------------------------------------
   void handleConfigPage() {
     String html = getHtmlHeader("Configurações", "config");
+
+    html += "<div class='cfg-collapse-toolbar'>";
+    html += "<div class='cfg-collapse-toolbar-info'><i class='fa-solid fa-sliders' style='color:var(--primary);'></i><span>Painéis de Configuração Colapsáveis (clique no cabeçalho de qualquer painel para recolher/expandir)</span></div>";
+    html += "<div class='cfg-collapse-toolbar-actions'>";
+    html += "<button type='button' class='btn btn-secondary' style='padding:6px 12px;font-size:0.78rem;' onclick='setAllConfigPanels(false)'><i class='fa-solid fa-angles-down'></i> Expandir Todos</button>";
+    html += "<button type='button' class='btn btn-secondary' style='padding:6px 12px;font-size:0.78rem;' onclick='setAllConfigPanels(true)'><i class='fa-solid fa-angles-up'></i> Colapsar Todos</button>";
+    html += "</div></div>";
 
     // Card 1: Estado do Armazenamento de Configurações
     bool hasSd = _sd.isReady();
@@ -2407,6 +2434,14 @@ private:
     html += "    }).catch(err=>alert('Erro ao recarregar: '+err));";
     html += "  }";
     html += "}";
+    html += "const CFG_COLLAPSE_STORAGE_KEY='wd_rover_cfg_collapsed_v1';";
+    html += "const supportsBeforeMatch=(typeof HTMLElement!=='undefined')&&('onbeforematch' in HTMLElement.prototype);";
+    html += "function getSavedCollapsedPanels(){try{const r=localStorage.getItem(CFG_COLLAPSE_STORAGE_KEY);return r?JSON.parse(r):{};}catch(e){return {};}}";
+    html += "function saveCollapsedPanelsState(m){try{localStorage.setItem(CFG_COLLAPSE_STORAGE_KEY,JSON.stringify(m));}catch(e){}}";
+    html += "function setCardCollapsed(card,collapsed,persist=true){if(!card)return;const body=card.querySelector(':scope > .collapsible-card-body');const btn=card.querySelector(':scope > .card-title .card-collapse-btn');if(!body||!btn)return;if(collapsed){card.classList.add('is-collapsed');btn.setAttribute('aria-expanded','false');btn.title='Expandir painel';if(supportsBeforeMatch)body.setAttribute('hidden','until-found');else body.hidden=true;}else{card.classList.remove('is-collapsed');btn.setAttribute('aria-expanded','true');btn.title='Colapsar painel';body.removeAttribute('hidden');}if(persist&&card.dataset.panelKey){const st=getSavedCollapsedPanels();if(collapsed)st[card.dataset.panelKey]=1;else delete st[card.dataset.panelKey];saveCollapsedPanelsState(st);}}";
+    html += "function setAllConfigPanels(collapsed){const cards=document.querySelectorAll('.card.collapsible-card');const st={};cards.forEach(c=>{setCardCollapsed(c,collapsed,false);if(collapsed&&c.dataset.panelKey)st[c.dataset.panelKey]=1;});saveCollapsedPanelsState(st);}";
+    html += "function initCollapsibleConfigPanels(){const cards=document.querySelectorAll('.container .card');const saved=getSavedCollapsedPanels();cards.forEach((card,idx)=>{if(card.classList.contains('collapsible-card'))return;const titleEl=card.querySelector(':scope > .card-title');if(!titleEl)return;const panelKey=card.id||('cfg_card_'+idx);const bodyId='cfg_panel_body_'+idx;card.dataset.panelKey=panelKey;card.classList.add('collapsible-card');const bodyEl=document.createElement('div');bodyEl.className='collapsible-card-body';bodyEl.id=bodyId;const innerEl=document.createElement('div');innerEl.className='collapsible-card-inner';let sib=titleEl.nextSibling;while(sib){const nxt=sib.nextSibling;innerEl.appendChild(sib);sib=nxt;}bodyEl.appendChild(innerEl);card.appendChild(bodyEl);const btn=document.createElement('button');btn.type='button';btn.className='card-collapse-btn';btn.setAttribute('aria-expanded','true');btn.setAttribute('aria-controls',bodyId);btn.setAttribute('aria-label','Alternar visibilidade do painel');btn.title='Colapsar painel';btn.innerHTML='<i class=\"fa-solid fa-chevron-down card-collapse-icon\" aria-hidden=\"true\"></i>';let rw=titleEl.querySelector(':scope > .card-title-right');if(!rw){rw=document.createElement('div');rw.className='card-title-right';Array.from(titleEl.children).slice(1).forEach(ch=>{if(ch.tagName==='DIV'&&!ch.classList.length){while(ch.firstChild)rw.appendChild(ch.firstChild);ch.remove();}else{rw.appendChild(ch);}});titleEl.appendChild(rw);}rw.appendChild(btn);btn.addEventListener('click',e=>{e.stopPropagation();setCardCollapsed(card,!card.classList.contains('is-collapsed'),true);});titleEl.addEventListener('click',e=>{if(e.target.closest('button:not(.card-collapse-btn),a,input,select,textarea,label,.switch'))return;setCardCollapsed(card,!card.classList.contains('is-collapsed'),true);});bodyEl.addEventListener('beforematch',()=>setCardCollapsed(card,false,true));if(saved[panelKey])setCardCollapsed(card,true,false);});}";
+    html += "document.addEventListener('DOMContentLoaded',initCollapsibleConfigPanels);";
     html += "</script>";
 
     html += getHtmlFooter();
