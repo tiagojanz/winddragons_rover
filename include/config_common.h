@@ -87,7 +87,12 @@
   2 // Lafvin Header J1 Pad 4 (Serigrafia 2 / GPIO 2)
 #define PIN_INTER_ESP_LAFVIN_RX                                                \
   1                            // Lafvin Header J1 Pad 5 (Serigrafia 1 / GPIO 1)
+#ifdef CARRIER_PCB_V2
+#define PIN_INTER_ESP_C6_TX                                                    \
+  3 // Onboard C6-WROOM-1-N8 GPIO3 (GPIO12/13 reservados para USB Serial/JTAG)
+#else
 #define PIN_INTER_ESP_C6_TX 13 // C6 DevKitC Header J3 Pin 13 (GPIO 13)
+#endif
 #define PIN_INTER_ESP_C6_RX 22 // C6 DevKitC Header J3 Pin 6 (GPIO 22)
 #define INTER_ESP_BAUDRATE 115200
 
@@ -110,7 +115,11 @@
 #define BATT_CURR_OFFSET_MV 6.5f
 
 // Sensor de Água
+#ifdef CARRIER_PCB_V2
+#define PIN_C6_WATER_SENS 10 // GPIO 10 (Entrada Analógica - Carrier PCB V2)
+#else
 #define PIN_C6_WATER_SENS 15 // GPIO 15 (Entrada Analógica)
+#endif
 
 // GPS Quectel LC29H (UART Hardware)
 #define PIN_LAFVIN_GPS_RX 16 // Lafvin Header J2 Pad 8 (Serigrafia RX / GPIO 16)
@@ -180,9 +189,14 @@
 // 4-pin Joystick connector on Top Header J1 (Pads 3 e 6)
 #define PIN_JOYSTICK_X 3 // ADC1_CH3 (Lafvin J1 Pad 3 / Serigrafia 3)
 #define PIN_JOYSTICK_Y 0 // ADC1_CH0 (Lafvin J1 Pad 6 / Serigrafia 0)
+#ifdef CARRIER_PCB_V2
+#define PIN_JOYSTICK_SW                                                        \
+  23 // Botao central do joystick RKJXV122400R (Carrier PCB V2: GPIO 23 dedicado)
+#else
 #define PIN_JOYSTICK_SW                                                        \
   -1 // Desativado no joystick: GPIO 9 e o botao BOOT com interrupcao dedicada
      // para mudar de pagina
+#endif
 
 // Physical buttons on Base (Bottom Header)
 #define PIN_BTN_ANCHOR_UP                                                      \
