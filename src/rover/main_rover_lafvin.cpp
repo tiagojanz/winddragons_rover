@@ -270,11 +270,11 @@ static void handleRoverMenuInputs(uint32_t now, bool &forceDisplay) {
         }
 
         roverDisplay.confirmNavWizardStep(step, gps);
-        printLog("[NAV WIZ] ★ Passo %u/5 registado (Proa=%.1f Raw=%.1f Off=%+.1f "
-                 "Lat=%.6f Lng=%.6f)\n",
-                 (unsigned)(step + 1), gps.getHeading(),
-                 gps.getCompassRawHeading(), gps.getCompassOffset(),
-                 gps.getLatitude(), gps.getLongitude());
+        printLog(
+            "[NAV WIZ] ★ Passo %u/5 registado (Proa=%.1f Raw=%.1f Off=%+.1f "
+            "Lat=%.6f Lng=%.6f)\n",
+            (unsigned)(step + 1), gps.getHeading(), gps.getCompassRawHeading(),
+            gps.getCompassOffset(), gps.getLatitude(), gps.getLongitude());
 
         if (step < 4) {
           roverDisplay.setNavWizStep(step + 1);
@@ -282,7 +282,8 @@ static void handleRoverMenuInputs(uint32_t now, bool &forceDisplay) {
           snprintf(fb, sizeof(fb), "PASSO %u/5 GRAVADO!", (unsigned)(step + 1));
           roverDisplay.showFeedback(fb, 1200);
         } else {
-          // Concluiu o Passo 5/5 -> Gerar Relatório Completo e Gravar no MicroSD
+          // Concluiu o Passo 5/5 -> Gerar Relatório Completo e Gravar no
+          // MicroSD
           String report = roverDisplay.buildNavWizardReport(
               roverConfig.getRoverId(), roverConfig.isMotorInverted());
           String csvRow =
@@ -304,12 +305,14 @@ static void handleRoverMenuInputs(uint32_t now, bool &forceDisplay) {
                   "p5_sim_rud_pct,p5_sim_thr_pct,result,diagnosis\n");
             }
             sdCard.appendFile("/nav_test_history.csv", csvRow.c_str());
-            printLog("[NAV WIZ] ★ Relatorio gravado no SD: /nav_test_wizard.txt "
-                     "(%s)\n",
-                     sdSaved ? "OK" : "FALHA");
+            printLog(
+                "[NAV WIZ] ★ Relatorio gravado no SD: /nav_test_wizard.txt "
+                "(%s)\n",
+                sdSaved ? "OK" : "FALHA");
           } else {
-            printLog("[NAV WIZ] ⚠ Cartao SD indisponivel — relatorio disponivel "
-                     "em /api/nav_wizard\n");
+            printLog(
+                "[NAV WIZ] ⚠ Cartao SD indisponivel — relatorio disponivel "
+                "em /api/nav_wizard\n");
           }
 
           roverDisplay.setNavWizSdSaved(sdSaved, "/nav_test_wizard.txt");
@@ -668,8 +671,9 @@ static void handleRoverMenuInputs(uint32_t now, bool &forceDisplay) {
         queuedWebCommand[sizeof(queuedWebCommand) - 1] = '\0';
 
         roverDisplay.showFeedback("NORTE GRAVADO (0 DEG)!", 2000);
-        printLog("[UI] ★ Calibrar Norte: BNO055 alinhado a 0.0° (Offset=%+.1f°)\n",
-                 newOff);
+        printLog(
+            "[UI] ★ Calibrar Norte: BNO055 alinhado a 0.0° (Offset=%+.1f°)\n",
+            newOff);
       } else {
         // Repor Offset = 0°
         float rawH = gps.getCompassRawHeading();

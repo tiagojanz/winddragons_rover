@@ -632,18 +632,18 @@ public:
 
       // Deteção de paragem do tambor pelo sensor Hall:
       // Assim que o tambor tiver rodado (_anchorDropHadPulses) e os pulsos pararem,
-      // tranca imediatamente a cremalheira.
+      // tranca a cremalheira (tolerância adaptativa para rotações lentas).
       uint32_t stopTimeoutMs =
           (_anchorDropLastIntervalMs > 0)
-              ? constrain(_anchorDropLastIntervalMs * 2UL + 120UL, 300UL, 700UL)
-              : 500UL;
+              ? constrain(_anchorDropLastIntervalMs * 2UL + 500UL, 1500UL, 3500UL)
+              : 2500UL;
       bool sensorStoppedAfterSpin =
           _anchorDropHadPulses &&
           ((now - _anchorDropLastPulseMs) >= stopTimeoutMs);
 
       // Timeout de segurança caso o tambor nunca chegue a rodar (ex: âncora já no fundo ou presa)
       bool noSpinTimeout =
-          !_anchorDropHadPulses && ((now - _anchorDropStartMs) >= 3500UL);
+          !_anchorDropHadPulses && ((now - _anchorDropStartMs) >= 8000UL);
 
       if (sensorStoppedAfterSpin || reachedTargetDepth || noSpinTimeout) {
         if (sensorStoppedAfterSpin) {
@@ -664,9 +664,9 @@ public:
                          targetDepthCm);
         } else {
           Serial.printf("[ACT-ANCORA] DROP TIMEOUT SEM ROTACAO -> Nenhum pulso "
-                        "no sensor Hall em 3.5s. A trancar cremalheira.\n");
+                        "no sensor Hall em 8s. A trancar cremalheira.\n");
           Serial0.printf("[ACT-ANCORA] DROP TIMEOUT SEM ROTACAO -> Nenhum pulso "
-                         "no sensor Hall em 3.5s. A trancar cremalheira.\n");
+                         "no sensor Hall em 8s. A trancar cremalheira.\n");
         }
         engageRack(); // Baixa e tranca a cremalheira imediatamente
         stopWinch();

@@ -308,7 +308,7 @@
       "plot": "gerbers/",
       "pos_files": "",
       "specctra_dsn": "",
-      "step": "",
+      "step": "Dual_ESP_Carrier.step",
       "svg": "",
       "vrml": ""
     },
