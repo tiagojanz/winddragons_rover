@@ -1,0 +1,65 @@
+#VRML V2.0 utf8
+# 3x05 Right-Angle (90-deg) 2.54mm RC Receiver / Servo Pin Header
+# Coordinates in 1:1 mm (use scale 0.393701 0.393701 0.393701 in KiCad .kicad_pcb)
+# Origin = Pad 1 of center channel (WIN:1 at X=4.40, Y=70.00); -X = outside Left Edge
+
+Group {
+  children [
+    # 1. Matte Charcoal/Black PBT Insulator Block (2.54 x 12.70 x 7.62 mm)
+    Transform {
+      translation -2.77 0.00 3.81
+      children [
+        Shape {
+          appearance Appearance {
+            material Material {
+              diffuseColor 0.14 0.14 0.15
+              specularColor 0.25 0.25 0.25
+              shininess 0.25
+            }
+          }
+          geometry Box { size 2.54 12.70 7.62 }
+        }
+      ]
+    }
+    # 2. Gold-Plated 0.64x0.64mm 3-Tier L-Bent Pins (5 channels @ Y=-5.08..+5.08)
+    # Channel -5.08 (ESC / STRB)
+    Transform { translation  0.00 -5.08 -0.705 children [ Shape { appearance DEF GOLD Appearance { material Material { diffuseColor 0.88 0.72 0.26 specularColor 0.96 0.86 0.42 shininess 0.82 } } geometry DEF POST1 Box { size 0.64 0.64 4.59 } } ] }
+    Transform { translation -4.86 -5.08  1.270 children [ Shape { appearance USE GOLD geometry DEF ARM1  Box { size 10.36 0.64 0.64 } } ] }
+    Transform { translation  2.54 -5.08  0.565 children [ Shape { appearance USE GOLD geometry DEF POST2 Box { size 0.64 0.64 7.13 } } ] }
+    Transform { translation -3.59 -5.08  3.810 children [ Shape { appearance USE GOLD geometry DEF ARM2  Box { size 12.90 0.64 0.64 } } ] }
+    Transform { translation  5.08 -5.08  1.835 children [ Shape { appearance USE GOLD geometry DEF POST3 Box { size 0.64 0.64 9.67 } } ] }
+    Transform { translation -2.32 -5.08  6.350 children [ Shape { appearance USE GOLD geometry DEF ARM3  Box { size 15.44 0.64 0.64 } } ] }
+
+    # Channel -2.54
+    Transform { translation  0.00 -2.54 -0.705 children [ Shape { appearance USE GOLD geometry USE POST1 } ] }
+    Transform { translation -4.86 -2.54  1.270 children [ Shape { appearance USE GOLD geometry USE ARM1  } ] }
+    Transform { translation  2.54 -2.54  0.565 children [ Shape { appearance USE GOLD geometry USE POST2 } ] }
+    Transform { translation -3.59 -2.54  3.810 children [ Shape { appearance USE GOLD geometry USE ARM2  } ] }
+    Transform { translation  5.08 -2.54  1.835 children [ Shape { appearance USE GOLD geometry USE POST3 } ] }
+    Transform { translation -2.32 -2.54  6.350 children [ Shape { appearance USE GOLD geometry USE ARM3  } ] }
+
+    # Channel 0.00 (Center WIN)
+    Transform { translation  0.00  0.00 -0.705 children [ Shape { appearance USE GOLD geometry USE POST1 } ] }
+    Transform { translation -4.86  0.00  1.270 children [ Shape { appearance USE GOLD geometry USE ARM1  } ] }
+    Transform { translation  2.54  0.00  0.565 children [ Shape { appearance USE GOLD geometry USE POST2 } ] }
+    Transform { translation -3.59  0.00  3.810 children [ Shape { appearance USE GOLD geometry USE ARM2  } ] }
+    Transform { translation  5.08  0.00  1.835 children [ Shape { appearance USE GOLD geometry USE POST3 } ] }
+    Transform { translation -2.32  0.00  6.350 children [ Shape { appearance USE GOLD geometry USE ARM3  } ] }
+
+    # Channel +2.54
+    Transform { translation  0.00  2.54 -0.705 children [ Shape { appearance USE GOLD geometry USE POST1 } ] }
+    Transform { translation -4.86  2.54  1.270 children [ Shape { appearance USE GOLD geometry USE ARM1  } ] }
+    Transform { translation  2.54  2.54  0.565 children [ Shape { appearance USE GOLD geometry USE POST2 } ] }
+    Transform { translation -3.59  2.54  3.810 children [ Shape { appearance USE GOLD geometry USE ARM2  } ] }
+    Transform { translation  5.08  2.54  1.835 children [ Shape { appearance USE GOLD geometry USE POST3 } ] }
+    Transform { translation -2.32  2.54  6.350 children [ Shape { appearance USE GOLD geometry USE ARM3  } ] }
+
+    # Channel +5.08
+    Transform { translation  0.00  5.08 -0.705 children [ Shape { appearance USE GOLD geometry USE POST1 } ] }
+    Transform { translation -4.86  5.08  1.270 children [ Shape { appearance USE GOLD geometry USE ARM1  } ] }
+    Transform { translation  2.54  5.08  0.565 children [ Shape { appearance USE GOLD geometry USE POST2 } ] }
+    Transform { translation -3.59  5.08  3.810 children [ Shape { appearance USE GOLD geometry USE ARM2  } ] }
+    Transform { translation  5.08  5.08  1.835 children [ Shape { appearance USE GOLD geometry USE POST3 } ] }
+    Transform { translation -2.32  5.08  6.350 children [ Shape { appearance USE GOLD geometry USE ARM3  } ] }
+  ]
+}

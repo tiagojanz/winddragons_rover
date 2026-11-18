@@ -1,0 +1,61 @@
+#VRML V2.0 utf8
+# Ai-Thinker Ra-02 (SX1278 433MHz LoRa SMD-16P Module) - 16.0 x 17.0 x 3.2 mm
+# Coordinates in 1:1 mm (use scale 0.393701 0.393701 0.393701 in KiCad .kicad_pcb)
+
+Group {
+  children [
+    # 1. Dark Navy PCB Substrate (16.0 x 17.0 x 0.80 mm)
+    Transform {
+      translation 0 0 0.40
+      children [
+        Shape {
+          appearance Appearance {
+            material Material {
+              diffuseColor 0.06 0.14 0.32
+              specularColor 0.25 0.25 0.30
+              shininess 0.35
+            }
+          }
+          geometry Box { size 16.0 17.0 0.80 }
+        }
+      ]
+    }
+    # 2. Metallic Brushed-Silver RF Shield Can (12.8 x 12.2 x 2.40 mm)
+    # Leaves Y = +4.2..+8.5 mm unshielded at the Pin 1 / Pin 16 antenna end for the U.FL jack
+    Transform {
+      translation 0 -1.90 2.00
+      children [
+        Shape {
+          appearance Appearance {
+            material Material {
+              diffuseColor 0.76 0.78 0.81
+              specularColor 0.90 0.92 0.95
+              shininess 0.75
+            }
+          }
+          geometry Box { size 12.8 12.2 2.40 }
+        }
+      ]
+    }
+    # 3. Left/Right Gold Edge Castellations (8 per side @ Y = -7..+7 step 2.0 mm)
+    Transform {
+      translation -7.65 -7.0 0.41
+      children [ Shape { appearance DEF GOLD Appearance { material Material { diffuseColor 0.86 0.70 0.25 specularColor 0.95 0.85 0.40 shininess 0.8 } } geometry DEF CAST Box { size 0.80 1.10 0.84 } } ]
+    }
+    Transform { translation -7.65 -5.0 0.41 children [ Shape { appearance USE GOLD geometry USE CAST } ] }
+    Transform { translation -7.65 -3.0 0.41 children [ Shape { appearance USE GOLD geometry USE CAST } ] }
+    Transform { translation -7.65 -1.0 0.41 children [ Shape { appearance USE GOLD geometry USE CAST } ] }
+    Transform { translation -7.65  1.0 0.41 children [ Shape { appearance USE GOLD geometry USE CAST } ] }
+    Transform { translation -7.65  3.0 0.41 children [ Shape { appearance USE GOLD geometry USE CAST } ] }
+    Transform { translation -7.65  5.0 0.41 children [ Shape { appearance USE GOLD geometry USE CAST } ] }
+    Transform { translation -7.65  7.0 0.41 children [ Shape { appearance USE GOLD geometry USE CAST } ] }
+    Transform { translation  7.65 -7.0 0.41 children [ Shape { appearance USE GOLD geometry USE CAST } ] }
+    Transform { translation  7.65 -5.0 0.41 children [ Shape { appearance USE GOLD geometry USE CAST } ] }
+    Transform { translation  7.65 -3.0 0.41 children [ Shape { appearance USE GOLD geometry USE CAST } ] }
+    Transform { translation  7.65 -1.0 0.41 children [ Shape { appearance USE GOLD geometry USE CAST } ] }
+    Transform { translation  7.65  1.0 0.41 children [ Shape { appearance USE GOLD geometry USE CAST } ] }
+    Transform { translation  7.65  3.0 0.41 children [ Shape { appearance USE GOLD geometry USE CAST } ] }
+    Transform { translation  7.65  5.0 0.41 children [ Shape { appearance USE GOLD geometry USE CAST } ] }
+    Transform { translation  7.65  7.0 0.41 children [ Shape { appearance USE GOLD geometry USE CAST } ] }
+  ]
+}

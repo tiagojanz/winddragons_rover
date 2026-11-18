@@ -3,7 +3,7 @@
 #include <Arduino.h>
 
 // ==========================================
-// PIN DEFINITIONS - LAFVIN ESP32-C6 1.47" LCD
+// PIN DEFINITIONS - WAVESHARE ESP32-C6-LCD-1.47 (100% pin-compatible with Lafvin)
 // ==========================================
 
 // --- Onboard LCD (ST7789 172x320 - internal hardware SPI) ---

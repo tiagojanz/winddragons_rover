@@ -1,0 +1,363 @@
+ERC report (2026-11-18T20:55:22, Encoding UTF8)
+Report includes: Errors, Warnings, Exclusions
+
+***** Sheet /
+[isolated_pin_label]: Label connected to only one pin
+    ; warning
+    @(66.04 mm, 68.58 mm): Rótulo 'IO5_FREE'
+[isolated_pin_label]: Label connected to only one pin
+    ; warning
+    @(66.04 mm, 71.12 mm): Rótulo 'IO4_FREE'
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Connector_PinHeader_2.54mm'
+    ; warning
+    @(78.74 mm, 78.74 mm): Símbolo J1 [Conn_01x09_L]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'RF_Module'
+    ; warning
+    @(86.36 mm, 375.92 mm): Símbolo U_LORA [Ra02_LoRa]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'PS5_joystick'
+    ; warning
+    @(132.08 mm, 223.52 mm): Símbolo JOY1 [Alps_RKJXV122400R]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Connector_PinHeader_2.54mm'
+    ; warning
+    @(147.32 mm, 487.68 mm): Símbolo J6 [Conn_01x07_L]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Connector_PinHeader_2.54mm'
+    ; warning
+    @(149.86 mm, 78.74 mm): Símbolo J2 [Conn_01x09_R]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Capacitor_SMD'
+    ; warning
+    @(157.48 mm, 375.92 mm): Símbolo C_LORA [C_Vert]
+[isolated_pin_label]: Label connected to only one pin
+    ; warning
+    @(162.56 mm, 81.28 mm): Rótulo 'IO12_FREE'
+[isolated_pin_label]: Label connected to only one pin
+    ; warning
+    @(162.56 mm, 83.82 mm): Rótulo 'IO13_FREE'
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Connector_JST'
+    ; warning
+    @(228.60 mm, 370.84 mm): Símbolo J_IMU [Conn_01x04_L]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'PS4_joystick'
+    ; warning
+    @(233.68 mm, 53.34 mm): Símbolo SW1 [SW_Push_H]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'PS4_joystick'
+    ; warning
+    @(233.68 mm, 76.20 mm): Símbolo SW2 [SW_Push_H]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'PS4_joystick'
+    ; warning
+    @(233.68 mm, 99.06 mm): Símbolo SW3 [SW_Push_H]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'PS4_joystick'
+    ; warning
+    @(233.68 mm, 121.92 mm): Símbolo SW4 [SW_Push_H]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Connector_PinHeader_2.54mm'
+    ; warning
+    @(304.80 mm, 307.34 mm): Símbolo J_BAL_MOT [Conn_01x07_R]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Diode_SMD'
+    ; warning
+    @(317.50 mm, 53.34 mm): Símbolo D_LDO_USB [D_Schottky_Horiz]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Diode_SMD'
+    ; warning
+    @(317.50 mm, 73.66 mm): Símbolo D_LDO_5V [D_Schottky_Horiz]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Resistor_SMD'
+    ; warning
+    @(317.50 mm, 134.62 mm): Símbolo R_C6_EN [R_Vert_Flip]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Button_Switch_SMD'
+    ; warning
+    @(317.50 mm, 205.74 mm): Símbolo SW_C6_BOOT [SW_Push_V]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Resistor_SMD'
+    ; warning
+    @(322.58 mm, 345.44 mm): Símbolo R_C1T [R_Horiz]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Resistor_SMD'
+    ; warning
+    @(322.58 mm, 381.00 mm): Símbolo R_C2T [R_Horiz]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Resistor_SMD'
+    ; warning
+    @(322.58 mm, 416.56 mm): Símbolo R_C3T [R_Horiz]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Resistor_SMD'
+    ; warning
+    @(322.58 mm, 452.12 mm): Símbolo R_C4T [R_Horiz]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Resistor_SMD'
+    ; warning
+    @(322.58 mm, 487.68 mm): Símbolo R_C5T [R_Horiz]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Resistor_SMD'
+    ; warning
+    @(322.58 mm, 523.24 mm): Símbolo R_C6T [R_Horiz]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Fuse'
+    ; warning
+    @(332.74 mm, 299.72 mm): Símbolo F_BAL [Fuse_Horiz]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Capacitor_SMD'
+    ; warning
+    @(337.82 mm, 157.48 mm): Símbolo C_C6_EN [C_Vert]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Capacitor_SMD'
+    ; warning
+    @(345.44 mm, 83.82 mm): Símbolo C_LDO_IN [C_Vert]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Resistor_SMD'
+    ; warning
+    @(345.44 mm, 205.74 mm): Símbolo R_IO8_PU [R_Vert_Flip]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Resistor_SMD'
+    ; warning
+    @(347.98 mm, 355.60 mm): Símbolo R_C1B [R_Vert]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Resistor_SMD'
+    ; warning
+    @(347.98 mm, 391.16 mm): Símbolo R_C2B [R_Vert]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Resistor_SMD'
+    ; warning
+    @(347.98 mm, 426.72 mm): Símbolo R_C3B [R_Vert]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Resistor_SMD'
+    ; warning
+    @(347.98 mm, 462.28 mm): Símbolo R_C4B [R_Vert]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Resistor_SMD'
+    ; warning
+    @(347.98 mm, 497.84 mm): Símbolo R_C5B [R_Vert]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Resistor_SMD'
+    ; warning
+    @(347.98 mm, 533.40 mm): Símbolo R_C6B [R_Vert]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Button_Switch_SMD'
+    ; warning
+    @(360.68 mm, 157.48 mm): Símbolo SW_C6_RST [SW_Push_V]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Capacitor_SMD'
+    ; warning
+    @(370.84 mm, 355.60 mm): Símbolo C_F1 [C_Vert]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Capacitor_SMD'
+    ; warning
+    @(370.84 mm, 391.16 mm): Símbolo C_F2 [C_Vert]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Capacitor_SMD'
+    ; warning
+    @(370.84 mm, 426.72 mm): Símbolo C_F3 [C_Vert]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Capacitor_SMD'
+    ; warning
+    @(370.84 mm, 462.28 mm): Símbolo C_F4 [C_Vert]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Capacitor_SMD'
+    ; warning
+    @(370.84 mm, 497.84 mm): Símbolo C_F5 [C_Vert]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Capacitor_SMD'
+    ; warning
+    @(370.84 mm, 533.40 mm): Símbolo C_F6 [C_Vert]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Package_TO_SOT_SMD'
+    ; warning
+    @(373.38 mm, 63.50 mm): Símbolo U_LDO [AMS1117_3V3]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Capacitor_SMD'
+    ; warning
+    @(375.92 mm, 205.74 mm): Símbolo C_C6_VDD [C_Vert]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Capacitor_SMD'
+    ; warning
+    @(396.24 mm, 83.82 mm): Símbolo C_LDO_OUT [C_Vert]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Resistor_SMD'
+    ; warning
+    @(457.20 mm, 492.76 mm): Símbolo R_I2C_SDA [R_Vert]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Package_SO'
+    ; warning
+    @(467.36 mm, 309.88 mm): Símbolo U_ADS1 [ADS1115]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Package_SO'
+    ; warning
+    @(467.36 mm, 396.24 mm): Símbolo U_ADS2 [ADS1115]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'RF_Module'
+    ; warning
+    @(474.98 mm, 127.00 mm): Símbolo U_C6 [ESP32_C6_WROOM_1]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Resistor_SMD'
+    ; warning
+    @(497.84 mm, 492.76 mm): Símbolo R_I2C_SCL [R_Vert]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Capacitor_SMD'
+    ; warning
+    @(533.40 mm, 309.88 mm): Símbolo C_ADS1 [C_Vert]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Capacitor_SMD'
+    ; warning
+    @(533.40 mm, 396.24 mm): Símbolo C_ADS2 [C_Vert]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Connector_PinHeader_2.54mm'
+    ; warning
+    @(576.58 mm, 439.42 mm): Símbolo J_PWR_SRV [Conn_01x02_R]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Connector_PinHeader_2.54mm'
+    ; warning
+    @(576.58 mm, 472.44 mm): Símbolo WIN [Conn_01x03_R]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Connector_PinHeader_2.54mm'
+    ; warning
+    @(576.58 mm, 505.46 mm): Símbolo J_WATER [Conn_01x02_R]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'MountingHole'
+    ; warning
+    @(579.12 mm, 563.88 mm): Símbolo H1 [MountingHole]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Connector_JST'
+    ; warning
+    @(581.66 mm, 190.50 mm): Símbolo J_SOLAR [Conn_01x02_R]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Connector_USB'
+    ; warning
+    @(589.28 mm, 86.36 mm): Símbolo J_USBC [USB_C_HRO_16P]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Resistor_SMD'
+    ; warning
+    @(589.28 mm, 142.24 mm): Símbolo R_CC1 [R_Horiz_Flip]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Resistor_SMD'
+    ; warning
+    @(589.28 mm, 160.02 mm): Símbolo R_CC2 [R_Horiz_Flip]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Fuse'
+    ; warning
+    @(589.28 mm, 271.78 mm): Símbolo F1 [Fuse_Horiz]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'MountingHole'
+    ; warning
+    @(604.52 mm, 563.88 mm): Símbolo H2 [MountingHole]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Diode_SMD'
+    ; warning
+    @(614.68 mm, 193.04 mm): Símbolo D_SOL [D_Schottky_Horiz]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Package_TO_SOT_SMD'
+    ; warning
+    @(614.68 mm, 350.52 mm): Símbolo U_BUCK [MT2492]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Connector_PinHeader_2.54mm'
+    ; warning
+    @(617.22 mm, 505.46 mm): Símbolo J_LIMIT [Conn_01x02_R]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Package_TO_SOT_SMD'
+    ; warning
+    @(619.76 mm, 271.78 mm): Símbolo Q_PROT [Q_PMOS_AO3401A]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Resistor_SMD'
+    ; warning
+    @(619.76 mm, 297.18 mm): Símbolo R_QG [R_Vert_Flip]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Connector_PinHeader_2.54mm'
+    ; warning
+    @(622.30 mm, 439.42 mm): Símbolo ESC [Conn_01x03_R]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Connector_PinHeader_2.54mm'
+    ; warning
+    @(622.30 mm, 472.44 mm): Símbolo RCK [Conn_01x03_R]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Diode_SMD'
+    ; warning
+    @(629.92 mm, 68.58 mm): Símbolo D_USB [D_Schottky_Horiz]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'MountingHole'
+    ; warning
+    @(629.92 mm, 563.88 mm): Símbolo H3 [MountingHole]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Capacitor_SMD'
+    ; warning
+    @(645.16 mm, 289.56 mm): Símbolo C_BIN [C_Vert]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Capacitor_SMD'
+    ; warning
+    @(645.16 mm, 335.28 mm): Símbolo C_BST2 [C_Horiz]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'LED_SMD'
+    ; warning
+    @(650.24 mm, 218.44 mm): Símbolo D_CHG [LED_Vert]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'MountingHole'
+    ; warning
+    @(655.32 mm, 563.88 mm): Símbolo H4 [MountingHole]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Capacitor_SMD'
+    ; warning
+    @(657.86 mm, 99.06 mm): Símbolo C_CHGIN [C_Vert]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Connector_PinHeader_2.54mm'
+    ; warning
+    @(662.94 mm, 502.92 mm): Símbolo J_WINCH_HUB [Conn_01x06_R]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Resistor_SMD'
+    ; warning
+    @(665.48 mm, 58.42 mm): Símbolo R_VIN [R_Horiz]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Connector_PinHeader_2.54mm'
+    ; warning
+    @(668.02 mm, 439.42 mm): Símbolo RUD [Conn_01x03_R]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Connector_PinHeader_2.54mm'
+    ; warning
+    @(668.02 mm, 472.44 mm): Símbolo STRB [Conn_01x03_R]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Resistor_SMD'
+    ; warning
+    @(673.10 mm, 119.38 mm): Símbolo R_CEN [R_Horiz]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Resistor_SMD'
+    ; warning
+    @(673.10 mm, 157.48 mm): Símbolo R_UV [R_Horiz_Flip]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Resistor_SMD'
+    ; warning
+    @(673.10 mm, 172.72 mm): Símbolo R_ISET [R_Horiz_Flip]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Resistor_SMD'
+    ; warning
+    @(673.10 mm, 187.96 mm): Símbolo R_NTC [R_Horiz_Flip]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Resistor_SMD'
+    ; warning
+    @(673.10 mm, 208.28 mm): Símbolo R_LED1 [R_Horiz_Flip]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Inductor_SMD'
+    ; warning
+    @(675.64 mm, 350.52 mm): Símbolo L2 [L_Horiz]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Button_Switch_SMD'
+    ; warning
+    @(680.72 mm, 274.32 mm): Símbolo SW_PWR [SW_SPDT_MSK12C02]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Connector_PinHeader_2.54mm'
+    ; warning
+    @(680.72 mm, 307.34 mm): Símbolo J_SW_EXT [Conn_01x02_L]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'MountingHole'
+    ; warning
+    @(680.72 mm, 563.88 mm): Símbolo H_HALL [MountingHole]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Capacitor_SMD'
+    ; warning
+    @(688.34 mm, 78.74 mm): Símbolo C_VIN [C_Vert]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Resistor_SMD'
+    ; warning
+    @(706.12 mm, 365.76 mm): Símbolo R_FB1 [R_Vert]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Resistor_SMD'
+    ; warning
+    @(706.12 mm, 383.54 mm): Símbolo R_FB2 [R_Vert]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Resistor_SMD'
+    ; warning
+    @(716.28 mm, 274.32 mm): Símbolo R_SW_PU [R_Horiz]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Package_DFN_QFN'
+    ; warning
+    @(721.36 mm, 132.08 mm): Símbolo U_CHG [IP2326]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Connector_PinHeader_2.54mm'
+    ; warning
+    @(726.44 mm, 457.20 mm): Símbolo J_WINCH_SUB [Conn_01x06_R]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Capacitor_SMD'
+    ; warning
+    @(728.98 mm, 365.76 mm): Símbolo C_BOUT1 [C_Vert]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Resistor_SMD'
+    ; warning
+    @(736.60 mm, 289.56 mm): Símbolo R_SW_PD [R_Vert_Flip]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Package_TO_SOT_SMD'
+    ; warning
+    @(744.22 mm, 508.00 mm): Símbolo U_HALL [DRV5032]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Capacitor_SMD'
+    ; warning
+    @(746.76 mm, 365.76 mm): Símbolo C_BOUT2 [C_Vert]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Capacitor_SMD'
+    ; warning
+    @(759.46 mm, 109.22 mm): Símbolo C_BST1 [C_Horiz_Flip]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Resistor_SMD'
+    ; warning
+    @(767.08 mm, 363.22 mm): Símbolo R_LED2 [R_Vert]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'LED_SMD'
+    ; warning
+    @(767.08 mm, 381.00 mm): Símbolo D_5V [LED_Vert]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Connector_PinHeader_2.54mm'
+    ; warning
+    @(769.62 mm, 444.50 mm): Símbolo SRV_WIN [Conn_01x03_R]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Connector_PinHeader_2.54mm'
+    ; warning
+    @(769.62 mm, 477.52 mm): Símbolo SRV_RCK [Conn_01x03_R]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Capacitor_SMD'
+    ; warning
+    @(772.16 mm, 210.82 mm): Símbolo C_BAT1 [C_Vert]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Resistor_SMD'
+    ; warning
+    @(772.16 mm, 279.40 mm): Símbolo R_2S_TOP [R_Vert]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Resistor_SMD'
+    ; warning
+    @(772.16 mm, 309.88 mm): Símbolo R_2S_BOT [R_Vert_Flip]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Resistor_SMD'
+    ; warning
+    @(777.24 mm, 182.88 mm): Símbolo R_BAL [R_Horiz]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Capacitor_SMD'
+    ; warning
+    @(782.32 mm, 152.40 mm): Símbolo C_SYS1 [C_Vert]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Inductor_SMD'
+    ; warning
+    @(787.40 mm, 121.92 mm): Símbolo L1 [L_Horiz_Flip]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Jumper'
+    ; warning
+    @(792.48 mm, 294.64 mm): Símbolo JP_2S_ADC [SolderJumper_2]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Capacitor_SMD'
+    ; warning
+    @(802.64 mm, 152.40 mm): Símbolo C_SYS2 [C_Vert]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Connector_PinHeader_2.54mm'
+    ; warning
+    @(802.64 mm, 375.92 mm): Símbolo J_PWR_ESP [Conn_01x02_L]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Capacitor_SMD'
+    ; warning
+    @(805.18 mm, 447.04 mm): Símbolo C_SRV [C_Vert]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Capacitor_SMD'
+    ; warning
+    @(805.18 mm, 502.92 mm): Símbolo C_HALL [C_Vert_Flip]
+[footprint_link_issues]: A configuração atual não inclui a biblioteca de footprints 'Connector_JST'
+    ; warning
+    @(807.72 mm, 182.88 mm): Símbolo J_LIPO_2S [Conn_01x03_L]
+
+ ** ERC messages: 117  Errors 0  Warnings 117
+
+ ** Ignored checks:
+    - Global label only appears once in the schematic
+    - Four connection points are joined together
+    - SPICE model issue
+    - Assigned footprint doesn't match footprint filters
